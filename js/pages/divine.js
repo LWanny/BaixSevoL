@@ -1,0 +1,926 @@
+/* 占卜模块 · 交互页
+   流程：选体系 → 选牌阵 → 起意 → 洗牌/投掷 → 翻牌 → 解读 → 补牌 / 追问
+   所有结果由本站代码在本地随机生成，不联网；解读口径可切换「解读牌意 / 传达信息」。 */
+
+import { el, uid, pick, rndInt, fmtDateTime, downloadBlob, compressImage, openFile } from '../util.js';
+import { iconImg } from '../icons.js';
+import { normalPage } from '../shell.js';
+import { all, put, del, kvGet, kvSet } from '../store.js';
+import { actionSheet, alertBox, confirmBox, toast, sheet } from '../ui.js';
+import { SYSTEMS, TAROT, LENORMAND, PLANETS, SIGNS, HOUSES, SPREADS, SHUFFLES } from '../data/divination.js';
+import { eligible, drawCards } from '../engine.js';
+import { addMessage } from '../scheduler.js';
+import { state } from '../state.js';
+import { imgEl, saveMedia, delMedia } from '../media.js';
+
+const SYSTEM_ICON = { tarot: 'IC-DIV-002', lenormand: 'IC-DIV-003', astro: 'IC-DIV-004' };
+const SYSTEM_TAG = { tarot: '象征之语', lenormand: '直白之言', astro: '星轨落定' };
+
+/** 体系副标题：牌数 / 骰数 + 一句定位（自定义牌面会一并计入） */
+function systemSub(id) {
+  if (id === 'astro') return '3 骰 · ' + SYSTEM_TAG.astro;
+  return deckFor(id).length + ' 张 · ' + SYSTEM_TAG[id];
+}
+
+let view = null;
+let picker = null;        // 当前的卡片轮播
+let sess = null;          // 当前这次占卜
+let stage = 'system';     // system | spread | intent | shuffle | board
+let customSpreads = [];   // 用户补充的牌阵
+let customCards = [];     // 用户补充的牌面
+let fabOff = null;        // 悬浮按钮的清理句柄
+
+export default async function pageDivine(v) {
+  view = v;
+  if (fabOff) window.removeEventListener('hashchange', fabOff);
+  fabOff = () => removeFab();
+  window.addEventListener('hashchange', fabOff);
+  normalPage('divine', {
+    back: true,
+    title: '占卜',
+    sub: '本地随机 · 仅供娱乐与自我梳理',
+    actions: [
+      { icon: 'IC-DIV-008', label: '记录', onclick: showHistory },
+      { icon: 'IC-DIV-009', label: '自定义', onclick: customMenu },
+      { icon: 'IC-CHT-007', label: '更多', onclick: moreMenu }
+    ]
+  });
+  customSpreads = await kvGet('customSpreads', []) || [];
+  customCards = await kvGet('customCards', []) || [];
+  if (!sess) stage = 'system';
+  render();
+}
+
+/* ---------------- 数据组装 ---------------- */
+function deckFor(system) {
+  const base = system === 'tarot' ? TAROT : system === 'lenormand' ? LENORMAND : [];
+  return base.concat(customCards.filter((c) => c.system === system));
+}
+function spreadsFor(system) {
+  return SPREADS.filter((s) => s.system === system).concat(customSpreads.filter((s) => s.system === system));
+}
+function stripPrefix(text) { return String(text || '').replace(/^(正位|逆位)：/, ''); }
+
+function buildDraws() {
+  if (sess.system === 'astro') {
+    const p = pick(PLANETS), s = pick(SIGNS), h = pick(HOUSES);
+    sess.draws = [
+      { pos: '行星', name: p.name, meaning: p.meaning },
+      { pos: '星座', name: s.name, meaning: s.meaning },
+      { pos: '宫位', name: h.name, meaning: h.meaning }
+    ];
+    sess.revealed = sess.draws.map(() => true);   // 占星骰没有翻牌环节，直接出结果
+    return;
+  }
+  const deck = deckFor(sess.system).slice();
+  const positions = sess.spread.positions;
+  const out = [];
+  for (let i = 0; i < positions.length && deck.length; i++) {
+    const card = deck.splice(rndInt(0, deck.length - 1), 1)[0];
+    const rev = Math.random() < 0.5;
+    out.push({
+      pos: positions[i], id: card.id, name: card.name, poker: card.poker, imgId: card.imgId,
+      keywords: card.keywords, reversed: rev, orient: card.system === 'astro' ? '' : (rev ? '逆位' : '正位'),
+      text: stripPrefix(rev ? card.reversed : card.upright)
+    });
+  }
+  sess.draws = out;
+  sess.revealed = out.map(() => false);   // 每次抽牌都重新盖好，等用户逐张或一键翻开
+}
+
+/* ---------------- 渲染 ---------------- */
+function render() {
+  picker?.destroy();
+  picker = null;
+  removeFab();
+  view.innerHTML = '';
+  const wrap = el('div', { class: 'page div-page' });
+  view.appendChild(wrap);
+  wrap.appendChild(ritualBar());
+  if (stage === 'system') renderSystem(wrap);
+  else if (stage === 'spread') renderSpread(wrap);
+  else if (stage === 'intent') renderIntent(wrap);
+  else if (stage === 'shuffle') renderShuffle(wrap);
+  else renderBoard(wrap);
+}
+
+/* 仪式流：塔罗 / 雷诺曼六步，占星骰四步；当前这一步点亮 */
+const RITUAL = {
+  full: ['选类', '设阵', '起意', '洗牌', '翻牌', '解读'],
+  astro: ['选类', '起意', '投掷', '解读']
+};
+const STEP_INDEX = {
+  full: { system: 0, spread: 1, intent: 2, shuffle: 3, board: 4 },
+  astro: { system: 0, intent: 1, shuffle: 2, board: 3 }
+};
+function ritualBar() {
+  const astro = sess?.system === 'astro';
+  const steps = astro ? RITUAL.astro : RITUAL.full;
+  let i = (astro ? STEP_INDEX.astro : STEP_INDEX.full)[stage] ?? 0;
+  if (stage === 'board' && sess?.revealed.every(Boolean)) i = steps.length - 1;   // 牌翻完就是解读
+  return el('div', { class: 'ritual' }, steps.map((s, k) => el('span', {
+    class: 'ritual-step' + (k === i ? ' on' : (k < i ? ' done' : '')),
+    text: s
+  })));
+}
+
+/* 选类：卡片轮播，左右滑动挑选体系，轻触中央卡即可进入下一步 */
+function renderSystem(wrap) {
+  picker = createPicker({
+    items: SYSTEMS,
+    start: Math.max(0, SYSTEMS.findIndex((s) => s.id === sess?.system)),
+    kicker: '选 类',
+    sub: '选择你想倾听的语言',
+    hint: '左右滑动 · 轻触中央卡以确认',
+    renderCard: (s) => [
+      el('div', { class: 'pk-frame' }, [iconImg(SYSTEM_ICON[s.id], 'pk-ico')]),
+      el('div', { class: 'pk-name', text: s.name }),
+      el('div', { class: 'pk-sub2', text: systemSub(s.id) })
+    ],
+    onConfirm: (s) => startSystem(s.id)
+  });
+  wrap.appendChild(picker.node);
+  picker.layout();
+  fabButton();
+}
+
+/** 右下角悬浮「+」：自定义牌面 / 牌阵（挂在 #app 上，避免被轮播 transform 影响定位） */
+function fabButton() {
+  removeFab();
+  const btn = el('button', { class: 'div-fab', id: 'div-fab', title: '自定义牌面 / 牌阵', onclick: customMenu }, [iconImg('IC-MIO-022')]);
+  document.getElementById('app').appendChild(btn);
+  return btn;
+}
+function removeFab() {
+  document.getElementById('div-fab')?.remove();
+}
+
+function startSystem(system) {
+  sess = { id: uid(), system, spread: null, question: '', mode: 'meaning', shuffle: pick(SHUFFLES), draws: [], revealed: [], ts: Date.now(), saved: false };
+  stage = system === 'astro' ? 'intent' : 'spread';
+  render();
+}
+
+/* 设阵：同样是卡片轮播，底部按钮确认本次牌阵 */
+function renderSpread(wrap) {
+  const list = spreadsFor(sess.system);
+  const start = Math.max(0, list.findIndex((s) => s.id === sess.spread?.id));
+
+  picker = createPicker({
+    items: list,
+    start,
+    kicker: '设 阵',
+    sub: '为这次提问选一个牌阵',
+    hint: '左右滑动 · 轻触中央卡以确认',
+    renderCard: (sp) => [
+      el('div', { class: 'pk-frame' }, [miniLayout(sp)]),
+      el('div', { class: 'pk-name', text: sp.name }),
+      el('div', { class: 'pk-desc', text: sp.positions.join(' · ') })
+    ],
+    onConfirm: chooseSpread
+  });
+
+  wrap.appendChild(stepbar('选择牌阵', () => { stage = 'system'; render(); }));
+  wrap.appendChild(picker.node);
+  picker.layout();
+
+  wrap.appendChild(el('div', { class: 'pk-cta' }, [
+    el('button', { class: 'pk-btn', onclick: () => chooseSpread(picker.current()) }, ['选择此牌阵'])
+  ]));
+  wrap.appendChild(el('div', { class: 'pk-random', text: '随 机 来 一 局', onclick: () => chooseSpread(pick(list)) }));
+  fabButton();
+}
+
+function chooseSpread(sp) {
+  sess.spread = sp;
+  stage = 'intent';
+  render();
+}
+
+function renderIntent(wrap) {
+  const q = el('textarea', { class: 'input', placeholder: '写下你想问的事（可留空，只做一次梳理）', text: sess.question });
+  q.addEventListener('input', () => { sess.question = q.value; });
+
+  const modeRow = el('div', { class: 'row wrap' });
+  const modes = [['meaning', '解读牌意', '只看牌面本身的象征'], ['message', '传达信息', '让 TA 借着牌面回应你']];
+  modes.forEach(([m, label, sub]) => {
+    modeRow.appendChild(el('div', {
+      class: 'chip' + (sess.mode === m ? ' on' : ''), title: sub,
+      onclick: (e) => { sess.mode = m; Array.from(modeRow.children).forEach((c) => c.classList.remove('on')); e.target.classList.add('on'); }
+    }, [label]));
+  });
+
+  const shuffleRow = el('div', { class: 'row between', style: { marginTop: '2px' } }, [
+    el('div', { class: 'small muted', text: '洗牌 / 投掷方式' }),
+    el('button', { class: 'btn sm', onclick: pickShuffle }, [iconImg('IC-DIV-005'), '更换'])
+  ]);
+  const shuffleName = el('div', { class: 'row', style: { gap: '7px', marginTop: '6px' } }, [
+    el('span', { class: 'badge', text: sess.shuffle.name })
+  ]);
+
+  const spreadLine = sess.system === 'astro'
+    ? '占星骰 · 行星 × 星座 × 宫位'
+    : `${sess.spread.name} · ${sess.spread.positions.length} 张`;
+
+  wrap.appendChild(stepbar(spreadLine, () => { stage = sess.system === 'astro' ? 'system' : 'spread'; render(); }));
+  wrap.appendChild(el('div', { class: 'sec' }, [
+    el('div', { class: 'field' }, [el('label', { text: '起意（你想问什么）' }), q]),
+    el('div', { class: 'field' }, [el('label', { text: '解读口径' }), modeRow]),
+    el('div', { class: 'field' }, [shuffleRow, shuffleName])
+  ]));
+  wrap.appendChild(el('div', { class: 'row', style: { justifyContent: 'center', gap: '10px' } }, [
+    el('button', { class: 'btn primary', onclick: () => { stage = 'shuffle'; render(); } },
+      [iconImg('IC-DIV-005'), sess.system === 'astro' ? '开始投掷' : '开始洗牌'])
+  ]));
+}
+
+function pickShuffle() {
+  actionSheet('洗牌 / 投掷方式', SHUFFLES.map((s) => ({
+    label: s.name, sub: `动作：${s.anim}`,
+    onSelect: () => { sess.shuffle = s; render(); toast('已改为「' + s.name + '」'); }
+  })));
+}
+
+function renderShuffle(wrap) {
+  const astro = sess.system === 'astro';
+  const anim = 'sh-' + sess.shuffle.anim;
+
+  /* 塔罗 / 雷诺曼：一整叠牌同时洗；占星骰：三颗骰子同时掷出 */
+  const stack = astro
+    ? el('div', { class: 'sh-stack dice' }, [0, 1, 2].map((i) => el('div', { class: 'sh-slot', style: { '--i': String(i - 1) } }, [
+        el('div', { class: 'sh-die ' + anim, style: { animationDelay: i * 110 + 'ms' } }, [dieFace(rndInt(1, 6))])
+      ])))
+    : el('div', { class: 'sh-stack' }, Array.from({ length: 7 }, (_, i) => el('div', { class: 'sh-slot', style: { '--i': String(i - 3) } }, [
+        el('div', { class: 'sh-mini ' + anim, style: { animationDelay: Math.abs(i - 3) * 80 + 'ms' } }, [iconImg('IC-DIV-006')])
+      ])));
+
+  wrap.appendChild(el('div', { class: 'divine-stage' }, [
+    stack,
+    el('div', { class: 'sh-cap' }, [
+      el('div', { text: astro ? '正在投掷…' : '正在' + sess.shuffle.name + '…' }),
+      el('div', { class: 'small muted', text: astro ? sess.shuffle.name + ' · 三骰一并掷出' : '整叠一起洗 · 洗好后自动抽牌' })
+    ])
+  ]));
+
+  const delay = 1250;
+  setTimeout(() => {
+    if (stage !== 'shuffle' || !view.isConnected) return;
+    buildDraws();
+    stage = 'board';
+    render();
+  }, delay);
+}
+
+/** 骰面：按点数摆骰子的小圆点 */
+const PIP_CELLS = {
+  1: ['2/2'],
+  2: ['1/1', '3/3'],
+  3: ['1/1', '2/2', '3/3'],
+  4: ['1/1', '1/3', '3/1', '3/3'],
+  5: ['1/1', '1/3', '2/2', '3/1', '3/3'],
+  6: ['1/1', '1/3', '2/1', '2/3', '3/1', '3/3']
+};
+function dieFace(n) {
+  return el('div', { class: 'die-face' }, (PIP_CELLS[n] || PIP_CELLS[1]).map((cell) => {
+    const [r, c] = cell.split('/');
+    return el('span', { class: 'die-pip', style: { gridArea: `${r} / ${c}` } });
+  }));
+}
+
+function renderBoard(wrap) {
+  const head = sess.question
+    ? el('div', { class: 'reading', style: { marginBottom: '14px' }, text: '问：' + sess.question })
+    : (sess.system === 'astro' ? el('div', {}) : el('div', { class: 'small muted center', style: { marginBottom: '14px' }, text: '心里默想一遍你要问的事，然后逐张翻牌。' }));
+
+  const rows = rowsFor(sess.spread?.layoutKind || 'auto', sess.draws.length);
+  const board = el('div', { class: 'spread board' });
+  rows.forEach((r) => {
+    const line = el('div', { class: 'spread-row' });
+    r.forEach((v) => {
+      if (v == null || v > sess.draws.length) { line.appendChild(el('div', { class: 'dcard blank' })); return; }
+      const i = v - 1;
+      const d = sess.draws[i];
+      line.appendChild(el('div', {
+        class: 'dcard' + (sess.revealed[i] ? ' flipped' : '') + (d.reversed ? ' rev' : '') + (d.imgId ? ' has-img' : ''),
+        onclick: (e) => flipCard(i, e.currentTarget)
+      }, [sess.revealed[i] ? cardFace(d) : cardBack()]));
+    });
+    board.appendChild(line);
+  });
+
+  wrap.appendChild(head);
+  wrap.appendChild(el('div', { class: 'divine-stage' }, [board]));
+
+  if (!sess.revealed.every(Boolean)) {
+    wrap.appendChild(el('div', { class: 'flip-bar' }, [
+      el('div', { class: 'small muted', text: '逐张轻触翻牌' }),
+      el('button', { class: 'btn', onclick: flipAll }, [iconImg('IC-DIV-006'), '一键全翻'])
+    ]));
+  }
+
+  if (sess.revealed.every(Boolean)) appendReading(wrap);
+}
+
+/** 一键全翻：把所有未翻的牌一次翻开 */
+function flipAll() {
+  sess.revealed = sess.draws.map(() => true);
+  render();
+  toast('牌面已全部翻开');
+}
+
+function cardBack() {
+  return el('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' } }, [
+    iconImg('IC-DIV-006'),
+    el('div', { class: 'back-lbl', text: '点击翻牌' })
+  ]);
+}
+
+function cardFace(d) {
+  if (d.imgId) {
+    return el('div', { class: 'dface-img' }, [
+      imgEl(d.imgId, 'dcard-img', d.name),
+      el('div', { class: 'dcard-cap' }, [
+        el('span', { text: d.name }),
+        d.orient ? el('span', { class: 'cap-ori', text: ' · ' + d.orient }) : null
+      ])
+    ]);
+  }
+  return el('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' } }, [
+    el('div', { class: 'nm', text: d.name }),
+    d.poker ? el('div', { class: 'pos', text: d.poker }) : null,
+    d.orient ? el('div', { class: 'pos', text: d.orient }) : (d.pos ? el('div', { class: 'pos', text: d.pos }) : null)
+  ]);
+}
+
+function flipCard(i, node) {
+  if (sess.revealed[i]) return;
+  sess.revealed[i] = true;
+  node.classList.add('flipped');
+  node.classList.toggle('rev', !!sess.draws[i].reversed);
+  node.classList.toggle('has-img', !!sess.draws[i].imgId);
+  node.innerHTML = '';
+  node.appendChild(cardFace(sess.draws[i]));
+  if (sess.revealed.every(Boolean)) { render(); toast('牌面已全部翻开'); }
+}
+
+function appendReading(wrap) {
+  const meaning = sess.system === 'astro' ? astroReading() : cardReading();
+
+  wrap.appendChild(el('div', { class: 'sec' }, [
+    el('div', { class: 'sec-h' }, [
+      el('div', { class: 'h', text: sess.mode === 'message' ? 'TA 借着牌面想对你说的' : '牌面解读' })
+    ]),
+    meaning
+  ]));
+
+  wrap.appendChild(el('div', { class: 'row wrap', style: { gap: '8px', marginBottom: '16px' } }, [
+    el('button', { class: 'btn sm', onclick: drawExtra }, [iconImg('IC-MIO-022'), '补牌（求变局）']),
+    el('button', { class: 'btn sm', onclick: again }, [iconImg('IC-DIV-005'), '再抽一次']),
+    el('button', { class: 'btn sm', onclick: askAgain }, [iconImg('IC-DIV-008'), '追问']),
+    el('button', { class: 'btn sm primary', onclick: taSpeak }, [iconImg('IC-DIV-001'), '让 TA 借牌说一句'])
+  ]));
+
+  if (!sess.saved) { sess.saved = true; saveRecord(); }
+}
+
+/** 关键词 / 释义统一用「·」分隔 */
+const dots = (s) => String(s || '').replace(/\s*\/\s*/g, ' · ');
+
+function cardReading() {
+  const box = el('div', { class: 'card' });
+  sess.draws.forEach((d) => {
+    box.appendChild(el('div', { style: { paddingBottom: '11px', marginBottom: '11px', borderBottom: '1px dashed var(--line-soft)' } }, [
+      el('div', { class: 'row', style: { gap: '7px', justifyContent: 'space-between' } }, [
+        el('div', { style: { fontWeight: '600' }, text: d.pos }),
+        el('div', { class: 'row', style: { gap: '6px' } }, [
+          el('span', { class: 'badge', text: d.name }),
+          d.orient ? el('span', { class: 'badge' + (d.reversed ? ' warn' : ' ok'), text: d.orient }) : null
+        ])
+      ]),
+      el('div', { class: 'kw', text: dots(d.keywords) }),
+      el('div', { class: 'small', text: sess.mode === 'message' ? `TA：${d.text}` : d.text })
+    ]));
+  });
+  box.appendChild(summaryBlock());
+  return box;
+}
+
+function astroReading() {
+  const [p, s, h] = sess.draws;
+  const box = el('div', { class: 'card' });
+  box.appendChild(el('div', { class: 'row', style: { gap: '8px', marginBottom: '10px' }, html:
+    `<span class="badge">${p.name}</span><span class="badge">${s.name}</span><span class="badge">${h.name}</span>` }));
+  const lines = [
+    ['行星 · 动力', p.name, p.meaning],
+    ['星座 · 方式', s.name, s.meaning],
+    ['宫位 · 落点', h.name, h.meaning]
+  ];
+  lines.forEach(([label, name, mean]) => {
+    box.appendChild(el('div', { style: { marginBottom: '9px' } }, [
+      el('div', { class: 'row between' }, [
+        el('div', { class: 'small muted', text: label }),
+        el('div', { style: { fontWeight: '600' }, text: name })
+      ]),
+      el('div', { class: 'small', text: sess.mode === 'message' ? `TA：${dots(mean)}` : dots(mean) })
+    ]));
+  });
+  box.appendChild(summaryBlock());
+  return box;
+}
+
+function summaryBlock() {
+  const d = sess.draws;
+  let text = '';
+  if (sess.system === 'astro') {
+    text = `这件事的底色是「${d[0].name}」——${dots(d[0].meaning)}；推进方式是「${d[1].name}」——${dots(d[1].meaning)}；落点在「${d[2].name}」——${dots(d[2].meaning)}。`;
+  } else {
+    const rev = d.filter((x) => x.reversed).length;
+    text = rev >= d.length - rev
+      ? '整套牌偏逆位：先别急着推进，适合停下来、向内看一看，等一个更清楚的信号再动。'
+      : '牌面偏正：眼下可以顺着已有的势头往前一步，不必反复掂量。';
+    text = d.map((x) => `${x.pos}是「${x.name}${x.orient ? '·' + x.orient : ''}」`).join('；') + '。' + text;
+  }
+  return el('div', { style: { marginTop: '12px', paddingTop: '10px', borderTop: '1px solid var(--line)' } }, [
+    el('div', { class: 'small muted', style: { marginBottom: '4px' }, text: '综合' }),
+    el('div', { text })
+  ]);
+}
+
+/* ---------------- 读取后的动作 ---------------- */
+function drawExtra() {
+  if (sess.system === 'astro') { toast('占星骰不支持补牌，可「再抽一次」'); return; }
+  const deck = deckFor(sess.system);
+  if (!deck.length) return;
+  const card = deck[rndInt(0, deck.length - 1)];
+  const rev = Math.random() < 0.5;
+  sess.draws.push({
+    pos: '补牌 · 变局', id: card.id, name: card.name, poker: card.poker, imgId: card.imgId, keywords: card.keywords,
+    reversed: rev, orient: rev ? '逆位' : '正位', text: stripPrefix(rev ? card.reversed : card.upright)
+  });
+  sess.revealed.push(true);
+  sess.saved = false;
+  render();
+  toast('已补一张：' + card.name);
+}
+
+function again() {
+  sess.shuffle = pick(SHUFFLES);
+  sess.draws = []; sess.revealed = []; sess.saved = false; sess.ts = Date.now();
+  stage = 'shuffle'; render();
+}
+
+function askAgain() {
+  sess.question = ''; sess.draws = []; sess.revealed = []; sess.saved = false; sess.ts = Date.now();
+  stage = 'intent'; render();
+}
+
+async function taSpeak() {
+  const cards = await all('cards');
+  const pool = eligible(cards);
+  if (!pool.length) { toast('字卡库还是空的，去「字卡库」加几张再试'); return; }
+  const [c] = drawCards(pool, 1, state.role.params.pureRandom);
+  const frame = sess.system === 'astro'
+    ? `TA 借着「${sess.draws[0].name}·${sess.draws[1].name}·${sess.draws[2].name}」对你说——`
+    : `TA 借着这一局「${sess.spread.name}」对你说——`;
+  await addMessage({ role: 'sys', type: 'sys', text: '【占卜】' + frame });
+  await addMessage({ role: 'ta', type: 'text', text: c.content, cardIds: [c.id] });
+  toast('已让 TA 借着牌面对你说了一句');
+}
+
+/* ---------------- 记录 ---------------- */
+function recordBody() {
+  return {
+    id: sess.id, ts: sess.ts, system: sess.system, mode: sess.mode,
+    spreadId: sess.spread ? sess.spread.id : 'astro',
+    spreadName: sess.spread ? sess.spread.name : '占星骰',
+    question: sess.question,
+    shuffleName: sess.shuffle.name,
+    draws: sess.draws.map((d) => ({ pos: d.pos, name: d.name, orient: d.orient || '', reversed: !!d.reversed, text: d.text, keywords: d.keywords || '', meaning: d.meaning || '' }))
+  };
+}
+
+async function saveRecord() {
+  try { await put('divinations', recordBody()); } catch (e) { console.warn('记录保存失败', e); }
+}
+
+async function showHistory() {
+  const list = (await all('divinations')).sort((a, b) => b.ts - a.ts);
+  if (!list.length) return alertBox({ title: '还没有记录', text: '做完一次占卜后会自动保存到本地，在这里可以回看。' });
+  sheet({
+    title: '占卜记录',
+    node: el('div', { class: 'card flush' }, list.slice(0, 40).map((r) =>
+      el('div', { class: 'list-item', onclick: () => viewRecord(r) }, [
+        iconImg(SYSTEM_ICON[r.system] || 'IC-DIV-001'),
+        el('div', { class: 'li-main' }, [
+          el('div', { class: 'li-title ellipsis', text: r.question || '（未写问题）' }),
+          el('div', { class: 'li-sub', text: `${r.spreadName} · ${fmtDateTime(r.ts)}` })
+        ]),
+        iconImg('IC-MIO-004', 'chev')
+      ])
+    )),
+    actions: [{ label: '导出为 JSON', icon: 'IC-MIO-009', onSelect: exportHistory }]
+  });
+}
+
+function viewRecord(r) {
+  const box = el('div', { class: 'card' });
+  if (r.question) box.appendChild(el('div', { class: 'small muted', style: { marginBottom: '8px' }, text: '问：' + r.question }));
+  (r.draws || []).forEach((d) => {
+    box.appendChild(el('div', { style: { marginBottom: '10px' } }, [
+      el('div', { class: 'row between' }, [
+        el('div', { class: 'small muted', text: d.pos }),
+        el('div', { class: 'row', style: { gap: '6px' } }, [
+          el('span', { class: 'badge', text: d.name }),
+          d.orient ? el('span', { class: 'badge', text: d.orient }) : null
+        ])
+      ]),
+      el('div', { class: 'small', text: d.text || d.meaning || '' })
+    ]));
+  });
+  sheet({
+    title: `${r.spreadName} · ${fmtDateTime(r.ts)}`,
+    node: box,
+    actions: [
+      { label: '删除这条记录', icon: 'IC-CRD-007', danger: true, onSelect: async () => {
+        const yes = await confirmBox({ title: '删除记录', text: '删除后无法恢复。', okText: '删除', danger: true });
+        if (yes) { await del('divinations', r.id); toast('已删除'); }
+      } }
+    ]
+  });
+}
+
+function exportHistory() {
+  all('divinations').then((list) => {
+    downloadBlob(new Blob([JSON.stringify({ version: 1, exportedAt: Date.now(), divinations: list }, null, 2)], { type: 'application/json' }), `占卜记录-${Date.now()}.json`);
+  });
+}
+
+/* ---------------- 自定义牌面 / 牌阵 ---------------- */
+const LAYOUT_KINDS = [
+  { id: 'auto', name: '自动' },
+  { id: 'line', name: '一字排开' },
+  { id: 'two', name: '两列' },
+  { id: 'three', name: '三列' },
+  { id: 'pyramid', name: '金字塔' },
+  { id: 'cross', name: '十字' }
+];
+
+const range = (n) => Array.from({ length: n }, (_, i) => i + 1);
+function chunk(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+/** 按排布样式把 n 个位置排成若干行，返回可渲染的二维数组（null 为空格） */
+function rowsFor(kind, n) {
+  if (n <= 0) return [[1]];
+  if (kind === 'line') return [range(n)];
+  if (kind === 'two') return chunk(range(n), 2);
+  if (kind === 'three') return chunk(range(n), 3);
+  if (kind === 'pyramid') {
+    const rows = []; let i = 1, w = 1;
+    while (i <= n) { const r = []; for (let c = 0; c < w && i <= n; c++) r.push(i++); rows.push(r); w++; }
+    return rows;
+  }
+  if (kind === 'cross' && n === 5) return [[null, 1, null], [2, 3, 4], [null, 5, null]];
+  return TILE_ROWS[n] || chunk(range(n), 3);
+}
+
+function customMenu() {
+  actionSheet('自定义占卜内容', [
+    { label: '新建牌阵', icon: 'IC-DIV-007', sub: '自定位置与排布，塔罗 / 雷诺曼都用', onSelect: () => spreadForm() },
+    { label: '新建牌面', icon: 'IC-DIV-009', sub: '自定牌名、配图与释义，会洗进牌组', onSelect: () => cardForm() },
+    { label: '管理自定义内容', icon: 'IC-CRD-006', sub: `现有 ${customSpreads.length} 个牌阵 · ${customCards.length} 张牌面`, onSelect: manageCustom }
+  ]);
+}
+
+/** 内容改完后重新载入并刷新当前页面 */
+async function reloadCustom() {
+  customSpreads = (await kvGet('customSpreads', [])) || [];
+  customCards = (await kvGet('customCards', [])) || [];
+  if (view?.isConnected) render();
+}
+
+function spreadForm(existing) {
+  const isNew = !existing;
+  const name = el('input', { class: 'input', placeholder: '牌阵名称，如「我和 TA 的下一步」', value: existing?.name || '' });
+  const sys = el('select', { class: 'input' }, [
+    el('option', { value: 'tarot' }, ['塔罗']),
+    el('option', { value: 'lenormand' }, ['雷诺曼'])
+  ]);
+  if (existing) sys.value = existing.system;
+  const pos = el('input', { class: 'input', placeholder: '位置用「/」分隔，如：现状/我的想法/对方想法/建议', value: existing ? existing.positions.join('/') : '' });
+
+  const positionsOf = () => pos.value.split(/[\/、,，]/).map((s) => s.trim()).filter(Boolean);
+  let kind = existing?.layoutKind || 'auto';
+
+  const preview = el('div', { class: 'sf-prev' });
+  const chips = el('div', { class: 'row wrap', style: { gap: '8px' } });
+  const refresh = () => {
+    const list = positionsOf();
+    preview.innerHTML = '';
+    preview.appendChild(miniLayout({ positions: list.length ? list : [1], layoutKind: kind }));
+    Array.from(chips.children).forEach((c) => c.classList.toggle('on', c.dataset.id === kind));
+    return list;
+  };
+  LAYOUT_KINDS.forEach((k) => chips.appendChild(el('div', {
+    class: 'chip', dataset: { id: k.id }, text: k.name,
+    onclick: () => { kind = k.id; refresh(); }
+  })));
+  pos.addEventListener('input', refresh);
+  refresh();
+
+  sheet({
+    title: isNew ? '新建牌阵' : '编辑牌阵',
+    node: el('div', {}, [
+      el('div', { class: 'field' }, [el('label', { text: '名称' }), name]),
+      el('div', { class: 'field' }, [el('label', { text: '所属体系' }), sys]),
+      el('div', { class: 'field' }, [el('label', { text: '位置（每张牌放在哪）' }), pos]),
+      el('div', { class: 'field' }, [
+        el('label', { text: '排布样式' }),
+        chips,
+        el('div', { class: 'small muted', style: { marginTop: '6px' }, text: '下面是这次牌阵的小样预览' }),
+        preview
+      ])
+    ]),
+    actions: [{ label: isNew ? '保存牌阵' : '保存修改', icon: 'IC-MIO-003', onSelect: async () => {
+      const n = name.value.trim(); const p = positionsOf();
+      if (!n || !p.length) return toast('请填写名称与位置');
+      let target = existing;
+      if (target) Object.assign(target, { name: n, system: sys.value, positions: p, layoutKind: kind });
+      else { target = { id: 'cs-' + uid(), name: n, system: sys.value, positions: p, layoutKind: kind, custom: true }; customSpreads.push(target); }
+      await kvSet('customSpreads', customSpreads);
+      if (stage === 'spread' && sess && sess.system === target.system) sess.spread = target;
+      await reloadCustom();
+      toast(isNew ? '牌阵已添加' : '牌阵已更新');
+    } }]
+  });
+}
+
+function cardForm(existing) {
+  const isNew = !existing;
+  const sys = el('select', { class: 'input' }, [
+    el('option', { value: 'tarot' }, ['塔罗']),
+    el('option', { value: 'lenormand' }, ['雷诺曼'])
+  ]);
+  if (existing) sys.value = existing.system;
+  const name = el('input', { class: 'input', placeholder: '牌名', value: existing?.name || '' });
+  const kw = el('input', { class: 'input', placeholder: '关键词，如：犹豫 / 等待', value: existing?.keywords || '' });
+  const up = el('input', { class: 'input', placeholder: '正位释义', value: existing?.upright && existing.upright !== '（未填写）' ? existing.upright : '' });
+  const rv = el('input', { class: 'input', placeholder: '逆位释义（可留空）', value: existing?.reversed && existing.reversed !== '（未填写）' ? existing.reversed : '' });
+  const poker = el('input', { class: 'input', placeholder: '对应扑克牌（雷诺曼常用，选填）', value: existing?.poker || '' });
+
+  let imgId = existing?.imgId || '';
+  const thumb = el('div', { class: 'cc-thumb' });
+  const drawThumb = () => {
+    thumb.innerHTML = '';
+    thumb.appendChild(imgId ? imgEl(imgId, 'cc-img') : el('div', { class: 'cc-none', text: '未配图' }));
+  };
+  drawThumb();
+
+  const pickImg = async () => {
+    const f = await openFile({ accept: 'image/*' });
+    if (!f) return;
+    const { blob, w, h } = await compressImage(f, 720, 0.88);
+    const old = imgId;
+    imgId = await saveMedia(blob, { type: 'image', w, h, source: 'library', name: name.value.trim() || '牌面' });
+    if (old && old !== imgId) await delMedia(old);
+    drawThumb();
+    toast('牌面图已换上');
+  };
+  const dropImg = () => {
+    if (!imgId) return;
+    const old = imgId; imgId = ''; drawThumb(); delMedia(old);
+  };
+
+  sheet({
+    title: isNew ? '新建牌面' : '编辑牌面',
+    node: el('div', {}, [
+      el('div', { class: 'field' }, [
+        el('label', { text: '牌面图' }),
+        el('div', { class: 'cc-pick' }, [
+          el('div', { class: 'cc-thumb-btn', onclick: pickImg }, [thumb]),
+          el('div', { class: 'cc-pick-hint' }, [
+            el('div', { class: 'small', text: '点左侧方框选一张图当作牌面' }),
+            el('div', { class: 'small muted', text: '不配图也可以，翻牌时会显示牌名与释义。' }),
+            el('div', { class: 'row', style: { gap: '8px', marginTop: '8px' } }, [
+              el('button', { class: 'btn sm', onclick: pickImg }, [iconImg('IC-MIO-020'), '选图']),
+              el('button', { class: 'btn sm', onclick: dropImg }, [iconImg('IC-MIO-002'), '去掉'])
+            ])
+          ])
+        ])
+      ]),
+      el('div', { class: 'field' }, [el('label', { text: '所属体系' }), sys]),
+      el('div', { class: 'field' }, [el('label', { text: '牌名' }), name]),
+      el('div', { class: 'field' }, [el('label', { text: '关键词' }), kw]),
+      el('div', { class: 'field' }, [el('label', { text: '正位释义' }), up]),
+      el('div', { class: 'field' }, [el('label', { text: '逆位释义' }), rv]),
+      el('div', { class: 'field' }, [el('label', { text: '对应扑克牌' }), poker])
+    ]),
+    actions: [{ label: isNew ? '保存牌面' : '保存修改', icon: 'IC-MIO-003', onSelect: async () => {
+      const n = name.value.trim();
+      if (!n) return toast('请填写牌名');
+      const patch = {
+        system: sys.value, name: n, keywords: kw.value.trim(),
+        upright: up.value.trim() || '（未填写）', reversed: rv.value.trim() || '（未填写）',
+        poker: poker.value.trim(), imgId
+      };
+      if (existing) Object.assign(existing, patch);
+      else customCards.push({ id: 'cc-' + uid(), custom: true, ...patch });
+      await kvSet('customCards', customCards);
+      await reloadCustom();
+      toast(isNew ? '牌面已添加' : '牌面已更新');
+    } }]
+  });
+}
+
+function manageCustom() {
+  const box = el('div', {});
+  if (!customSpreads.length && !customCards.length) {
+    box.appendChild(el('div', { class: 'small muted', text: '还没有自定义内容，先「新建牌阵」或「新建牌面」。' }));
+  }
+
+  customSpreads.forEach((s) => {
+    const row = el('div', { class: 'list-item' }, [
+      el('div', { class: 'cc-mini' }, [miniLayout(s)]),
+      el('div', { class: 'li-main' }, [
+        el('div', { class: 'li-title ellipsis', text: s.name }),
+        el('div', { class: 'li-sub', text: `${s.system === 'tarot' ? '塔罗' : '雷诺曼'} · ${s.positions.length} 张 · ${s.positions.join(' / ')}` })
+      ]),
+      el('div', { class: 'row', style: { gap: '6px', flex: 'none' } }, [
+        el('button', { class: 'btn sm', onclick: () => { sh.close(); spreadForm(s); } }, ['编辑']),
+        el('button', { class: 'btn sm danger', onclick: async () => {
+          customSpreads = customSpreads.filter((x) => x.id !== s.id);
+          await kvSet('customSpreads', customSpreads);
+          row.remove();
+          await reloadCustom();
+          toast('已删除');
+        } }, ['删除'])
+      ])
+    ]);
+    box.appendChild(row);
+  });
+
+  customCards.forEach((c) => {
+    const row = el('div', { class: 'list-item' }, [
+      el('div', { class: 'cc-mini' }, [c.imgId ? imgEl(c.imgId, 'cc-img') : iconImg('IC-DIV-009')]),
+      el('div', { class: 'li-main' }, [
+        el('div', { class: 'li-title ellipsis', text: c.name }),
+        el('div', { class: 'li-sub ellipsis', text: `${c.system === 'tarot' ? '塔罗' : '雷诺曼'} · ${c.keywords || '（无关键词）'}${c.imgId ? ' · 有配图' : ''}` })
+      ]),
+      el('div', { class: 'row', style: { gap: '6px', flex: 'none' } }, [
+        el('button', { class: 'btn sm', onclick: () => { sh.close(); cardForm(c); } }, ['编辑']),
+        el('button', { class: 'btn sm danger', onclick: async () => {
+          customCards = customCards.filter((x) => x.id !== c.id);
+          await kvSet('customCards', customCards);
+          await delMedia(c.imgId);
+          row.remove();
+          await reloadCustom();
+          toast('已删除');
+        } }, ['删除'])
+      ])
+    ]);
+    box.appendChild(row);
+  });
+
+  const sh = sheet({ title: '管理自定义内容', node: box });
+}
+
+/* ---------------- 更多 ---------------- */
+function moreMenu() {
+  actionSheet('占卜', [
+    { label: '关于结果', icon: 'IC-DIV-001', sub: '本地随机生成 · 仅供娱乐与自我梳理', onSelect: () => alertBox({ title: '关于结果', text: '结果由本站代码在本地随机生成，仅供娱乐与自我梳理，不构成任何现实建议。' }) },
+    { label: '查看记录', icon: 'IC-DIV-008', onSelect: showHistory },
+    { label: '导出记录为 JSON', icon: 'IC-MIO-009', onSelect: exportHistory },
+    { label: '补充牌阵 / 牌面', icon: 'IC-DIV-009', onSelect: customMenu },
+    { label: '清空全部占卜记录', icon: 'IC-CRD-007', danger: true, onSelect: async () => {
+      const yes = await confirmBox({ title: '清空记录', text: '将删除本地保存的全部占卜记录，无法撤销。', okText: '清空', danger: true });
+      if (!yes) return;
+      const list = await all('divinations');
+      await Promise.all(list.map((r) => del('divinations', r.id)));
+      toast('已清空');
+    } }
+  ]);
+}
+
+/* ---------------- 卡片轮播 ----------------
+   左右滑动切换，轻触中央卡确认；两侧卡片缩放淡出，形成层叠感。 */
+const PICK_SPACING = 0.56;   // 相邻卡片的水平位移（相对卡片宽度）
+const TILE_ROWS = {
+  3: [[1, 2, 3]],
+  4: [[1, 2], [3, 4]],
+  5: [[1, null, 3], [null, 5, null], [2, null, 4]],
+  7: [[1, 2, 3], [4, 5, 6], [null, 7, null]],
+  9: [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+};
+
+/** 牌阵小样：把位置画成编号小牌，排布按牌阵自己的样式（自定义牌阵可自选） */
+function miniLayout(sp) {
+  const rows = rowsFor(sp.layoutKind || 'auto', (sp.positions || []).length);
+  return el('div', { class: 'pk-rows' }, rows.map((row) => el('div', { class: 'pk-row' },
+    row.map((v) => el('span', { class: 'pk-tile' + (v == null ? ' blank' : ''), text: v == null ? '' : String(v) })))));
+}
+
+function createPicker({ items, start = 0, kicker, sub, hint, renderCard, onConfirm }) {
+  let index = Math.max(0, Math.min(items.length - 1, start));
+  let drag = null;
+
+  const cards = [];
+  const dots = [];
+  const stage = el('div', { class: 'picker-stage' });
+  const dotRow = el('div', { class: 'pk-dots' });
+
+  items.forEach((it, i) => {
+    cards.push(el('div', { class: 'pk-card', dataset: { i: String(i) } }, renderCard(it, i)));
+    stage.appendChild(cards[i]);
+    dots.push(el('span', { class: 'pk-dot' }));
+    dotRow.appendChild(dots[i]);
+  });
+
+  const node = el('div', { class: 'pkbox' }, [
+    el('div', { class: 'pk-head' }, [
+      el('div', { class: 'pk-kicker', text: kicker }),
+      el('div', { class: 'pk-sub', text: sub })
+    ]),
+    stage,
+    dotRow,
+    el('div', { class: 'pk-hint', text: hint })
+  ]);
+
+  const stepW = () => (cards[0]?.offsetWidth || 240) * PICK_SPACING;
+
+  function layout(dx = 0) {
+    const s = stepW();
+    const base = index - dx / s;                                       // 连续位置（拖拽时为小数）
+    const near = Math.max(0, Math.min(cards.length - 1, Math.round(base)));
+    cards.forEach((c, i) => {
+      const d = i - base;
+      const ad = Math.abs(d);
+      c.style.transform = `translate(-50%,0) translateX(${(d * s).toFixed(1)}px)`
+        + ` scale(${Math.max(0.74, 1 - ad * 0.13).toFixed(3)}) rotateY(${(-d * 7).toFixed(2)}deg)`;
+      c.style.opacity = Math.max(0.14, 1 - ad * 0.42).toFixed(3);
+      c.style.zIndex = String(60 - Math.round(ad * 10));
+      c.classList.toggle('on', i === near);
+    });
+    dots.forEach((d, i) => d.classList.toggle('on', i === near));
+  }
+
+  function goTo(i) {
+    index = Math.max(0, Math.min(cards.length - 1, i));
+    layout(0);
+  }
+
+  function onDown(e) {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (drag) return;
+    const card = e.target.closest('.pk-card');
+    drag = { x0: e.clientX, dx: 0, moved: false, i: card ? Number(card.dataset.i) : -1 };
+    stage.classList.add('dragging');
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
+  }
+
+  function onMove(e) {
+    if (!drag) return;
+    drag.dx = e.clientX - drag.x0;
+    if (Math.abs(drag.dx) > 4) drag.moved = true;
+    if (drag.moved) { e.preventDefault(); layout(drag.dx); }
+  }
+
+  function onUp() {
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+    document.removeEventListener('pointercancel', onUp);
+    if (!drag) return;
+    const { moved, dx, i } = drag;
+    drag = null;
+    stage.classList.remove('dragging');
+    if (moved) return goTo(index + Math.round(-dx / stepW()));
+    if (i >= 0 && i !== index) return goTo(i);                        // 轻触旁边的卡 → 移到它
+    layout(0);
+    if (i === index) onConfirm?.(items[index], index);
+  }
+
+  stage.addEventListener('pointerdown', onDown);
+
+  const onResize = () => layout(0);
+  window.addEventListener('resize', onResize);
+
+  return {
+    node,
+    layout,
+    goTo,
+    current: () => items[index],
+    destroy: () => window.removeEventListener('resize', onResize)
+  };
+}
+
+/* ---------------- 小部件 ---------------- */
+function stepbar(label, onBack) {
+  return el('div', { class: 'row between', style: { marginBottom: '12px' } }, [
+    el('button', { class: 'btn sm', onclick: onBack }, [iconImg('IC-CHT-006'), '上一步']),
+    el('div', { class: 'small muted ellipsis', style: { textAlign: 'right' }, text: label })
+  ]);
+}

@@ -1,0 +1,996 @@
+{
+  "version": 1,
+  "rule": "IC-<分类2字母>-<三位序号>",
+  "categories": {
+    "NAV": "导航",
+    "CHT": "聊天",
+    "CRD": "字卡库",
+    "MOM": "朋友圈",
+    "DIV": "占卜",
+    "MOD": "情绪态度",
+    "MIO": "通用"
+  },
+  "count": 96,
+  "icons": [
+    {
+      "id": "IC-CHT-001",
+      "name": "表情",
+      "desc": "颜文字 / 表情入口",
+      "category": "CHT",
+      "categoryName": "聊天",
+      "file": "assets/icons/chat/IC-CHT-001.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CHT-002",
+      "name": "图片",
+      "desc": "从相册发送图片",
+      "category": "CHT",
+      "categoryName": "聊天",
+      "file": "assets/icons/chat/IC-CHT-002.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CHT-003",
+      "name": "语音",
+      "desc": "语音字卡 / 播放",
+      "category": "CHT",
+      "categoryName": "聊天",
+      "file": "assets/icons/chat/IC-CHT-003.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CHT-004",
+      "name": "发送",
+      "desc": "发送消息",
+      "category": "CHT",
+      "categoryName": "聊天",
+      "file": "assets/icons/chat/IC-CHT-004.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CHT-005",
+      "name": "更多",
+      "desc": "输入栏「+」更多入口",
+      "category": "CHT",
+      "categoryName": "聊天",
+      "file": "assets/icons/chat/IC-CHT-005.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CHT-006",
+      "name": "返回",
+      "desc": "返回上一页",
+      "category": "CHT",
+      "categoryName": "聊天",
+      "file": "assets/icons/chat/IC-CHT-006.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CHT-007",
+      "name": "菜单",
+      "desc": "更多操作菜单",
+      "category": "CHT",
+      "categoryName": "聊天",
+      "file": "assets/icons/chat/IC-CHT-007.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CHT-008",
+      "name": "表情包",
+      "desc": "我的表情库 / 贴纸",
+      "category": "CHT",
+      "categoryName": "聊天",
+      "file": "assets/icons/chat/IC-CHT-008.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CHT-009",
+      "name": "引用",
+      "desc": "引用某条消息",
+      "category": "CHT",
+      "categoryName": "聊天",
+      "file": "assets/icons/chat/IC-CHT-009.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CHT-010",
+      "name": "撤回",
+      "desc": "撤回一条消息",
+      "category": "CHT",
+      "categoryName": "聊天",
+      "file": "assets/icons/chat/IC-CHT-010.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CHT-011",
+      "name": "拍一拍",
+      "desc": "双击头像触发拍一拍",
+      "category": "CHT",
+      "categoryName": "聊天",
+      "file": "assets/icons/chat/IC-CHT-011.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CHT-012",
+      "name": "通话",
+      "desc": "虚拟通话（P1）",
+      "category": "CHT",
+      "categoryName": "聊天",
+      "file": "assets/icons/chat/IC-CHT-012.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CHT-013",
+      "name": "录音",
+      "desc": "站内录音（P1）",
+      "category": "CHT",
+      "categoryName": "聊天",
+      "file": "assets/icons/chat/IC-CHT-013.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CHT-014",
+      "name": "背景",
+      "desc": "聊天壁纸 / 背景",
+      "category": "CHT",
+      "categoryName": "聊天",
+      "file": "assets/icons/chat/IC-CHT-014.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CHT-015",
+      "name": "转账",
+      "desc": "给 TA 转账",
+      "category": "CHT",
+      "categoryName": "聊天",
+      "file": "assets/icons/chat/IC-CHT-015.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CHT-016",
+      "name": "红包",
+      "desc": "发一个红包",
+      "category": "CHT",
+      "categoryName": "聊天",
+      "file": "assets/icons/chat/IC-CHT-016.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CRD-001",
+      "name": "字卡库",
+      "desc": "字卡库入口",
+      "category": "CRD",
+      "categoryName": "字卡库",
+      "file": "assets/icons/card/IC-CRD-001.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CRD-002",
+      "name": "新建字卡",
+      "desc": "新增一张字卡",
+      "category": "CRD",
+      "categoryName": "字卡库",
+      "file": "assets/icons/card/IC-CRD-002.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CRD-003",
+      "name": "导入",
+      "desc": "导入 JSON / 纯文本",
+      "category": "CRD",
+      "categoryName": "字卡库",
+      "file": "assets/icons/card/IC-CRD-003.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CRD-004",
+      "name": "导出",
+      "desc": "导出字卡库",
+      "category": "CRD",
+      "categoryName": "字卡库",
+      "file": "assets/icons/card/IC-CRD-004.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CRD-005",
+      "name": "分组",
+      "desc": "字卡分组 / 文件夹",
+      "category": "CRD",
+      "categoryName": "字卡库",
+      "file": "assets/icons/card/IC-CRD-005.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CRD-006",
+      "name": "编辑",
+      "desc": "修改字卡内容",
+      "category": "CRD",
+      "categoryName": "字卡库",
+      "file": "assets/icons/card/IC-CRD-006.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CRD-007",
+      "name": "删除",
+      "desc": "删除字卡 / 分组",
+      "category": "CRD",
+      "categoryName": "字卡库",
+      "file": "assets/icons/card/IC-CRD-007.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CRD-008",
+      "name": "启禁",
+      "desc": "启用 / 停用字卡",
+      "category": "CRD",
+      "categoryName": "字卡库",
+      "file": "assets/icons/card/IC-CRD-008.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CRD-009",
+      "name": "使用次数",
+      "desc": "字卡被使用次数统计",
+      "category": "CRD",
+      "categoryName": "字卡库",
+      "file": "assets/icons/card/IC-CRD-009.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CRD-010",
+      "name": "查找",
+      "desc": "搜索字卡",
+      "category": "CRD",
+      "categoryName": "字卡库",
+      "file": "assets/icons/card/IC-CRD-010.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CRD-011",
+      "name": "排序",
+      "desc": "拖拽排序",
+      "category": "CRD",
+      "categoryName": "字卡库",
+      "file": "assets/icons/card/IC-CRD-011.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-CRD-012",
+      "name": "复制",
+      "desc": "复制字卡内容",
+      "category": "CRD",
+      "categoryName": "字卡库",
+      "file": "assets/icons/card/IC-CRD-012.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-DIV-001",
+      "name": "占卜",
+      "desc": "占卜模块入口",
+      "category": "DIV",
+      "categoryName": "占卜",
+      "file": "assets/icons/divine/IC-DIV-001.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-DIV-002",
+      "name": "塔罗",
+      "desc": "塔罗牌体系",
+      "category": "DIV",
+      "categoryName": "占卜",
+      "file": "assets/icons/divine/IC-DIV-002.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-DIV-003",
+      "name": "雷诺曼",
+      "desc": "雷诺曼牌体系",
+      "category": "DIV",
+      "categoryName": "占卜",
+      "file": "assets/icons/divine/IC-DIV-003.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-DIV-004",
+      "name": "占星骰",
+      "desc": "占星骰体系",
+      "category": "DIV",
+      "categoryName": "占卜",
+      "file": "assets/icons/divine/IC-DIV-004.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-DIV-005",
+      "name": "洗牌",
+      "desc": "洗牌 / 投掷动画",
+      "category": "DIV",
+      "categoryName": "占卜",
+      "file": "assets/icons/divine/IC-DIV-005.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-DIV-006",
+      "name": "翻牌",
+      "desc": "翻牌查看解读",
+      "category": "DIV",
+      "categoryName": "占卜",
+      "file": "assets/icons/divine/IC-DIV-006.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-DIV-007",
+      "name": "牌阵",
+      "desc": "牌阵选择",
+      "category": "DIV",
+      "categoryName": "占卜",
+      "file": "assets/icons/divine/IC-DIV-007.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-DIV-008",
+      "name": "追问",
+      "desc": "多轮追问 / 补牌",
+      "category": "DIV",
+      "categoryName": "占卜",
+      "file": "assets/icons/divine/IC-DIV-008.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-DIV-009",
+      "name": "自定义牌面",
+      "desc": "自定义牌面 / 牌阵",
+      "category": "DIV",
+      "categoryName": "占卜",
+      "file": "assets/icons/divine/IC-DIV-009.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-001",
+      "name": "设置",
+      "desc": "设置入口",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-001.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-002",
+      "name": "关闭",
+      "desc": "关闭弹层 / 取消",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-002.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-003",
+      "name": "勾选",
+      "desc": "确认 / 完成",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-003.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-004",
+      "name": "右箭头",
+      "desc": "列表项箭头",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-004.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-005",
+      "name": "上箭头",
+      "desc": "返回顶部 / 展开",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-005.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-006",
+      "name": "应用图标",
+      "desc": "站点图标 / 桌面图标（带色，非线稿）",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-006.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-007",
+      "name": "信息",
+      "desc": "说明 / 提示",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-007.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-008",
+      "name": "警告",
+      "desc": "风险 / 警告提示",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-008.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-009",
+      "name": "下载",
+      "desc": "导出 / 下载数据",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-009.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-010",
+      "name": "上传",
+      "desc": "导入 / 上传数据",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-010.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-011",
+      "name": "刷新",
+      "desc": "重试 / 刷新",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-011.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-012",
+      "name": "铃声",
+      "desc": "通知铃声设置",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-012.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-013",
+      "name": "调色",
+      "desc": "装扮 / 主题配色",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-013.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-014",
+      "name": "用户",
+      "desc": "个人资料 / 头像",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-014.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-015",
+      "name": "相册",
+      "desc": "他的相册 / 图片库",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-015.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-016",
+      "name": "音乐",
+      "desc": "音乐 / 一起听",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-016.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-017",
+      "name": "日历",
+      "desc": "日期 / 相识天数",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-017.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-018",
+      "name": "时钟",
+      "desc": "时间 / 延迟",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-018.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-019",
+      "name": "锁",
+      "desc": "密码 / 私密",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-019.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-020",
+      "name": "星标",
+      "desc": "收藏 / 重要",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-020.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-021",
+      "name": "保存",
+      "desc": "保存设置",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-021.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-022",
+      "name": "加号",
+      "desc": "新增",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-022.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-023",
+      "name": "减号",
+      "desc": "移除",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-023.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-024",
+      "name": "文字",
+      "desc": "文本 / 输入",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-024.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-025",
+      "name": "全屏",
+      "desc": "全屏查看 / 展开",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-025.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-026",
+      "name": "备忘录",
+      "desc": "本地便签 / 备忘录",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-026.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-027",
+      "name": "问卷",
+      "desc": "TA 提问 / 我提问 / 历史记录",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-027.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-028",
+      "name": "信箱",
+      "desc": "TA 的来信 / 我写封信",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-028.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-029",
+      "name": "播放",
+      "desc": "播放音频",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-029.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-030",
+      "name": "暂停",
+      "desc": "暂停播放",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-030.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-031",
+      "name": "一起听",
+      "desc": "与 TA 一起听",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-031.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-032",
+      "name": "挂断",
+      "desc": "挂断通话",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-032.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MOD-001",
+      "name": "开心",
+      "desc": "心情：开心",
+      "category": "MOD",
+      "categoryName": "情绪态度",
+      "file": "assets/icons/mood/IC-MOD-001.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MOD-002",
+      "name": "平静",
+      "desc": "心情：平静",
+      "category": "MOD",
+      "categoryName": "情绪态度",
+      "file": "assets/icons/mood/IC-MOD-002.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MOD-003",
+      "name": "难过",
+      "desc": "心情：难过",
+      "category": "MOD",
+      "categoryName": "情绪态度",
+      "file": "assets/icons/mood/IC-MOD-003.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MOD-004",
+      "name": "生气",
+      "desc": "心情：生气",
+      "category": "MOD",
+      "categoryName": "情绪态度",
+      "file": "assets/icons/mood/IC-MOD-004.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MOD-005",
+      "name": "喜欢",
+      "desc": "心情：喜欢",
+      "category": "MOD",
+      "categoryName": "情绪态度",
+      "file": "assets/icons/mood/IC-MOD-005.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MOD-006",
+      "name": "在意",
+      "desc": "心情：在意 / 关注",
+      "category": "MOD",
+      "categoryName": "情绪态度",
+      "file": "assets/icons/mood/IC-MOD-006.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MOM-001",
+      "name": "朋友圈",
+      "desc": "朋友圈入口",
+      "category": "MOM",
+      "categoryName": "朋友圈",
+      "file": "assets/icons/moments/IC-MOM-001.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MOM-002",
+      "name": "发布",
+      "desc": "发布一条动态",
+      "category": "MOM",
+      "categoryName": "朋友圈",
+      "file": "assets/icons/moments/IC-MOM-002.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MOM-003",
+      "name": "点赞",
+      "desc": "赞 / 态度",
+      "category": "MOM",
+      "categoryName": "朋友圈",
+      "file": "assets/icons/moments/IC-MOM-003.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MOM-004",
+      "name": "评论",
+      "desc": "评论 / 留言",
+      "category": "MOM",
+      "categoryName": "朋友圈",
+      "file": "assets/icons/moments/IC-MOM-004.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MOM-005",
+      "name": "围观",
+      "desc": "围观 / 查看态度",
+      "category": "MOM",
+      "categoryName": "朋友圈",
+      "file": "assets/icons/moments/IC-MOM-005.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MOM-006",
+      "name": "配音频",
+      "desc": "动态附音频",
+      "category": "MOM",
+      "categoryName": "朋友圈",
+      "file": "assets/icons/moments/IC-MOM-006.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-NAV-001",
+      "name": "首页",
+      "desc": "主屏门户 / 返回首页",
+      "category": "NAV",
+      "categoryName": "导航",
+      "file": "assets/icons/nav/IC-NAV-001.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-NAV-002",
+      "name": "消息",
+      "desc": "聊天会话（底部导航）",
+      "category": "NAV",
+      "categoryName": "导航",
+      "file": "assets/icons/nav/IC-NAV-002.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-NAV-003",
+      "name": "朋友圈",
+      "desc": "朋友圈动态（底部导航）",
+      "category": "NAV",
+      "categoryName": "导航",
+      "file": "assets/icons/nav/IC-NAV-003.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-NAV-004",
+      "name": "占卜",
+      "desc": "占卜模块（底部导航）",
+      "category": "NAV",
+      "categoryName": "导航",
+      "file": "assets/icons/nav/IC-NAV-004.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-NAV-005",
+      "name": "我的",
+      "desc": "设置与个人（底部导航）",
+      "category": "NAV",
+      "categoryName": "导航",
+      "file": "assets/icons/nav/IC-NAV-005.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-NAV-006",
+      "name": "更多",
+      "desc": "更多功能入口",
+      "category": "NAV",
+      "categoryName": "导航",
+      "file": "assets/icons/nav/IC-NAV-006.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-033",
+      "name": "经期",
+      "desc": "经期记录 · 日历",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-033.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-034",
+      "name": "记账",
+      "desc": "收支账本",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-034.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-035",
+      "name": "番茄钟",
+      "desc": "专注计时",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-035.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-036",
+      "name": "观影",
+      "desc": "观影清单",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-036.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-037",
+      "name": "书架",
+      "desc": "读书清单",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-037.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-038",
+      "name": "收藏",
+      "desc": "朋友圈帖子收藏",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-038.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-039",
+      "name": "商城",
+      "desc": "商城 · 购物袋",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-039.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-040",
+      "name": "游戏手柄",
+      "desc": "游戏厅 · 手柄",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-040.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-041",
+      "name": "拼夕夕",
+      "desc": "拼夕夕 · 拼单",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-041.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-042",
+      "name": "通牌",
+      "desc": "通牌 · 只以字卡交流",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-042.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-043",
+      "name": "回声",
+      "desc": "回声 · 拖上桌翻开看",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-043.svg",
+      "replaced": false,
+      "replacement": null
+    }
+  ]
+}

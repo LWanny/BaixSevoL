@@ -1,0 +1,381 @@
+/* 装扮 · 全局背景 / 聊天壁纸 / 气泡样式 */
+
+import { el, openFile, compressImage } from '../util.js';
+import { iconImg } from '../icons.js';
+import { fullPage } from '../shell.js';
+import { state, saveSkin, applySkin } from '../state.js';
+import { saveMedia, mediaURL, delMedia } from '../media.js';
+import { toast, confirmBox, sheet } from '../ui.js';
+
+const BG_PRESETS = ['#f7f7f6', '#ffffff', '#f2f2f1', '#ececea', '#e6e6e4', '#dcdcda', '#1a1c20'];
+/* 马卡龙浅色系（双方气泡共用） */
+const MACARON = [
+  '#FFD8E4', '#FFE3C9', '#FFF6BF', '#D9F2D0',
+  '#CCEAF4', '#DCD6F7', '#F6D6EC', '#EDEDEA'
+];
+
+let curView = null;
+
+export default async function pageSkin(view) {
+  curView = view;
+  build(view);
+}
+
+function build(view) {
+  view.innerHTML = '';
+  fullPage({ back: true, title: '装扮', sub: '改完即时生效' });
+
+  const wrap = el('div', { class: 'page' });
+  const s = state.skin;
+
+  /* ---- 整体背景 ---- */
+  wrap.appendChild(section('整体背景', el('div', { class: 'card' }, [
+    el('div', { class: 'field' }, [
+      el('label', { text: '背景颜色' }),
+      el('div', { class: 'row wrap', style: { gap: '8px', marginBottom: '8px' } }, BG_PRESETS.map((c) =>
+        el('span', { class: 'chip' + (s.globalBgColor === c ? ' on' : ''), style: { background: c, width: '30px', height: '22px' }, title: c, dataset: { val: c }, onclick: async (e) => {
+          s.globalBgColor = c; await saveSkin(); await applySkin(); refreshChips(e.target.parentElement, c);
+        } }))),
+      el('input', { class: 'input', type: 'color', value: s.globalBgColor || '#f7f7f6', oninput: async (e) => { s.globalBgColor = e.target.value; await saveSkin(); await applySkin(); } })
+    ]),
+    imagePicker('全局背景图', '全局背景图片会铺满整个应用。', s.globalBgImageId, async (id) => { s.globalBgImageId = id; await saveSkin(); await applySkin(); }, 'bg'),
+    bgAdjust('globalBgX', 'globalBgY', 'globalBgZoom', s.globalBgImageId)
+  ])));
+
+  /* ---- 聊天壁纸 ---- */
+  wrap.appendChild(section('聊天壁纸', el('div', { class: 'card' }, [
+    imagePicker('聊天背景图', '只作用于聊天页，铺在气泡后面。', s.chatWallpaperId, async (id) => { s.chatWallpaperId = id; await saveSkin(); await applySkin(); }, 'wp'),
+    bgAdjust('chatWallX', 'chatWallY', 'chatWallZoom', s.chatWallpaperId)
+  ])));
+
+  /* ---- 气泡 ---- */
+  wrap.appendChild(section('聊天气泡', el('div', { class: 'card' }, [
+    bubbleColorField('我方气泡', 'me'),
+    bubbleColorField('TA 气泡', 'ta'),
+    el('div', { class: 'param' }, [
+      el('div', { class: 'pname' }, [el('span', { text: '气泡圆角' })]),
+      el('span', { class: 'pval', text: s.bubbleRadius + 'px' }),
+      el('div', { class: 'row', style: { flex: '1 1 100%' } }, [
+        (() => { const r = el('input', { type: 'range', min: '0', max: '22', value: String(s.bubbleRadius) });
+          r.addEventListener('input', async () => { s.bubbleRadius = Number(r.value); r.parentElement.previousElementSibling.textContent = r.value + 'px'; await saveSkin(); await applySkin(); });
+          return r; })()
+      ])
+    ]),
+    (() => {
+      const ta = el('textarea', {
+        class: 'input',
+        rows: '4',
+        value: s.bubbleCss || '',
+        placeholder: '例 1：border-radius:20px;box-shadow:0 2px 8px rgba(0,0,0,.1)\n例 2：.msg-out .msg-bubble{color:#fff}\n也支持 .me / .friend / .message-me / .bubble 等常见类名',
+        style: { fontFamily: 'ui-monospace,Menlo,monospace', fontSize: '12.5px', lineHeight: '1.6', resize: 'vertical' }
+      });
+      const apply = el('button', { class: 'btn sm', onclick: async () => {
+        s.bubbleCss = ta.value;
+        await saveSkin(); await applySkin();
+        toast('已应用气泡样式');
+      } }, ['应用']);
+      const clear = el('button', { class: 'btn sm', onclick: async () => {
+        ta.value = ''; s.bubbleCss = '';
+        await saveSkin(); await applySkin();
+        toast('已清空');
+      } }, ['清空']);
+      return el('div', { class: 'field' }, [
+        el('label', { text: '自定义气泡样式（CSS）' }),
+        ta,
+        el('div', { class: 'row', style: { gap: '8px', marginTop: '8px' } }, [apply, clear]),
+        el('div', { class: 'hint', text: '只写声明会自动套到双方气泡；写选择器时，.msg-out/.msg-in/.msg-bubble/.message-me/.me/.friend/.bubble 会自动映射到本应用结构。' })
+      ]);
+    })()
+  ])));
+
+  /* ---- 聊天头像形状 ---- */
+  wrap.appendChild(section('聊天头像', el('div', { class: 'card' }, [
+    el('div', { class: 'field' }, [
+      el('label', { text: '头像形状' }),
+      el('div', { class: 'row', style: { gap: '8px' } }, [
+        shapeBtn('圆形', 'circle'),
+        shapeBtn('圆角方形', 'rounded')
+      ]),
+      el('div', { class: 'hint', text: '只影响聊天页每条消息旁的头像。' })
+    ])
+  ])));
+
+  /* ---- 头像 ---- */
+  wrap.appendChild(section('头像', el('div', { class: 'card flush' }, [
+    el('div', { class: 'list-item', onclick: async () => {
+      const f = await openFile({ accept: 'image/*' }); if (!f) return;
+      const { blob, w, h } = await compressImage(f, 512, 0.9);
+      s.avatarMeId = await saveMedia(blob, { type: 'image', w, h, source: 'avatar' });
+      await saveSkin(); await applySkin(); toast('我的头像已更新');
+    } }, [iconImg('IC-MIO-014'), el('div', { class: 'li-main' }, [el('div', { class: 'li-title', text: '更换我的头像' })]), iconImg('IC-MIO-004', 'chev')]),
+    el('div', { class: 'list-item', onclick: async () => {
+      if (!s.avatarMeId) return;
+      const yes = await confirmBox({ title: '还原头像', text: '将恢复为默认文字头像。' });
+      if (!yes) return;
+      await delMedia(s.avatarMeId); s.avatarMeId = null; await saveSkin(); await applySkin(); toast('已还原');
+    } }, [iconImg('IC-MIO-023'), el('div', { class: 'li-main' }, [el('div', { class: 'li-title', text: '还原为默认头像' })])])
+  ])));
+
+  /* ---- 重置 ---- */
+  wrap.appendChild(el('div', { style: { padding: '0 2px 20px' } }, [
+    el('button', { class: 'btn block', onclick: async () => {
+      const yes = await confirmBox({ title: '恢复默认装扮', text: '背景、壁纸与气泡样式都会回到初始值。头像不会被清除。', okText: '恢复默认' });
+      if (!yes) return;
+      const keepMe = s.avatarMeId;
+      Object.assign(s, {
+        globalBgColor: '#f7f7f6', globalBgImageId: null, chatWallpaperId: null,
+        bubbleMe: 'linear-gradient(135deg,#1c1e22,#3c4048)', bubbleMeTxt: '#ffffff',
+        bubbleTa: '#ffffff', bubbleTaTxt: '#16181c', bubbleRadius: 15,
+        avatarShape: 'rounded', bubbleCss: '', avatarMeId: keepMe,
+        globalBgX: 50, globalBgY: 50, globalBgZoom: 100,
+        chatWallX: 50, chatWallY: 50, chatWallZoom: 100
+      });
+      await saveSkin(); await applySkin();
+      renderCurrent();
+      toast('已恢复默认装扮');
+    } }, ['恢复默认装扮'])
+  ]));
+
+  view.appendChild(wrap);
+}
+
+/* 背景图 / 壁纸的位置与缩放（50 = 居中，仅在有图时生效） */
+function bgAdjust(xKey, yKey, zoomKey, hasImage) {
+  const s = state.skin;
+  const row = (label, key, min, max) => {
+    const val = el('span', { class: 'pval', text: `${s[key]}%` });
+    const r = el('input', { type: 'range', min: String(min), max: String(max), value: String(s[key]) });
+    r.addEventListener('input', async () => {
+      s[key] = Number(r.value);
+      val.textContent = r.value + '%';
+      await saveSkin(); await applySkin();
+    });
+    return el('div', { class: 'param' }, [
+      el('div', { class: 'pname' }, [el('span', { text: label })]),
+      val,
+      el('div', { class: 'row', style: { flex: '1 1 100%' } }, [r])
+    ]);
+  };
+  return el('div', {}, [
+    hasImage ? null : el('div', { class: 'hint', text: '上传图片后下面三项才生效。' }),
+    row('水平位置（50 = 居中）', xKey, 0, 100),
+    row('垂直位置（50 = 居中）', yKey, 0, 100),
+    row('缩放比例（100 = 铺满）', zoomKey, 50, 200)
+  ]);
+}
+
+/* ---------------- 小部件 ---------------- */
+function shapeBtn(label, value) {
+  const s = state.skin;
+  const on = (s.avatarShape || 'rounded') === value;
+  return el('button', {
+    class: 'btn sm shape-btn' + (on ? ' primary' : ''),
+    dataset: { shape: value },
+    onclick: async () => {
+      s.avatarShape = value;
+      await saveSkin(); await applySkin();
+      document.querySelectorAll('.shape-btn').forEach((b) => {
+        b.classList.toggle('primary', b.dataset.shape === value);
+      });
+    }
+  }, [label]);
+}
+
+/* 气泡颜色：马卡龙预设 + HSV 自定义 */
+function bubbleColorField(label, side) {
+  const s = state.skin;
+  const key = side === 'me' ? 'bubbleMe' : 'bubbleTa';
+  const cur = s[key];
+  const isHex = /^#[0-9a-fA-F]{6}$/.test(cur || '');
+
+  const curNorm = (cur || '').toUpperCase();
+  const chips = MACARON.map((c) =>
+    el('span', {
+      class: 'chip' + (curNorm === c ? ' on' : ''),
+      style: { background: c, width: '30px', height: '22px' },
+      title: c,
+      onclick: async (e) => {
+        s[key] = c;
+        s[side === 'me' ? 'bubbleMeTxt' : 'bubbleTaTxt'] = textFor(c);
+        await saveSkin(); await applySkin();
+        refreshChips(e.target.parentElement, c);
+        if (previewChip) previewChip.style.background = c;
+      }
+    })
+  );
+
+  if (isHex && !MACARON.includes(curNorm)) {
+    chips.push(el('span', {
+      class: 'chip on', title: cur,
+      style: { background: cur, width: '30px', height: '22px' },
+      onclick: async (e) => {
+        s[key] = cur; await saveSkin(); await applySkin();
+        refreshChips(e.target.parentElement, cur);
+      }
+    }));
+  }
+
+  const previewChip = el('span', {
+    class: 'chip on',
+    style: { background: isHex ? cur : 'linear-gradient(135deg,#1c1e22,#3c4048)', width: '30px', height: '22px' }
+  });
+
+  return el('div', { class: 'field' }, [
+    el('label', { text: label }),
+    el('div', { class: 'row wrap', style: { gap: '8px', marginBottom: '8px' } }, chips),
+    el('div', { class: 'row', style: { gap: '8px' } }, [
+      previewChip,
+      el('button', { class: 'btn sm', onclick: () => openHsvSheet(side) }, ['自定义颜色（色相/饱和度/明度）'])
+    ])
+  ]);
+}
+
+function openHsvSheet(side) {
+  const s = state.skin;
+  const key = side === 'me' ? 'bubbleMe' : 'bubbleTa';
+  const txtKey = side === 'me' ? 'bubbleMeTxt' : 'bubbleTaTxt';
+  const init = /^#[0-9a-fA-F]{6}$/.test(s[key] || '') ? s[key] : '#ffd8e4';
+  const hsv = hexToHsv(init);
+
+  const preview = el('div', { class: 'hsv-prev' });
+  const code = el('div', { class: 'hsv-code' });
+  const paint = () => {
+    const hex = hsvToHex(hsv.h, hsv.s, hsv.v);
+    preview.style.background = hex;
+    code.textContent = hex;
+  };
+
+  const mkRow = (label, min, max, get, set, bgFn) => {
+    const out = el('span', { class: 'pval', text: String(get()) });
+    const r = el('input', { type: 'range', min: String(min), max: String(max), value: String(get()) });
+    const setBg = () => { if (bgFn) r.style.setProperty('--grad', typeof bgFn === 'function' ? bgFn() : bgFn); };
+    setBg();
+    r.addEventListener('input', () => {
+      set(Number(r.value));
+      out.textContent = r.value;
+      setBg();
+      paint();
+    });
+    return el('div', { class: 'hsv-row' }, [el('div', { class: 'hsv-l', text: label }), r, out]);
+  };
+
+  const hueBg = 'linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)';
+  const satBg = () => `linear-gradient(90deg,hsl(${hsv.h},0%,${Math.max(20, hsv.v)}%),hsl(${hsv.h},100%,${Math.max(20, hsv.v)}%))`;
+  const valBg = () => `linear-gradient(90deg,#000,hsl(${hsv.h},${hsv.s}%,50%))`;
+
+  const apply = el('button', { class: 'btn primary', style: { flex: '1' }, onclick: async () => {
+    const hex = hsvToHex(hsv.h, hsv.s, hsv.v);
+    s[key] = hex;
+    s[txtKey] = textFor(hex);
+    await saveSkin(); await applySkin();
+    ctl.close();
+    toast('已应用颜色');
+  } }, ['应用']);
+
+  const body = el('div', {}, [
+    el('div', { class: 'hsv-top' }, [preview, code]),
+    mkRow('色相', 0, 360, () => hsv.h, (v) => { hsv.h = v; }, hueBg),
+    mkRow('饱和度', 0, 100, () => hsv.s, (v) => { hsv.s = v; }, satBg),
+    mkRow('明度', 0, 100, () => hsv.v, (v) => { hsv.v = v; }, valBg)
+  ]);
+
+  const ctl = sheet({
+    title: side === 'me' ? '我方气泡颜色' : 'TA 气泡颜色',
+    node: body,
+    foot: apply
+  });
+  paint();
+}
+
+function hexToHsv(hex) {
+  let h = String(hex).replace('#', '');
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  const r = parseInt(h.slice(0, 2), 16) / 255;
+  const g = parseInt(h.slice(2, 4), 16) / 255;
+  const b = parseInt(h.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  let hh = 0;
+  if (d) {
+    if (max === r) hh = ((g - b) / d) % 6;
+    else if (max === g) hh = (b - r) / d + 2;
+    else hh = (r - g) / d + 4;
+    hh *= 60;
+    if (hh < 0) hh += 360;
+  }
+  return {
+    h: Math.round(hh),
+    s: Math.round((max ? d / max : 0) * 100),
+    v: Math.round(max * 100)
+  };
+}
+
+function hsvToHex(h, s, v) {
+  s /= 100; v /= 100;
+  const c = v * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = v - c;
+  let r = 0, g = 0, b = 0;
+  const seg = Math.floor(h / 60) % 6;
+  if (seg === 0) { r = c; g = x; }
+  else if (seg === 1) { r = x; g = c; }
+  else if (seg === 2) { g = c; b = x; }
+  else if (seg === 3) { g = x; b = c; }
+  else if (seg === 4) { r = x; b = c; }
+  else { r = c; b = x; }
+  const to = (n) => Math.round((n + m) * 255).toString(16).padStart(2, '0');
+  return '#' + to(r) + to(g) + to(b);
+}
+
+/* 浅色气泡配深色字，深色气泡配白字 */
+function textFor(color) {
+  if (!/^#[0-9a-fA-F]{6}$/.test(color || '')) return '#ffffff';
+  const r = parseInt(color.slice(1, 3), 16);
+  const g = parseInt(color.slice(3, 5), 16);
+  const b = parseInt(color.slice(5, 7), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? '#16181c' : '#ffffff';
+}
+
+function refreshChips(container, active) {
+  if (!container) return;
+  Array.from(container.querySelectorAll('.chip')).forEach((c) => c.classList.toggle('on', c.title === active || c.dataset.val === active));
+}
+
+function imagePicker(label, desc, mediaId, onSet, kind) {
+  const box = el('div', { class: 'field' });
+  box.appendChild(el('label', { text: label }));
+
+  const preview = el('div', { style: { marginBottom: '8px', borderRadius: '10px', overflow: 'hidden', height: mediaId ? '120px' : '0', background: '#f0f0ee', display: mediaId ? 'block' : 'none' } });
+  if (mediaId) mediaURL(mediaId).then((u) => { if (u) preview.appendChild(el('img', { src: u, style: { width: '100%', height: '100%', objectFit: 'cover' } })); });
+  box.appendChild(preview);
+
+  box.appendChild(el('div', { class: 'row', style: { gap: '8px' } }, [
+    el('button', { class: 'btn sm', onclick: async () => {
+      const f = await openFile({ accept: 'image/*' });
+      if (!f) return;
+      const { blob, w, h } = await compressImage(f, 1600, 0.86);
+      const id = await saveMedia(blob, { type: 'image', w, h, source: 'skin' });
+      await onSet(id);
+      toast('已应用');
+    } }, mediaId ? ['更换'] : ['选择图片']),
+    mediaId ? el('button', { class: 'btn sm', onclick: async () => {
+      await delMedia(mediaId); await onSet(null); toast('已移除');
+    } }, ['移除']) : null
+  ]));
+
+  if (desc) box.appendChild(el('div', { class: 'hint', text: desc }));
+  void kind;
+  return box;
+}
+
+function section(title, node) {
+  return el('div', { class: 'sec' }, [
+    el('div', { class: 'sec-h' }, [el('div', { class: 'h', text: title })]),
+    node
+  ]);
+}
+
+function renderCurrent() {
+  if (curView) build(curView);
+}
