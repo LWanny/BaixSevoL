@@ -966,10 +966,12 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .mail-empty .e-p{font-size:12.5px}
 /* 信纸详情页 / 写信页（独立 fullPage，路由 /mail/:id、/compose） */
 .letter-page{
-  min-height:100vh;background:#f2f3f5;
+  height:100%;min-height:100%;background:#f2f3f5;
   padding:14px 14px calc(20px + var(--safe-b));
   box-sizing:border-box;
   display:flex;flex-direction:column;
+  overflow-y:auto;overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
 }
 
 /* 信纸主体：默认纯白空白信纸，可铺一层导入的信纸图 */
