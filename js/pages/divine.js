@@ -52,9 +52,13 @@ export default async function pageDivine(v) {
 }
 
 /* ---------------- 数据组装 ---------------- */
+/** 牌面覆盖机制：customCards 里 override:true 且 id 与内置一致的，
+    会替换掉内置 deck 里的同名牌；不带 override 的 customCards 是新增牌，拼在后面。 */
 function deckFor(system) {
   const base = system === 'tarot' ? TAROT : system === 'lenormand' ? LENORMAND : [];
-  return base.concat(customCards.filter((c) => c.system === system));
+  const over = new Map(customCards.filter((c) => c.override && c.system === system).map((c) => [c.id, c]));
+  const added = customCards.filter((c) => !c.override && c.system === system);
+  return base.map((c) => over.get(c.id) || c).concat(added);
 }
 function spreadsFor(system) {
   return SPREADS.filter((s) => s.system === system).concat(customSpreads.filter((s) => s.system === system));
@@ -292,7 +296,7 @@ function renderBoard(wrap) {
     ? el('div', { class: 'reading', style: { marginBottom: '14px' }, text: '问：' + sess.question })
     : (sess.system === 'astro' ? el('div', {}) : el('div', { class: 'small muted center', style: { marginBottom: '14px' }, text: '心里默想一遍你要问的事，然后逐张翻牌。' }));
 
-  const rows = rowsFor(sess.spread?.layoutKind || 'auto', sess.draws.length);
+  const rows = rowsFor(sess.spread?.layoutKind || 'auto', sess.draws.length, sess.spread?.layoutCells);
   const board = el('div', { class: 'spread board' });
   rows.forEach((r) => {
     const line = el('div', { class: 'spread-row' });
@@ -302,8 +306,9 @@ function renderBoard(wrap) {
       const d = sess.draws[i];
       line.appendChild(el('div', {
         class: 'dcard' + (sess.revealed[i] ? ' flipped' : '') + (d.reversed ? ' rev' : '') + (d.imgId ? ' has-img' : ''),
+        'data-i': String(i),
         onclick: (e) => flipCard(i, e.currentTarget)
-      }, [sess.revealed[i] ? cardFace(d) : cardBack()]));
+      }, [sess.revealed[i] ? cardFace(d, i) : cardBack()]));
     });
     board.appendChild(line);
   });
@@ -335,21 +340,30 @@ function cardBack() {
   ]);
 }
 
-function cardFace(d) {
+function cardFace(d, i) {
+  const root = el('div', { class: 'dface-root' });
+  const wrap = el('div', { class: 'dface-body' });
   if (d.imgId) {
-    return el('div', { class: 'dface-img' }, [
+    wrap.appendChild(el('div', { class: 'dface-img' }, [
       imgEl(d.imgId, 'dcard-img', d.name),
       el('div', { class: 'dcard-cap' }, [
         el('span', { text: d.name }),
         d.orient ? el('span', { class: 'cap-ori', text: ' · ' + d.orient }) : null
       ])
-    ]);
+    ]));
+  } else {
+    wrap.appendChild(el('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' } }, [
+      el('div', { class: 'nm', text: d.name }),
+      d.poker ? el('div', { class: 'pos', text: d.poker }) : null,
+      d.orient ? el('div', { class: 'pos', text: d.orient }) : (d.pos ? el('div', { class: 'pos', text: d.pos }) : null)
+    ]));
   }
-  return el('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' } }, [
-    el('div', { class: 'nm', text: d.name }),
-    d.poker ? el('div', { class: 'pos', text: d.poker }) : null,
-    d.orient ? el('div', { class: 'pos', text: d.orient }) : (d.pos ? el('div', { class: 'pos', text: d.pos }) : null)
-  ]);
+  root.appendChild(wrap);
+  if (sess?.system !== 'astro') {
+    const editBtn = el('button', { class: 'dface-edit', title: '编辑这张牌', onclick: (e) => { e.stopPropagation(); openDrawEditor(i); } }, [iconImg('IC-MIO-022')]);
+    root.appendChild(editBtn);
+  }
+  return root;
 }
 
 function flipCard(i, node) {
@@ -359,8 +373,41 @@ function flipCard(i, node) {
   node.classList.toggle('rev', !!sess.draws[i].reversed);
   node.classList.toggle('has-img', !!sess.draws[i].imgId);
   node.innerHTML = '';
-  node.appendChild(cardFace(sess.draws[i]));
+  node.appendChild(cardFace(sess.draws[i], i));
   if (sess.revealed.every(Boolean)) { render(); toast('牌面已全部翻开'); }
+}
+
+/** 在 board 上编辑某张已抽到的牌 —— 保存为 override 后刷新当前卡与解读 */
+function openDrawEditor(i) {
+  const d = sess.draws[i];
+  // 找出对应的 builtin / override
+  const builtin = findBuiltinCard(d.id);
+  const override = customCards.find((c) => c.id === d.id && c.override);
+  cardForm(override || builtin || { ...d, custom: true });
+
+  // 等 sheet 关闭 + reloadCustom 完成后刷新
+  const tryRefresh = setInterval(() => {
+    // 最简单的检测：sheet 消失 / customCards 里存在 id === d.id 的 override
+    const nowOverride = customCards.find((c) => c.id === d.id && c.override);
+    const sheetEl = document.querySelector('#layer-root .sheet');
+    if (!sheetEl) {     // sheet 关了 → 刷新
+      clearInterval(tryRefresh);
+      const cur = customCards.find((c) => c.id === d.id && c.override) || builtin;
+      if (cur) {
+        Object.assign(sess.draws[i], {
+          name: cur.name, keywords: cur.keywords, imgId: cur.imgId || d.imgId,
+          poker: cur.poker || d.poker,
+          text: stripPrefix(d.reversed ? (cur.reversed || cur.upright) : (cur.upright || cur.reversed)),
+          ...(d.reversed ? { reversed: d.reversed } : {})
+        });
+        // 如果改过正逆，这里也跟着——实际上 reversed 不会因为 override 变，留着
+      }
+      render();
+    } else if (nowOverride && !document.querySelector('#layer-root .sheet')) {
+      clearInterval(tryRefresh);
+      render();
+    }
+  }, 200);
 }
 
 function appendReading(wrap) {
@@ -572,8 +619,10 @@ function chunk(arr, size) {
   return out;
 }
 
-/** 按排布样式把 n 个位置排成若干行，返回可渲染的二维数组（null 为空格） */
-function rowsFor(kind, n) {
+/** 按排布样式把 n 个位置排成若干行，返回可渲染的二维数组（null 为空格）。
+    若牌阵自带 layoutCells（用户用格子编辑器自己摆的），直接返回那个 */
+function rowsFor(kind, n, layoutCells) {
+  if (layoutCells && layoutCells.length) return layoutCells;
   if (n <= 0) return [[1]];
   if (kind === 'line') return [range(n)];
   if (kind === 'two') return chunk(range(n), 2);
@@ -604,74 +653,259 @@ async function reloadCustom() {
 
 function spreadForm(existing) {
   const isNew = !existing;
-  const name = el('input', { class: 'input', placeholder: '牌阵名称，如「我和 TA 的下一步」', value: existing?.name || '' });
+  // 内置牌阵直接 edit：克隆一份做 custom 副本再改，保留 baseId 指向原牌阵
+  const builtinBase = !isNew && !existing.custom;
+  let target = existing ? (builtinBase ? {
+    id: 'cs-' + uid(), name: existing.name + '（我改的）', system: existing.system,
+    positions: [...existing.positions], layoutKind: 'custom', layoutCells: null,
+    custom: true, baseId: existing.id
+  } : { ...existing }) : null;
+
+  const name = el('input', { class: 'input', placeholder: '牌阵名称，如「我和 TA 的下一步」', value: target?.name || existing?.name || '' });
   const sys = el('select', { class: 'input' }, [
     el('option', { value: 'tarot' }, ['塔罗']),
     el('option', { value: 'lenormand' }, ['雷诺曼'])
   ]);
-  if (existing) sys.value = existing.system;
-  const pos = el('input', { class: 'input', placeholder: '位置用「/」分隔，如：现状/我的想法/对方想法/建议', value: existing ? existing.positions.join('/') : '' });
+  if (target) sys.value = target.system;
+  else if (existing) sys.value = existing.system;
 
+  const pos = el('input', { class: 'input', placeholder: '位置用「/」分隔，如：现状/我的想法/对方想法/建议',
+    value: (target ? target.positions : existing?.positions)?.join('/') || '' });
   const positionsOf = () => pos.value.split(/[\/、,，]/).map((s) => s.trim()).filter(Boolean);
-  let kind = existing?.layoutKind || 'auto';
 
-  const preview = el('div', { class: 'sf-prev' });
-  const chips = el('div', { class: 'row wrap', style: { gap: '8px' } });
-  const refresh = () => {
+  /* ---------- 格子编辑器 ---------- */
+  let kind = target?.layoutKind || existing?.layoutKind || 'custom';
+  let rowsN = 3, colsN = 3;      // 默认格子 3×3
+  let cells = (target || existing)?.layoutCells;
+  // 从 kind 自动推导初始 cells
+  function autoCellsFor(n) {
+    const base = rowsFor(kind === 'custom' ? 'auto' : kind, n, null);
+    return base.map((r) => r.slice());
+  }
+  if (!cells) cells = autoCellsFor((target || existing)?.positions?.length || positionsOf().length || 3);
+
+  const rowsSelect = el('select', { class: 'input', style: { width: '70px' } });
+  const colsSelect = el('select', { class: 'input', style: { width: '70px' } });
+  [3, 4, 5].forEach((n) => {
+    rowsSelect.appendChild(el('option', { value: String(n), text: n + ' 行' }));
+    colsSelect.appendChild(el('option', { value: String(n), text: n + ' 列' }));
+  });
+  // 从现有 cells 推断尺寸
+  rowsN = Math.max(rowsN, cells.length);
+  colsN = Math.max(colsN, ...cells.map((r) => r.length || 0));
+  rowsSelect.value = String(rowsN);
+  colsSelect.value = String(colsN);
+
+  // 所有已摆位置的集合
+  const placed = () => new Set(cells.flat().filter((v) => v != null));
+
+  // 格子 DOM 容器
+  const gridWrap = el('div', { class: 'sf-grid-wrap' });
+  const poolWrap = el('div', { class: 'sf-pool' });
+
+  /** 重建 cells 尺寸（保留内容） */
+  function resizeCells(rn, cn) {
+    const old = cells;
+    const out = [];
+    for (let r = 0; r < rn; r++) {
+      const row = [];
+      for (let c = 0; c < cn; c++) row.push(old[r]?.[c] ?? null);
+      out.push(row);
+    }
+    cells = out;
+  }
+
+  /** 渲染整格编辑器（格子 + 位置池） */
+  function paintEditor() {
     const list = positionsOf();
-    preview.innerHTML = '';
-    preview.appendChild(miniLayout({ positions: list.length ? list : [1], layoutKind: kind }));
-    Array.from(chips.children).forEach((c) => c.classList.toggle('on', c.dataset.id === kind));
-    return list;
-  };
-  LAYOUT_KINDS.forEach((k) => chips.appendChild(el('div', {
-    class: 'chip', dataset: { id: k.id }, text: k.name,
-    onclick: () => { kind = k.id; refresh(); }
-  })));
-  pos.addEventListener('input', refresh);
-  refresh();
+    const placeSet = placed();
+
+    // 1. 格子网
+    gridWrap.innerHTML = '';
+    const grid = el('div', { class: 'sf-grid', style: {
+      gridTemplateColumns: `repeat(${colsN}, minmax(0,1fr))`,
+      gridTemplateRows: `repeat(${rowsN}, 1fr)`
+    } });
+    cells.forEach((row, r) => row.forEach((v, c) => {
+      const cell = el('div', { class: 'sf-cell' });
+      if (v != null) {
+        const label = list[v - 1] || `位置 ${v}`;
+        cell.appendChild(el('div', { class: 'sf-cell-tile', draggable: 'true', dataset: { kind: 'cell', r: r, c: c, v: String(v) } }, [
+          el('div', { class: 'sf-idx', text: String(v) }),
+          el('div', { class: 'sf-pos', text: label })
+        ]));
+      }
+      setupCellDrop(cell, r, c);
+      grid.appendChild(cell);
+    }));
+    gridWrap.appendChild(grid);
+
+    // 2. 位置池（没摆的）
+    poolWrap.innerHTML = '';
+    const poolTitle = el('div', { class: 'small muted', style: { marginBottom: '6px' }, text: '下面的位置可拖到格子里' });
+    poolWrap.appendChild(poolTitle);
+    const poolRow = el('div', { class: 'sf-pool-row' });
+    list.forEach((name, i) => {
+      const n = i + 1;
+      const chip = el('div', { class: 'sf-pool-chip' + (placeSet.has(n) ? ' off' : ''),
+        draggable: String(!placeSet.has(n)), dataset: { kind: 'pool', v: String(n) } }, [
+        el('span', { class: 'sf-idx', text: String(n) }),
+        el('span', { text: name })
+      ]);
+      poolRow.appendChild(chip);
+    });
+    poolWrap.appendChild(poolRow);
+    setupDropZones();
+  }
+
+  /* ---- 拖拽：HTML5 Drag & Drop（比 pointerdown 更简洁，移动端在安卓浏览器同样可用） ---- */
+  let dragData = null;
+
+  function setupCellDrop(cell, r, c) {
+    cell.addEventListener('dragover', (e) => { e.preventDefault(); cell.classList.add('over'); });
+    cell.addEventListener('dragleave', () => cell.classList.remove('over'));
+    cell.addEventListener('drop', (e) => {
+      e.preventDefault(); cell.classList.remove('over');
+      if (!dragData) return;
+      const v = Number(dragData.v);
+      if (dragData.kind === 'pool') {
+        // 从池拖来：如果 cell 有值就交换回去
+        const old = cells[r][c];
+        cells[r][c] = v;
+        if (old != null && !cells.flat().includes(old)) {
+          // 旧值在其它 cell 里 → 不处理（交换逻辑在下面），若只剩它一个就保持
+        }
+        // 如果 pool 本来是这个格子里的挪来（dragData.kind === 'cell'），先清空旧位置
+        if (dragData.kind === 'cell') {
+          const sr = Number(dragData.r), sc = Number(dragData.c);
+          cells[sr][sc] = null;
+        }
+      } else if (dragData.kind === 'cell') {
+        // cell → cell：交换
+        const sr = Number(dragData.r), sc = Number(dragData.c);
+        cells[r][c] = cells[sr][sc];
+        cells[sr][sc] = v;
+      }
+      paintEditor();
+    });
+  }
+
+  function setupDropZones() {
+    // pool 里的 chip draggable
+    poolWrap.querySelectorAll('[data-kind=pool]').forEach((el) => {
+      if (el.classList.contains('off')) return;
+      el.addEventListener('dragstart', (e) => {
+        dragData = { kind: 'pool', v: el.dataset.v };
+        e.dataTransfer.effectAllowed = 'move';
+      });
+    });
+    // cell 里的 tile
+    gridWrap.querySelectorAll('[data-kind=cell]').forEach((el) => {
+      el.addEventListener('dragstart', (e) => {
+        dragData = { kind: 'cell', v: el.dataset.v, r: el.dataset.r, c: el.dataset.c };
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      // 双击格子里的位置编号 → 清空
+      el.addEventListener('dblclick', () => {
+        const r = Number(el.dataset.r), c = Number(el.dataset.c);
+        cells[r][c] = null;
+        paintEditor();
+      });
+    });
+  }
+
+  rowsSelect.addEventListener('change', () => { rowsN = Number(rowsSelect.value); resizeCells(rowsN, colsN); paintEditor(); });
+  colsSelect.addEventListener('change', () => { colsN = Number(colsSelect.value); resizeCells(rowsN, colsN); paintEditor(); });
+  pos.addEventListener('input', paintEditor);
+
+  // 初始渲染
+  paintEditor();
 
   sheet({
-    title: isNew ? '新建牌阵' : '编辑牌阵',
-    node: el('div', {}, [
+    title: isNew ? '新建牌阵' : (builtinBase ? ('编辑（基于内置：' + existing.name + '）') : '编辑牌阵'),
+    node: el('div', { class: 'sf-form' }, [
       el('div', { class: 'field' }, [el('label', { text: '名称' }), name]),
       el('div', { class: 'field' }, [el('label', { text: '所属体系' }), sys]),
-      el('div', { class: 'field' }, [el('label', { text: '位置（每张牌放在哪）' }), pos]),
+      el('div', { class: 'field' }, [el('label', { text: '位置（每行一个 / 或用顿号分隔）' }), pos]),
       el('div', { class: 'field' }, [
-        el('label', { text: '排布样式' }),
-        chips,
-        el('div', { class: 'small muted', style: { marginTop: '6px' }, text: '下面是这次牌阵的小样预览' }),
-        preview
-      ])
+        el('label', { text: '格子尺寸' }),
+        el('div', { class: 'row', style: { gap: '8px', alignItems: 'center' } }, [
+          rowsSelect, el('span', { text: '×' }), colsSelect
+        ])
+      ]),
+      el('div', { class: 'field' }, [
+        el('label', { text: '摆位（拖下面的位置号到格子里；双击格子里的位置可清空）' }),
+        gridWrap
+      ]),
+      poolWrap
     ]),
     actions: [{ label: isNew ? '保存牌阵' : '保存修改', icon: 'IC-MIO-003', onSelect: async () => {
-      const n = name.value.trim(); const p = positionsOf();
-      if (!n || !p.length) return toast('请填写名称与位置');
-      let target = existing;
-      if (target) Object.assign(target, { name: n, system: sys.value, positions: p, layoutKind: kind });
-      else { target = { id: 'cs-' + uid(), name: n, system: sys.value, positions: p, layoutKind: kind, custom: true }; customSpreads.push(target); }
+      const n = name.value.trim();
+      const p = positionsOf();
+      if (!n) return toast('请填写名称');
+      if (!p.length) return toast('至少写一个位置');
+      // 校验：cells 里所有位置编号都在 1..p.length 范围内，且无重复
+      const flat = cells.flat().filter((v) => v != null).map(Number).sort((a, b) => a - b);
+      const expected = Array.from({ length: Math.min(flat.length, p.length) }, (_, i) => i + 1);
+      // 如果用户还没把全部位置摆完就保存，允许（至少摆一个）
+      if (flat.some((v) => v < 1 || v > p.length)) return toast('格子里有无效位置号');
+      if (flat.length >= 2 && new Set(flat).size !== flat.length) return toast('格子里有重复的位置号，请调整');
+
+      let store = target;
+      if (!store) store = { id: 'cs-' + uid(), custom: true };
+      Object.assign(store, {
+        name: n, system: sys.value, positions: p,
+        layoutKind: 'custom', layoutCells: cells.map((r) => r.slice())
+      });
+      if (!customSpreads.find((s) => s.id === store.id)) customSpreads.push(store);
       await kvSet('customSpreads', customSpreads);
-      if (stage === 'spread' && sess && sess.system === target.system) sess.spread = target;
+      if (stage === 'spread' && sess && sess.system === store.system) sess.spread = store;
       await reloadCustom();
-      toast(isNew ? '牌阵已添加' : '牌阵已更新');
+      toast(isNew || builtinBase ? '牌阵已添加' : '牌阵已更新');
     } }]
   });
 }
 
+/** 判断一张卡是否是内置牌（id 在 TAROT 或 LENORMAND 里）。
+    返回对应内置对象，否则 null。 */
+function findBuiltinCard(id) {
+  if (!id) return null;
+  const t = TAROT.find((c) => c.id === id);
+  if (t) return t;
+  const l = LENORMAND.find((c) => c.id === id);
+  if (l) return l;
+  return null;
+}
+
 function cardForm(existing) {
-  const isNew = !existing;
+  // 内置牌第一次编辑 → 克隆成 customCard（override:true）再改
+  const builtinBase = existing && !existing.custom && findBuiltinCard(existing.id);
+  let target = existing;
+  if (builtinBase) {
+    const found = customCards.find((c) => c.id === existing.id && c.override);
+    target = found || { ...builtinBase, override: true };
+    if (!found) customCards.push(target);
+  }
+
+  const isNew = !target || !target.id;
   const sys = el('select', { class: 'input' }, [
     el('option', { value: 'tarot' }, ['塔罗']),
     el('option', { value: 'lenormand' }, ['雷诺曼'])
   ]);
-  if (existing) sys.value = existing.system;
-  const name = el('input', { class: 'input', placeholder: '牌名', value: existing?.name || '' });
-  const kw = el('input', { class: 'input', placeholder: '关键词，如：犹豫 / 等待', value: existing?.keywords || '' });
-  const up = el('input', { class: 'input', placeholder: '正位释义', value: existing?.upright && existing.upright !== '（未填写）' ? existing.upright : '' });
-  const rv = el('input', { class: 'input', placeholder: '逆位释义（可留空）', value: existing?.reversed && existing.reversed !== '（未填写）' ? existing.reversed : '' });
-  const poker = el('input', { class: 'input', placeholder: '对应扑克牌（雷诺曼常用，选填）', value: existing?.poker || '' });
+  if (target) sys.value = target.system;
+  else if (existing) sys.value = existing.system;
 
-  let imgId = existing?.imgId || '';
+  const name = el('input', { class: 'input', placeholder: '牌名', value: (target || existing)?.name || '' });
+  const kw = el('input', { class: 'input', placeholder: '关键词，如：犹豫 / 等待',
+    value: (target || existing)?.keywords || '' });
+  const up = el('input', { class: 'input', placeholder: '正位释义',
+    value: (target || existing)?.upright === '（未填写）' ? '' : ((target || existing)?.upright || '') });
+  const rv = el('input', { class: 'input', placeholder: '逆位释义（可留空）',
+    value: (target || existing)?.reversed === '（未填写）' ? '' : ((target || existing)?.reversed || '') });
+  const poker = el('input', { class: 'input', placeholder: '对应扑克牌（雷诺曼常用，选填）',
+    value: (target || existing)?.poker || '' });
+
+  let imgId = (target || existing)?.imgId || '';
   const thumb = el('div', { class: 'cc-thumb' });
   const drawThumb = () => {
     thumb.innerHTML = '';
@@ -686,16 +920,14 @@ function cardForm(existing) {
     const old = imgId;
     imgId = await saveMedia(blob, { type: 'image', w, h, source: 'library', name: name.value.trim() || '牌面' });
     if (old && old !== imgId) await delMedia(old);
-    drawThumb();
-    toast('牌面图已换上');
+    drawThumb(); toast('牌面图已换上');
   };
-  const dropImg = () => {
-    if (!imgId) return;
-    const old = imgId; imgId = ''; drawThumb(); delMedia(old);
-  };
+  const dropImg = () => { if (!imgId) return; const old = imgId; imgId = ''; drawThumb(); delMedia(old); };
+
+  const savingText = builtinBase ? (target.override ? '保存覆盖' : '保存为覆盖版') : (isNew ? '保存牌面' : '保存修改');
 
   sheet({
-    title: isNew ? '新建牌面' : '编辑牌面',
+    title: isNew ? '新建牌面' : (builtinBase ? ('编辑内置牌：' + builtinBase.name) : '编辑牌面'),
     node: el('div', {}, [
       el('div', { class: 'field' }, [
         el('label', { text: '牌面图' }),
@@ -718,7 +950,7 @@ function cardForm(existing) {
       el('div', { class: 'field' }, [el('label', { text: '逆位释义' }), rv]),
       el('div', { class: 'field' }, [el('label', { text: '对应扑克牌' }), poker])
     ]),
-    actions: [{ label: isNew ? '保存牌面' : '保存修改', icon: 'IC-MIO-003', onSelect: async () => {
+    actions: [{ label: savingText, icon: 'IC-MIO-003', onSelect: async () => {
       const n = name.value.trim();
       if (!n) return toast('请填写牌名');
       const patch = {
@@ -726,11 +958,13 @@ function cardForm(existing) {
         upright: up.value.trim() || '（未填写）', reversed: rv.value.trim() || '（未填写）',
         poker: poker.value.trim(), imgId
       };
-      if (existing) Object.assign(existing, patch);
-      else customCards.push({ id: 'cc-' + uid(), custom: true, ...patch });
+      let store = target;
+      if (!store) { store = { id: 'cc-' + uid(), custom: true }; customCards.push(store); }
+      else { store.override = builtinBase ? true : (store.override || false); }
+      Object.assign(store, patch);
       await kvSet('customCards', customCards);
       await reloadCustom();
-      toast(isNew ? '牌面已添加' : '牌面已更新');
+      toast(builtinBase ? '已覆盖内置牌（以后抽到这张都用你改的版本）' : (isNew ? '牌面已添加' : '牌面已更新'));
     } }]
   });
 }
@@ -817,7 +1051,7 @@ const TILE_ROWS = {
 
 /** 牌阵小样：把位置画成编号小牌，排布按牌阵自己的样式（自定义牌阵可自选） */
 function miniLayout(sp) {
-  const rows = rowsFor(sp.layoutKind || 'auto', (sp.positions || []).length);
+  const rows = rowsFor(sp.layoutKind || 'auto', (sp.positions || []).length, sp.layoutCells);
   return el('div', { class: 'pk-rows' }, rows.map((row) => el('div', { class: 'pk-row' },
     row.map((v) => el('span', { class: 'pk-tile' + (v == null ? ' blank' : ''), text: v == null ? '' : String(v) })))));
 }
