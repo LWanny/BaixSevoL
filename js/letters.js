@@ -7,7 +7,7 @@
 import { put, del, all, kvGet, kvSet } from './store.js';
 import { state } from './state.js';
 import { uid, rndInt, chance, pick } from './util.js';
-import { eligible, drawCards, joinFragments, stickers, EMOJI, randomKaomoji } from './engine.js';
+import { eligible, drawCards, joinFragments, stickers, injectEmoji, randomKaomoji } from './engine.js';
 import { notify } from './notify.js';
 import { maybePickInspiration } from './inspiration.js';
 
@@ -127,7 +127,7 @@ async function deliverIncoming({ proactive, lo, hi }) {
 
   /* ---- 来信内容附加 ---- */
   let text = composed.text;
-  if (p.letterEmojiEnabled && chance(Number(p.letterEmojiPct) || 0)) text += ' ' + pick(EMOJI);
+  if (p.letterEmojiEnabled) text = injectEmoji(text, p.letterEmojiPct);
   if (p.letterKaomojiEnabled && chance(Number(p.letterKaomojiPct) || 0)) text += ' ' + randomKaomoji();
   const images = [];
   const stickerPool = stickers(cards);

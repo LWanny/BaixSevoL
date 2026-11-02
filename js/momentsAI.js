@@ -4,7 +4,7 @@
 import { all, put, bulkPut, kvGet, kvSet } from './store.js';
 import { state } from './state.js';
 import { uid, chance, rndInt, pick } from './util.js';
-import { eligible, drawCards, joinFragments, randomKaomoji } from './engine.js';
+import { eligible, drawCards, joinFragments, randomKaomoji, injectEmoji } from './engine.js';
 
 const bus = new EventTarget();
 export const onMoments = (fn) => bus.addEventListener('change', fn);
@@ -48,7 +48,7 @@ async function composeText({ cardMin, cardMax, multiPct, emojiPct, stickerPct, k
   const drawn = drawCards(pool, n, p.momentsPureRandom);
   if (!drawn.length) return null;
   let text = joinFragments(drawn.map((c) => c.content));
-  if (emojiPct != null && chance(emojiPct)) text += ' ' + pick(EMOJI);
+  if (emojiPct != null) text = injectEmoji(text, emojiPct);
   if (stickerPct != null && chance(stickerPct)) text += ' ' + pick(STICKERS);
   if (kaomojiPct != null && chance(kaomojiPct)) text += ' ' + randomKaomoji();
   return { text, cardIds: drawn.map((c) => c.id), store };

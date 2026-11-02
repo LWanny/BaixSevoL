@@ -6,8 +6,21 @@ import { chance, rndInt, pick, uid } from './util.js';
 import { drawInspiration } from './inspiration.js';
 import { randomPhrase } from './pinyin.js';
 
-/* ---------- 表情池（句尾附加） ---------- */
+/* ---------- 表情池 ---------- */
 export const EMOJI = ['😢', '🥺', '😆', '😘', '💕', '😌', '😻', '😴', '😤', '🤣', '😅', '😊', '💪', '✨', '🍀', '🌙', '☀️', '🐱', '🐶'];
+
+/** 在句子里随机位置插入随机数量（1~3 个）的 emoji。
+    不再只追加句尾，看起来更自然。 */
+export function injectEmoji(text, pct) {
+  if (!text || !text.trim() || !chance(Number(pct) || 0)) return text;
+  const count = rndInt(1, 3);
+  let arr = Array.from(text);
+  for (let i = 0; i < count; i++) {
+    const pos = rndInt(0, arr.length);
+    arr.splice(pos, 0, pick(EMOJI));
+  }
+  return arr.join('');
+}
 
 /* ---------- 抽卡 ---------- */
 export function eligible(cards) {
@@ -148,9 +161,9 @@ export async function buildReply({ cards, params, history = [], incomingText = '
     const one = await buildOne(textPool, params);
     if (!one) break;
 
-    /* ---- 句尾附加 emoji / 颜文字 ---- */
+    /* ---- 随机位置注入 emoji / 句尾附加颜文字 ---- */
     let text = one.text;
-    if (chance(Number(params.emojiPct) || 0)) text += ' ' + pick(EMOJI);
+    text = injectEmoji(text, Number(params.emojiPct) || 0);
     if (chance(Number(params.kaomojiPct) || 0)) text += ' ' + randomKaomoji();
 
     const cardIds = one.cardIds.slice();
@@ -262,7 +275,7 @@ export async function buildProactive({ cards, params, history = [], medias = [] 
     const one = await buildOne(textPool, params);
     if (!one) break;
     let text = one.text;
-    if (chance(Number(params.emojiPct) || 0)) text += ' ' + pick(EMOJI);
+    text = injectEmoji(text, Number(params.emojiPct) || 0);
     if (chance(Number(params.kaomojiPct) || 0)) text += ' ' + randomKaomoji();
     steps.push({ kind: 'message', delayMs: i === 0 ? 0 : delayFor(params), text, cardIds: one.cardIds, proactive: true });
 

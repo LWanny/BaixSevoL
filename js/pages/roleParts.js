@@ -40,11 +40,19 @@ for (const [lo, hi] of Object.entries(PAIR_MAX)) PAIR_MIN[hi] = lo;
 export function setupRoleUi(p) {
   const ui = {};   // key → { sync(v) }
 
+  /** 仅把数值写入 params 并保存，不做跨对校验 —— 用于「输入中」的瞬时提交 */
+  function writeOnly(key, v) {
+    p[key] = v;
+    saveRole();
+    return v;
+  }
+
+  /** 完整提交：写入 + 跨对校验 —— 用于 blur 时最终落盘 */
   function commit(key, v) {
     const loKey = PAIR_MIN[key];
     if (loKey && v < p[loKey]) v = p[loKey];
     const hiKey = PAIR_MAX[key];
-    if (hiKey && v > p[hiKey]) { p[hiKey] = v; ui[hiKey]?.sync(v); }
+    if (hiKey && v > p[hiKey]) { p[hiKey] = v; ui[hiKey]?.sync(p[hiKey]); }
     p[key] = v;
     saveRole();
     return v;
@@ -57,31 +65,59 @@ export function setupRoleUi(p) {
     ]);
   }
 
-  /** 概率行：滑杆 + 右侧百分比 */
+  /** 概率行：滑杆 + 右侧数字输入框（两者双向联动） */
   function rowPct(name, desc, key, value) {
-    const input = el('input', { class: 'set-range', type: 'range', min: '0', max: '100', step: '1' });
-    input.value = String(value);
-    const valEl = el('span', { class: 'set-val', text: value + '%' });
-    const sync = (v) => { input.value = String(v); valEl.textContent = v + '%'; };
-    input.addEventListener('input', () => sync(commit(key, Number(input.value))));
+    const range = el('input', { class: 'set-range', type: 'range', min: '0', max: '100', step: '1' });
+    range.value = String(value);
+    const num = el('input', {
+      class: 'set-num set-pct-num', type: 'number', inputmode: 'numeric',
+      min: '0', max: '100', step: '1', value: String(value)
+    });
+    num.style.width = '54px';
+    num.addEventListener('focus', () => num.select());
+    const sync = (v) => {
+      range.value = String(v);
+      num.value = String(v);
+    };
+    let fromSlider = false, fromNum = false;
+    range.addEventListener('input', () => {
+      const v = Number(range.value);
+      fromSlider = true; sync(v); writeOnly(key, v);
+    });
+    range.addEventListener('change', () => { commit(key, Number(range.value)); });
+    num.addEventListener('input', () => {
+      const raw = num.value.trim();
+      if (raw === '') return;
+      let v = Number(raw);
+      if (!Number.isFinite(v)) return;
+      v = Math.min(100, Math.max(0, Math.round(v)));
+      fromNum = true; sync(v); writeOnly(key, v);
+    });
+    num.addEventListener('blur', () => { sync(commit(key, p[key])); });
     ui[key] = { sync };
-    return el('div', { class: 'set-row' }, [rowMain(name, desc), el('div', { class: 'set-ctl' }, [input, valEl])]);
+    return el('div', { class: 'set-row' }, [
+      rowMain(name, desc),
+      el('div', { class: 'set-ctl' }, [range, num, el('span', { class: 'set-val set-pct-suf', text: '%' })])
+    ]);
   }
 
-  /** 数量/时长行：右侧圆角数字框 + 单位 */
+  /** 数量/时长行：右侧圆角数字框 + 单位
+      输入期间只保存当前值（不做跨对校验），失焦时再 cross-validate。
+      焦点进入时自动全选，方便直接打新数字替换旧值。 */
   function rowNum(name, desc, key, value, min, max, unit = '') {
     const input = el('input', { class: 'set-num', type: 'number', inputmode: 'numeric', min: String(min), max: String(max) });
     input.value = String(value);
     const sync = (v) => { input.value = String(v); };
+    input.addEventListener('focus', () => input.select());
     input.addEventListener('input', () => {
       const raw = input.value.trim();
-      if (raw === '') return;
+      if (raw === '') { p[key] = min; saveRole(); return; }
       let v = Number(raw);
       if (!Number.isFinite(v)) return;
       v = Math.min(max, Math.max(min, Math.round(v)));
-      sync(commit(key, v));
+      writeOnly(key, v);
     });
-    input.addEventListener('blur', () => sync(p[key]));
+    input.addEventListener('blur', () => { sync(commit(key, p[key])); });
     ui[key] = { sync };
     return el('div', { class: 'set-row' }, [
       rowMain(name, desc),

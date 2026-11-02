@@ -47,7 +47,7 @@ export default async function pageRoleMailbox(view) {
   wrap.appendChild(section('来信内容附加', el('div', { class: 'set-card' }, [
     rowToggle('来信带颜文字', '来信正文句尾有概率追加一个颜文字', 'letterKaomojiEnabled', p.letterKaomojiEnabled),
     rowPct('颜文字附加概率', '只有开关开启时才生效', 'letterKaomojiPct', p.letterKaomojiPct),
-    rowToggle('来信带 Emoji', '来信正文句尾有概率追加一个 emoji', 'letterEmojiEnabled', p.letterEmojiEnabled),
+    rowToggle('来信带 Emoji', '来信正文里随机位置插入 1~3 个 emoji', 'letterEmojiEnabled', p.letterEmojiEnabled),
     rowPct('Emoji 附加概率', '只有开关开启时才生效', 'letterEmojiPct', p.letterEmojiPct),
     rowToggle('来信夹带表情包', '信纸里多一张从字卡库抽的表情图片', 'letterStickerEnabled', p.letterStickerEnabled),
     rowPct('表情包附加概率', '只有开关开启时才生效', 'letterStickerPct', p.letterStickerPct)

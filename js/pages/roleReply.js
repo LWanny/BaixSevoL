@@ -44,7 +44,7 @@ export default async function pageRoleReply(view) {
     rowPct('表情包概率', '从字卡库「表情」类抽一张独立发出（不计入回复条数上限）', 'stickerPct', p.stickerPct),
     rowPct('图片概率', '从你上传过的图片里抽一张独立发出（不计入回复条数上限）', 'imagePct', p.imagePct),
     rowPct('语音概率', '从字卡库「语音」类抽一条独立发出（不计入回复条数上限）', 'voicePct', p.voicePct),
-    rowPct('Emoji 概率', '在文字消息句尾附加一个 emoji', 'emojiPct', p.emojiPct),
+    rowPct('Emoji 概率', '在文字消息里随机位置插入 1~3 个 emoji', 'emojiPct', p.emojiPct),
     rowPct('颜文字附加概率', '在文字消息句尾附加一个颜文字', 'kaomojiPct', p.kaomojiPct),
     rowPct('撤回概率', 'TA 可能撤回刚发的消息', 'recallPct', p.recallPct),
     rowToggle('撤回后补发消息', '撤回后再发一条新消息（补发消息不计入回复条数上限）', 'recallRepostEnabled', p.recallRepostEnabled),
