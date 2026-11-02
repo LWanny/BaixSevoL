@@ -47,7 +47,7 @@ export default async function pageDivine(v) {
   });
   customSpreads = await kvGet('customSpreads', []) || [];
   customCards = await kvGet('customCards', []) || [];
-  if (!sess) stage = 'system';
+  sess = null; stage = 'system';   // 每次进占卜页都从「选类」开始，不沿用上次的解读态
   render();
 }
 
