@@ -811,7 +811,7 @@ export default async function pageChat(view) {
     btns.appendChild(el('button', { class: 'btn sm', onclick: () => c.clear() }, ['清空']));
 
     const canvasWrap = el('div', {
-      style: { width: 'min(360px, 92vw)', margin: '12px auto 0', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--line)' }
+      style: { width: 'min(360px, 92vw)', margin: '12px auto 0', aspectRatio: '1 / 1', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--line)', background: '#fff' }
     });
     canvasWrap.appendChild(c.canvas);
 

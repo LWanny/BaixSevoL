@@ -9,8 +9,8 @@ import { uid, chance, rndInt, pick } from './util.js';
 import { saveMedia } from './media.js';
 import * as sched from './scheduler.js';
 
-export const GRAFITTI_W = 520;
-export const GRAFITTI_H = 680;
+export const GRAFITTI_W = 600;
+export const GRAFITTI_H = 600;
 
 /* ---------- TA 可用的 43 种图形 ---------- */
 /* 每个 shape 是 (ctx, x, y, s, color) => void，s 是基准尺寸 */
@@ -168,7 +168,7 @@ export function drawTaShape(ctx, shapeKey, { x, y, size, color, fill }) {
   fn(ctx, x, y, size, color, !!fill);
 }
 
-/* 生成一张 TA 的涂鸦（一张 canvas 上 1~5 个图形） */
+/* 生成一张 TA 的涂鸦（一张 canvas 上 3~10 个图形，每次随机） */
 export function renderTaGraffiti() {
   const canvas = document.createElement('canvas');
   canvas.width = GRAFITTI_W;
@@ -177,11 +177,11 @@ export function renderTaGraffiti() {
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  const n = rndInt(1, 5);
+  const n = rndInt(3, 10);
   for (let i = 0; i < n; i++) {
     const x = rndInt(60, canvas.width - 60);
     const y = rndInt(60, canvas.height - 60);
-    const size = rndInt(60, 140);
+    const size = rndInt(50, 130);
     const color = pick(TA_COLORS);
     const { key, fill } = pickTaShape();
     drawTaShape(ctx, key, { x, y, size, color, fill });
@@ -200,6 +200,8 @@ export async function taSendGraffiti() {
 export function createFreeCanvas({ width = GRAFITTI_W, height = GRAFITTI_H, color = '#1f2937', size = 3, eraser = false } = {}) {
   const canvas = document.createElement('canvas');
   canvas.width = width; canvas.height = height;
+  // CSS 尺寸：填满父容器 + 严格正方形 + 禁止默认滚动手势抢事件
+  canvas.style.cssText = 'display:block;width:100%;aspect-ratio:1/1;touch-action:none;border-radius:0;';
   const ctx = canvas.getContext('2d');
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
 
@@ -211,13 +213,17 @@ export function createFreeCanvas({ width = GRAFITTI_W, height = GRAFITTI_H, colo
   history.push(canvas.toDataURL());
 
   function onDown(e) {
+    e.preventDefault();
     const pt = point(e, canvas);
     state.drawing = true; state.last = pt;
     history.push(canvas.toDataURL());
     if (history.length > 40) history.shift();
+    // setPointerCapture 让后续 move/up 即使手指移到 canvas 外也继续接收
+    try { canvas.setPointerCapture(e.pointerId); } catch {}
   }
   function onMove(e) {
     if (!state.drawing) return;
+    e.preventDefault();
     const pt = point(e, canvas);
     ctx.strokeStyle = state.eraser ? '#ffffff' : state.color;
     ctx.lineWidth = state.eraser ? state.size * 3 : state.size;
@@ -227,13 +233,17 @@ export function createFreeCanvas({ width = GRAFITTI_W, height = GRAFITTI_H, colo
     ctx.stroke();
     state.last = pt;
   }
-  function onUp() { state.drawing = false; state.last = null; }
+  function onUp(e) {
+    state.drawing = false; state.last = null;
+    try { canvas.releasePointerCapture(e.pointerId); } catch {}
+  }
 
-  canvas.addEventListener('pointerdown', onDown);
-  canvas.addEventListener('pointermove', onMove);
+  canvas.addEventListener('pointerdown', onDown, { passive: false });
+  canvas.addEventListener('pointermove', onMove, { passive: false });
   canvas.addEventListener('pointerup', onUp);
   canvas.addEventListener('pointercancel', onUp);
-  canvas.addEventListener('pointerleave', onUp);
+  // 注意：不监听 pointerleave —— 手机上手指稍微划出边界就结束绘制，
+  // 这是"画短横"的主因。setPointerCapture 已保证事件不丢。
 
   return {
     canvas,
@@ -259,7 +269,6 @@ export function createFreeCanvas({ width = GRAFITTI_W, height = GRAFITTI_H, colo
       canvas.removeEventListener('pointermove', onMove);
       canvas.removeEventListener('pointerup', onUp);
       canvas.removeEventListener('pointercancel', onUp);
-      canvas.removeEventListener('pointerleave', onUp);
     }
   };
 }
@@ -268,9 +277,9 @@ function point(e, canvas) {
   const rect = canvas.getBoundingClientRect();
   const scaleX = canvas.width / rect.width;
   const scaleY = canvas.height / rect.height;
-  const t = e.touches && e.touches[0];
-  const px = (t ? t.clientX : e.clientX) - rect.left;
-  const py = (t ? t.clientY : e.clientY) - rect.top;
+  // pointer 事件统一用 clientX/Y（e.touches 在 pointer 事件下是空数组，别再用）
+  const px = e.clientX - rect.left;
+  const py = e.clientY - rect.top;
   return { x: px * scaleX, y: py * scaleY };
 }
 
