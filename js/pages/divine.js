@@ -54,7 +54,8 @@ export default async function pageDivine(v) {
 import { register, go } from '../router.js';
 
 /* ---------------- 牌面图鉴（独立路由 /decks） ---------------- */
-register({ path: '/decks' }, async () => {
+register({
+  '/decks': async () => {
   const view = document.getElementById('view');
   view.innerHTML = '';
   normalPage('decks', {
@@ -195,6 +196,7 @@ register({ path: '/decks' }, async () => {
 
   /* ---------- 返回时清理 ---------- */
   window.addEventListener('hashchange', () => { removeFab(); clearTimeout(); }, { once: true });
+  }
 });
 
 /** 按文件名匹配内置牌。匹配顺序：精确 name → 包含 → 数字序号 */
