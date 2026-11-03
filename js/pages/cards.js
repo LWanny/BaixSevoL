@@ -18,6 +18,7 @@ let sortByCount = false;
 export default async function pageCards(view) {
   fullPage({ back: true, title: '字卡库', actions: [
     { icon: 'IC-CRD-010', label: '搜索', onclick: toggleSearch },
+    { icon: 'IC-CRD-003', label: '导入', onclick: importMenu },
     { icon: 'IC-CRD-002', label: '新建字卡', onclick: newCard },
     { icon: 'IC-CHT-007', label: '更多', onclick: moreMenu }
   ] });
@@ -628,7 +629,7 @@ function toggleSearch() {
 function moreMenu() {
   actionSheet('字卡库', [
     { label: '灵感拾取', sub: 'TA 悄悄收的你的话', icon: 'IC-MIO-020', onSelect: () => go('/inspiration') },
-    { label: '导入字卡', icon: 'IC-CRD-003', onSelect: importMenu },
+    { label: '导入字卡（TXT / JSON 批量）', icon: 'IC-CRD-003', sub: '一行一张卡 · 或 JSON 数组', onSelect: importMenu },
     { label: '导出为 JSON', icon: 'IC-CRD-004', onSelect: exportJSON },
     { label: '按使用次数排序 / 从未使用', icon: 'IC-CRD-009', onSelect: () => { sortByCount = !sortByCount; render(document.getElementById('view')); } },
     { label: '显示全部字卡', icon: 'IC-CRD-001', onSelect: () => { curGroup = 'all'; render(document.getElementById('view')); } },
