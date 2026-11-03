@@ -35,14 +35,23 @@ export default async function pageDivine(v) {
   if (fabOff) window.removeEventListener('hashchange', fabOff);
   fabOff = () => removeFab();
   window.addEventListener('hashchange', fabOff);
-
+  normalPage('divine', {
+    back: true,
+    title: '占卜',
+    sub: '本地随机 · 仅供娱乐与自我梳理',
+    actions: [
+      { icon: 'IC-DIV-002', label: '图鉴', onclick: () => go('/decks') },
+      { icon: 'IC-DIV-008', label: '记录', onclick: showHistory },
+      { icon: 'IC-DIV-009', label: '自定义', onclick: customMenu }
+    ]
+  });
   customSpreads = await kvGet('customSpreads', []) || [];
   customCards = await kvGet('customCards', []) || [];
   sess = null; stage = 'system';   // 每次进占卜页都从「选类」开始，不沿用上次的解读态
   render();
 }
 
-import { register } from '../router.js';
+import { register, go } from '../router.js';
 
 /* ---------------- 牌面图鉴（独立路由 /decks） ---------------- */
 register({ path: '/decks' }, async () => {
