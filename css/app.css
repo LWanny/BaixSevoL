@@ -1792,6 +1792,29 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .ld-cat-bar{flex:1;height:6px;background:var(--bg-sunken);border-radius:3px;overflow:hidden}
 .ld-cat-bar i{display:block;height:100%;background:var(--accent);border-radius:3px}
 .ld-cat-amt{width:76px;flex:0 0 auto;text-align:right;color:var(--txt-dim);font-variant-numeric:tabular-nums}
+/* 收入分类条（统计页） */
+.ld-cat-bar i.in{background:#2da44e}
+.st-pct{width:44px;flex:0 0 auto;text-align:right;color:var(--txt-mute);font-size:11.5px;font-variant-numeric:tabular-nums}
+/* 统计页 · KPI 网格 */
+.st-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:4px}
+.st-kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+.st-kpi-t{font-size:11.5px;color:var(--txt-mute);margin-bottom:3px}
+.st-kpi-v{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.2px;word-break:break-all}
+.st-kpi-v.in{color:#2da44e}
+.st-kpi-v.out{color:#d1242f}
+/* 统计页 · 月度趋势双色柱 */
+.st-legend{display:flex;gap:14px;justify-content:flex-end;font-size:11.5px;color:var(--txt-dim);margin-bottom:8px}
+.st-legend span{display:inline-flex;align-items:center;gap:5px}
+.st-dot{width:8px;height:8px;border-radius:2px;display:inline-block}
+.st-dot.out{background:#d1242f}
+.st-dot.in{background:#2da44e}
+.st-bars{display:flex;align-items:flex-end;gap:6px;height:132px}
+.st-col{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;height:100%}
+.st-pair{flex:1;display:flex;align-items:flex-end;justify-content:center;gap:3px;min-height:0}
+.st-bar{width:9px;border-radius:3px 3px 0 0;min-height:0}
+.st-bar.out{background:#d1242f}
+.st-bar.in{background:#2da44e}
+.st-x{font-size:10.5px;color:var(--txt-mute);text-align:center;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ld-day-h{
   display:flex;align-items:center;justify-content:space-between;gap:8px;
   padding:8px 13px;background:var(--bg-elev2);font-size:11.5px;color:var(--txt-mute);

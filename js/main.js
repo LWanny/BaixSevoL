@@ -39,6 +39,7 @@ import pageQuizFill from './pages/quizfill.js';
 import pageMusic from './pages/music.js';
 import pagePeriod from './pages/period.js';
 import pageLedger from './pages/ledger.js';
+import { pageLedgerStats } from './pages/ledger.js';
 import pagePomodoro from './pages/pomodoro.js';
 import pageWatch from './pages/watch.js';
 import pageBooks from './pages/books.js';
@@ -92,6 +93,7 @@ async function boot() {
     '/music': pageMusic,
     '/period': pagePeriod,
     '/ledger': pageLedger,
+    '/ledger-stats': pageLedgerStats,
     '/pomodoro': pagePomodoro,
     '/watch': pageWatch,
     '/books': pageBooks,

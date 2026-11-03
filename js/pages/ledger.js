@@ -5,6 +5,7 @@
 import { el, uid } from '../util.js';
 import { iconImg } from '../icons.js';
 import { fullPage } from '../shell.js';
+import { go } from '../router.js';
 import { all, put, del } from '../store.js';
 import { actionSheet, confirmBox, sheet, toast } from '../ui.js';
 
@@ -24,7 +25,9 @@ const fmtMoney = (n) => {
 
 export default async function pageLedger(v) {
   view = v;
-  fullPage({ back: true, title: '记账', sub: '本地账本 · 按月统计' });
+  fullPage({ back: true, title: '记账', sub: '本地账本 · 按月统计', actions: [
+    { icon: 'IC-CRD-009', label: '统计', onclick: () => go('/ledger-stats') }
+  ] });
   await load();
 }
 
@@ -233,4 +236,162 @@ function openEditor(rec) {
     actions: [{ label: '保存', icon: 'IC-MIO-021', onSelect: () => { void save(); } }]
   });
   setTimeout(() => amount.focus(), 260);
+}
+
+/* ================= 统计页 ================= */
+const RANGES = [
+  { k: '1', label: '本月' },
+  { k: '3', label: '近3月' },
+  { k: '6', label: '近6月' },
+  { k: 'all', label: '全部' }
+];
+let statRange = '1';
+
+function rangeStart(k) {
+  const now = new Date();
+  if (k === 'all') return 0;
+  const back = Number(k) - 1;
+  return new Date(now.getFullYear(), now.getMonth() - back, 1).getTime();
+}
+function rangeRows(k) {
+  const s = rangeStart(k);
+  return rows.filter((r) => r.ts >= s);
+}
+/* 时段覆盖的月份数（用于日均与趋势图） */
+function rangeMonths(k) {
+  if (k === 'all') {
+    if (!rows.length) return 1;
+    const first = Math.min(...rows.map((r) => r.ts || Infinity));
+    const now = new Date();
+    const start = new Date(first);
+    return Math.max(1, (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()) + 1);
+  }
+  return Number(k);
+}
+
+export async function pageLedgerStats(v) {
+  view = v;
+  fullPage({ back: true, title: '统计', sub: '收支分析 · 纯本地计算' });
+  await load();
+  paintStats();
+}
+
+function paintStats() {
+  view.innerHTML = '';
+  const page = el('div', { class: 'page ledger' });
+  const list = rangeRows(statRange);
+
+  const income = list.filter((r) => r.kind === 'in').reduce((s, r) => s + Number(r.amount), 0);
+  const expense = list.filter((r) => r.kind === 'out').reduce((s, r) => s + Number(r.amount), 0);
+  const days = Math.max(1, Math.ceil((Date.now() - rangeStart(statRange)) / 86400000)) || 1;
+  const avgDay = expense / days;
+  const maxOut = list.filter((r) => r.kind === 'out').sort((a, b) => Number(b.amount) - Number(a.amount))[0];
+
+  /* 时段切换 */
+  const seg = el('div', { class: 'ld-bar', style: { marginTop: '0' } }, [
+    el('div', { class: 'seg-row' }, RANGES.map((r) => el('button', {
+      class: 'chip' + (statRange === r.k ? ' on' : ''), type: 'button',
+      onclick: () => { statRange = r.k; paintStats(); }
+    }, [r.label])))
+  ]);
+  page.appendChild(seg);
+
+  /* 总览 KPI */
+  page.appendChild(el('div', { class: 'st-grid' }, [
+    kpi('收入', fmtMoney(income), 'in'),
+    kpi('支出', fmtMoney(expense), 'out'),
+    kpi('结余', (income - expense < 0 ? '−' : '') + fmtMoney(Math.abs(income - expense)), income - expense >= 0 ? 'in' : 'out'),
+    kpi('笔数', String(list.length), ''),
+    kpi('日均支出', fmtMoney(Math.round(avgDay * 100) / 100), ''),
+    kpi('最大单笔', maxOut ? fmtMoney(maxOut.amount) : '—', maxOut ? 'out' : '')
+  ]));
+
+  /* 月趋势（时段内月份，全部时最多 12 根） */
+  const months = buildMonths(statRange, list);
+  if (months.length) {
+    const max = Math.max(...months.map((m) => Math.max(m.out, m.in)), 1);
+    page.appendChild(el('div', { class: 'sec' }, [
+      el('div', { class: 'sec-h' }, [el('div', { class: 'h', text: '月度趋势' })]),
+      el('div', { class: 'card' }, [
+        el('div', { class: 'st-legend' }, [
+          el('span', {}, [el('i', { class: 'st-dot out' }), '支出']),
+          el('span', {}, [el('i', { class: 'st-dot in' }), '收入'])
+        ]),
+        el('div', { class: 'st-bars' }, months.map((m) => el('div', { class: 'st-col' }, [
+          el('div', { class: 'st-pair' }, [
+            el('i', { class: 'st-bar out', style: { height: Math.max(m.out ? 3 : 0, (m.out / max) * 100) + '%' }, title: '支出 ' + fmtMoney(m.out) }),
+            el('i', { class: 'st-bar in', style: { height: Math.max(m.in ? 3 : 0, (m.in / max) * 100) + '%' }, title: '收入 ' + fmtMoney(m.in) })
+          ]),
+          el('div', { class: 'st-x', text: m.label })
+        ])))
+      ])
+    ]));
+  }
+
+  /* 支出 / 收入分类占比 */
+  page.appendChild(catBlock('支出分类', list, 'out'));
+  page.appendChild(catBlock('收入分类', list, 'in'));
+
+  if (!list.length) {
+    page.appendChild(el('div', { class: 'empty' }, [
+      iconImg('IC-MIO-034'),
+      el('div', { class: 'e-h', text: '这个时段没有账目' }),
+      el('div', { class: 'e-p', text: '换个时段，或先去记一笔' })
+    ]));
+  }
+
+  page.appendChild(el('div', { class: 'hint', style: { textAlign: 'center', marginTop: '14px' }, text: '统计只读取本机账本数据' }));
+  view.appendChild(page);
+}
+
+function kpi(label, value, tone) {
+  return el('div', { class: 'st-kpi' }, [
+    el('div', { class: 'st-kpi-t', text: label }),
+    el('div', { class: 'st-kpi-v' + (tone ? ' ' + tone : ''), text: value })
+  ]);
+}
+
+function buildMonths(k, list) {
+  const now = new Date();
+  const n = Math.min(rangeMonths(k), 12);
+  const out = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const s = d.getTime();
+    const e = new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime();
+    const inMonth = list.filter((r) => r.ts >= s && r.ts < e);
+    out.push({
+      label: `${d.getMonth() + 1}月`,
+      out: inMonth.filter((r) => r.kind === 'out').reduce((a, r) => a + Number(r.amount), 0),
+      in: inMonth.filter((r) => r.kind === 'in').reduce((a, r) => a + Number(r.amount), 0)
+    });
+  }
+  return out;
+}
+
+function catBlock(title, list, kind) {
+  const byCat = new Map();
+  list.filter((r) => r.kind === kind).forEach((r) => {
+    const k = r.cat || '其他';
+    byCat.set(k, (byCat.get(k) || 0) + Number(r.amount));
+  });
+  const cats = [...byCat.entries()].sort((a, b) => b[1] - a[1]);
+  const total = cats.reduce((s, [, a]) => s + a, 0);
+  if (!cats.length) return el('div');
+  const max = cats[0][1] || 1;
+  return el('div', { class: 'sec' }, [
+    el('div', { class: 'sec-h' }, [el('div', { class: 'h', text: title })]),
+    el('div', { class: 'card' }, cats.map(([name, amt]) => {
+      const pct = total ? Math.round((amt / total) * 1000) / 10 : 0;
+      return el('div', { class: 'ld-cat-row' }, [
+        el('div', { class: 'ld-cat-name', text: name }),
+        el('div', { class: 'ld-cat-bar' }, [el('i', {
+          class: kind === 'in' ? 'in' : '',
+          style: { width: Math.max(4, (amt / max) * 100) + '%' }
+        })]),
+        el('div', { class: 'ld-cat-amt', text: fmtMoney(amt) }),
+        el('div', { class: 'st-pct', text: pct + '%' })
+      ]);
+    }))
+  ]);
 }
