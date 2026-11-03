@@ -111,10 +111,12 @@ export function downloadBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
-export function openFile({ accept = '', multiple = false } = {}) {
+export function openFile({ accept = '', multiple = false, directory = false } = {}) {
   return new Promise((res) => {
-    const input = el('input', { type: 'file', accept });
-    if (multiple) input.multiple = true;
+    // directory 模式不能设 accept（部分浏览器会因此过滤掉整个目录选择）
+    const input = el('input', { type: 'file', accept: directory ? '' : accept });
+    if (multiple || directory) input.multiple = true;
+    if (directory) { input.webkitdirectory = true; input.directory = true; }
     // 移动端（尤其是微信/QQ 内置 WebView）对 display:none 的 file input 不会唤起相册，
     // 改成「1px 透明 + 移出屏幕外」，既不可见又能正常唤出系统选择器
     input.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;border:0;padding:0;';
@@ -129,13 +131,13 @@ export function openFile({ accept = '', multiple = false } = {}) {
       res(val);
     };
     // 用户从系统选择器返回页面却没有 change → 视为取消，避免 Promise 永远挂着
-    const onFocus = () => setTimeout(() => finish(multiple ? [] : null), 800);
+    const onFocus = () => setTimeout(() => finish((multiple || directory) ? [] : null), 800);
     window.addEventListener('focus', onFocus);
     input.addEventListener('change', () => {
       const files = Array.from(input.files || []);
-      finish(multiple ? files : files[0] || null);
+      finish((multiple || directory) ? files : files[0] || null);
     });
-    input.addEventListener('cancel', () => finish(multiple ? [] : null));
+    input.addEventListener('cancel', () => finish((multiple || directory) ? [] : null));
     input.click();
   });
 }

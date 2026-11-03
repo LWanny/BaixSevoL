@@ -59,7 +59,7 @@ register({
   const view = document.getElementById('view');
   view.innerHTML = '';
   normalPage('decks', {
-    back: true, title: '牌面图鉴', sub: '塔罗 78 · 雷诺曼 40 · 可覆盖可批量导入',
+    back: true, title: '牌面图鉴', sub: '塔罗 78 · 雷诺曼 36 · 可覆盖可批量导入',
     actions: [
       { icon: 'IC-DIV-009', label: '批量导入', onclick: () => batchImportDialog() },
       { icon: 'IC-DIV-007', label: '新建', onclick: () => cardForm() }
@@ -76,7 +76,7 @@ register({
   function drawTab() {
     tabRow.innerHTML = '';
     ['tarot', 'lenormand'].forEach((id) => {
-      const label = id === 'tarot' ? '塔罗 78' : '雷诺曼 40';
+      const label = id === 'tarot' ? '塔罗 78' : '雷诺曼 36';
       const chip = el('div', {
         class: 'chip' + (tab === id ? ' on' : ''), text: label,
         onclick: () => { tab = id; drawTab(); paint(); }
@@ -142,37 +142,49 @@ register({
     });
   }
 
-  view.appendChild(tabRow);
-  view.appendChild(list);
+  /* #view 是 overflow:hidden，只有 #view>.page 才能滚动 —— 包一层滚动容器，
+     否则首屏 16 张之后（恶魔/高塔附近）全被裁掉，根本滑不动 */
+  const scrollBox = el('div', { class: 'page', style: { padding: '0' } });
+  scrollBox.appendChild(tabRow);
+  scrollBox.appendChild(list);
+  view.appendChild(scrollBox);
   drawTab(); paint();
 
   /* ---------- 批量导入 ---------- */
   function batchImportDialog() {
     actionSheet('批量导入牌面图', [
-      { label: '塔罗牌（按文件名匹配）', icon: 'IC-DIV-002', onSelect: () => batchImport('tarot') },
-      { label: '雷诺曼牌（按文件名匹配）', icon: 'IC-DIV-003', onSelect: () => batchImport('lenormand') },
+      { label: '塔罗 · 选图片文件', icon: 'IC-DIV-002', onSelect: () => batchImport('tarot', false) },
+      { label: '塔罗 · 整个文件夹', icon: 'IC-DIV-002', onSelect: () => batchImport('tarot', true) },
+      { label: '雷诺曼 · 选图片文件', icon: 'IC-DIV-003', onSelect: () => batchImport('lenormand', false) },
+      { label: '雷诺曼 · 整个文件夹', icon: 'IC-DIV-003', onSelect: () => batchImport('lenormand', true) },
       { label: '怎么匹配文件名？', icon: 'IC-DIV-001', onSelect: () => alertBox({
         title: '文件名匹配规则',
-        text: '选体系后，会按文件名自动匹配内置牌并保存为"覆盖版"：\n\n' +
+        text: '选体系后，会按文件名自动匹配内置牌并保存为"覆盖版"（图片文件和整个文件夹都支持）：\n\n' +
               '· 塔罗大阿卡那：愚者 / 魔术师 / 女祭司 ...（22 张），或数字 1~22\n' +
               '· 塔罗小阿卡那：权杖Ace / 圣杯7 / 宝剑王后 / 星币国王 ...\n' +
-              '· 雷诺曼：骑士 / 四叶草 / 船 / 房子 ...（40 张），或数字 1~40\n\n' +
+              '· 雷诺曼：骑士 / 四叶草 / 船 / 房子 ...（36 张），或数字 1~36\n\n' +
               '文件名可含扩展名（.jpg/.png/.webp）、可含空格和下划线，例如：\n' +
               '  愚者.png / 01.jpg / 权杖_Ace.jpeg / 骑士.webp\n\n' +
+              '文件夹模式：整个文件夹里的图片都会扫一遍，按各自文件名匹配；非图片文件自动跳过。\n\n' +
               '匹配顺序：精确 name → 包含 name → 纯数字按序号。\n没匹配到的会单独告诉你。'
       }) }
     ]);
   }
 
-  async function batchImport(system) {
-    const files = await openFile({ accept: 'image/*', multiple: true });
+  const IMG_RE = /\.(png|jpe?g|webp|gif|bmp|avif|heic)$/i;
+  async function batchImport(system, folder = false) {
+    const files = await openFile(folder ? { directory: true } : { accept: 'image/*', multiple: true });
     if (!files || !files.length) return;
+    // 文件夹里可能混有非图片（说明文档等），只挑图片处理
+    const imgs = files.filter((f) => (f.type || '').startsWith('image/') || IMG_RE.test(f.name));
+    const nonImg = files.length - imgs.length;
+    if (!imgs.length) { alertBox({ title: '没有图片', text: '所选内容里没有可用的图片文件。' }); return; }
     const deck = system === 'tarot' ? TAROT : LENORMAND;
     const existingOverrides = new Map(customCards.filter((c) => c.override && c.system === system).map((c) => [c.id, c]));
     let ok = 0, skip = 0, dup = 0;
     const skipList = [];
 
-    for (const f of files) {
+    for (const f of imgs) {
       const base = f.name.replace(/\.[^.]+$/, '').replace(/[_\-\s]+/g, '').trim();
       const matched = matchBuiltinCard(base, system, deck);
       if (!matched) { skip++; skipList.push(f.name); continue; }
@@ -189,7 +201,8 @@ register({
 
     await kvSet('customCards', customCards);
     paint();
-    const msg = `体系：${system === 'tarot' ? '塔罗' : '雷诺曼'}\n✓ 成功覆盖 ${ok} 张\n· 重复跳过 ${dup} 张\n· 没匹配到 ${skip} 张` +
+    const msg = `体系：${system === 'tarot' ? '塔罗' : '雷诺曼'}${folder ? ' · 文件夹' : ''}\n✓ 成功覆盖 ${ok} 张\n· 重复跳过 ${dup} 张\n· 没匹配到 ${skip} 张` +
+                (folder && nonImg ? `\n· 非图片跳过 ${nonImg} 个` : '') +
                 (skipList.length ? `\n\n没匹配的：\n${skipList.join('\n')}` : '');
     alertBox({ title: '批量导入完成', text: msg });
   }
