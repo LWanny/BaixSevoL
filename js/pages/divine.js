@@ -35,21 +35,189 @@ export default async function pageDivine(v) {
   if (fabOff) window.removeEventListener('hashchange', fabOff);
   fabOff = () => removeFab();
   window.addEventListener('hashchange', fabOff);
-  normalPage('divine', {
-    back: true,
-    title: '占卜',
-    sub: '本地随机 · 仅供娱乐与自我梳理',
-    actions: [
-      { icon: 'IC-DIV-008', label: '记录', onclick: showHistory },
-      { icon: 'IC-DIV-009', label: '自定义', onclick: customMenu },
-      { icon: 'IC-CHT-007', label: '更多', onclick: moreMenu }
-    ]
-  });
+
   customSpreads = await kvGet('customSpreads', []) || [];
   customCards = await kvGet('customCards', []) || [];
   sess = null; stage = 'system';   // 每次进占卜页都从「选类」开始，不沿用上次的解读态
   render();
 }
+
+import { register } from '../router.js';
+
+/* ---------------- 牌面图鉴（独立路由 /decks） ---------------- */
+register({ path: '/decks' }, async () => {
+  const view = document.getElementById('view');
+  view.innerHTML = '';
+  normalPage('decks', {
+    back: true, title: '牌面图鉴', sub: '塔罗 78 · 雷诺曼 40 · 可覆盖可批量导入',
+    actions: [
+      { icon: 'IC-DIV-009', label: '批量导入', onclick: () => batchImportDialog() },
+      { icon: 'IC-DIV-007', label: '新建', onclick: () => cardForm() }
+    ]
+  });
+
+  const customSpreads = await kvGet('customSpreads', []) || [];
+  let customCards = (await kvGet('customCards', []) || []).slice();
+
+  let tab = 'tarot';
+  const tabRow = el('div', { class: 'row', style: { gap: '6px', padding: '8px 14px', position: 'sticky', top: '0', background: 'var(--bg)', zIndex: '3', borderBottom: '1px solid var(--line)' } });
+  const list = el('div', { id: 'deck-grid', style: 'padding:10px 12px 30px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;' });
+
+  function drawTab() {
+    tabRow.innerHTML = '';
+    ['tarot', 'lenormand'].forEach((id) => {
+      const label = id === 'tarot' ? '塔罗 78' : '雷诺曼 40';
+      const chip = el('div', {
+        class: 'chip' + (tab === id ? ' on' : ''), text: label,
+        onclick: () => { tab = id; drawTab(); paint(); }
+      });
+      tabRow.appendChild(chip);
+    });
+  }
+
+  function paint() {
+    list.innerHTML = '';
+    const deck = deckFor(tab);
+    deck.forEach((c) => {
+      const hasOverride = customCards.some((o) => o.id === c.id && o.override);
+      const isPureCustom = customCards.some((o) => o.id === c.id && !o.override);   // 纯新增 custom（同名不会进 deckFor）
+      // 同名 override 会替换进 deckFor，纯新增 custom 如果 system 匹配也会进 deckFor 的 added 部分
+      const node = el('div', {
+        class: 'dk-cell',
+        onclick: () => openDeckCard(c)
+      }, [
+        c.imgId
+          ? el('div', { class: 'dk-thumb', style: { background: '#fff' } }, [imgEl(c.imgId, 'dk-img')])
+          : el('div', { class: 'dk-thumb dk-empty' }, [iconImg(tab === 'tarot' ? 'IC-DIV-002' : 'IC-DIV-003')]),
+        el('div', { class: 'dk-name', text: c.name }),
+        hasOverride ? el('div', { class: 'dk-tag tag-ov', text: '已覆盖' }) : null
+      ]);
+      list.appendChild(node);
+    });
+    // 纯新增 customCards（没有 override 且不在 base 里），如果 tab 匹配也展示
+    const pureCustoms = customCards.filter((o) => !o.override && o.system === tab);
+    const shownIds = new Set(deck.map((c) => c.id));
+    pureCustoms.filter((o) => !shownIds.has(o.id)).forEach((c) => {
+      const node = el('div', { class: 'dk-cell', onclick: () => openDeckCard(c) }, [
+        c.imgId
+          ? el('div', { class: 'dk-thumb', style: { background: '#fff' } }, [imgEl(c.imgId, 'dk-img')])
+          : el('div', { class: 'dk-thumb dk-empty' }, [iconImg(tab === 'tarot' ? 'IC-DIV-002' : 'IC-DIV-003')]),
+        el('div', { class: 'dk-name', text: c.name }),
+        el('div', { class: 'dk-tag tag-add', text: '我加的' })
+      ]);
+      list.appendChild(node);
+    });
+  }
+
+  /** 在图鉴里打开一张卡 —— 可能是内置 / override / 纯新增 */
+  function openDeckCard(card) {
+    // 先 reload customCards（可能上次别处改过）
+    kvGet('customCards', []).then((cc) => {
+      customCards = cc.slice();
+      paint();
+      // 找 override 或 builtin
+      const override = customCards.find((o) => o.id === card.id && o.override);
+      const builtin = (tab === 'tarot' ? TAROT : LENORMAND).find((x) => x.id === card.id);
+      cardForm(override || builtin || card);
+      // sheet 关闭后刷新页面
+      const tick = setInterval(() => {
+        if (!document.querySelector('#layer-root .sheet')) {
+          clearInterval(tick);
+          kvGet('customCards', []).then((cc) => {
+            customCards = cc.slice();
+            paint();
+          });
+        }
+      }, 200);
+    });
+  }
+
+  view.appendChild(tabRow);
+  view.appendChild(list);
+  drawTab(); paint();
+
+  /* ---------- 批量导入 ---------- */
+  function batchImportDialog() {
+    actionSheet('批量导入牌面图', [
+      { label: '塔罗牌（按文件名匹配）', icon: 'IC-DIV-002', onSelect: () => batchImport('tarot') },
+      { label: '雷诺曼牌（按文件名匹配）', icon: 'IC-DIV-003', onSelect: () => batchImport('lenormand') },
+      { label: '怎么匹配文件名？', icon: 'IC-DIV-001', onSelect: () => alertBox({
+        title: '文件名匹配规则',
+        text: '选体系后，会按文件名自动匹配内置牌并保存为"覆盖版"：\n\n' +
+              '· 塔罗大阿卡那：愚者 / 魔术师 / 女祭司 ...（22 张），或数字 1~22\n' +
+              '· 塔罗小阿卡那：权杖Ace / 圣杯7 / 宝剑王后 / 星币国王 ...\n' +
+              '· 雷诺曼：骑士 / 四叶草 / 船 / 房子 ...（40 张），或数字 1~40\n\n' +
+              '文件名可含扩展名（.jpg/.png/.webp）、可含空格和下划线，例如：\n' +
+              '  愚者.png / 01.jpg / 权杖_Ace.jpeg / 骑士.webp\n\n' +
+              '匹配顺序：精确 name → 包含 name → 纯数字按序号。\n没匹配到的会单独告诉你。'
+      }) }
+    ]);
+  }
+
+  async function batchImport(system) {
+    const files = await openFile({ accept: 'image/*', multiple: true });
+    if (!files || !files.length) return;
+    const deck = system === 'tarot' ? TAROT : LENORMAND;
+    const existingOverrides = new Map(customCards.filter((c) => c.override && c.system === system).map((c) => [c.id, c]));
+    let ok = 0, skip = 0, dup = 0;
+    const skipList = [];
+
+    for (const f of files) {
+      const base = f.name.replace(/\.[^.]+$/, '').replace(/[_\-\s]+/g, '').trim();
+      const matched = matchBuiltinCard(base, system, deck);
+      if (!matched) { skip++; skipList.push(f.name); continue; }
+      // 防重复：同一文件命中同一 id 多次（理论上不会，但文件名包含就可能）
+      if (existingOverrides.has(matched.id)) { dup++; continue; }
+
+      const { blob, w, h } = await compressImage(f, 720, 0.88);
+      const imgId = await saveMedia(blob, { type: 'image', w, h, source: 'library', name: matched.name });
+      const patch = { ...matched, override: true, custom: true, imgId, system };
+      customCards.push(patch);
+      existingOverrides.set(matched.id, patch);
+      ok++;
+    }
+
+    await kvSet('customCards', customCards);
+    paint();
+    const msg = `体系：${system === 'tarot' ? '塔罗' : '雷诺曼'}\n✓ 成功覆盖 ${ok} 张\n· 重复跳过 ${dup} 张\n· 没匹配到 ${skip} 张` +
+                (skipList.length ? `\n\n没匹配的：\n${skipList.join('\n')}` : '');
+    alertBox({ title: '批量导入完成', text: msg });
+  }
+
+  /* ---------- 返回时清理 ---------- */
+  window.addEventListener('hashchange', () => { removeFab(); clearTimeout(); }, { once: true });
+});
+
+/** 按文件名匹配内置牌。匹配顺序：精确 name → 包含 → 数字序号 */
+function matchBuiltinCard(base, system, deck) {
+  if (!base) return null;
+  // 1. 精确 name
+  let m = deck.find((c) => c.name === base);
+  if (m) return m;
+  // 2. 包含 name（双向）
+  m = deck.find((c) => c.name.includes(base) || base.includes(c.name));
+  if (m) return m;
+  // 3. 纯数字 → 序号
+  const n = Number(base);
+  if (Number.isFinite(n) && n >= 1) {
+    if (system === 'tarot') {
+      // 塔罗大阿卡那编号 1~22（愚者=0 在最后一位，这里按 1~22 算 tarot-m{index}）
+      if (n <= 22) {
+        m = deck.find((c) => c.id === `tarot-m${n - 1}`);
+        if (m) return m;
+      }
+      // 塔罗小阿卡那 23~78 难直接用序号匹配，跳过
+    } else if (system === 'lenormand') {
+      if (n <= deck.length) {
+        m = deck.find((c) => c.id === `len-${n - 1}`);
+        if (m) return m;
+      }
+    }
+  }
+  return null;
+}
+
+
 
 /* ---------------- 数据组装 ---------------- */
 /** 牌面覆盖机制：customCards 里 override:true 且 id 与内置一致的，
