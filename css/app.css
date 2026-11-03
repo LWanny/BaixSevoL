@@ -2481,6 +2481,63 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .sh-detail-name{font-size:16px;font-weight:700}
 .sh-detail-desc{font-size:12.5px;color:var(--txt-dim);line-height:1.7}
 .sh-detail-price{font-size:19px;font-weight:800;color:var(--accent-2);font-variant-numeric:tabular-nums}
+/* 商品卡 · 快速加购按钮 */
+.sh-tile{position:relative}
+.sh-add{
+  position:absolute;right:8px;bottom:8px;width:30px;height:30px;border-radius:50%;
+  border:1px solid var(--line);background:var(--card);font-size:15px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.10);
+}
+.sh-add:active{transform:scale(.9)}
+/* 图片型商品视觉（卡/详情/订单/购物车共用） */
+.sh-img{width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit}
+.sh-tile .sh-emoji.sh-img,.sh-cart-emoji.sh-img,.sh-order-emoji.sh-img{border-radius:inherit}
+/* 购物车 */
+.sh-cart{display:flex;flex-direction:column;gap:8px;padding-bottom:120px}
+.sh-cart-row{
+  display:flex;align-items:center;gap:10px;background:var(--card);
+  border:1px solid var(--line-soft);border-radius:14px;padding:9px 10px;
+}
+.sh-cart-emoji{
+  width:46px;height:46px;flex:0 0 auto;border-radius:10px;display:flex;
+  align-items:center;justify-content:center;font-size:24px;overflow:hidden;
+}
+.sh-cart-main{flex:1;min-width:0}
+.sh-cart-name{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sh-cart-price{font-size:12.5px;color:var(--accent-2);font-variant-numeric:tabular-nums;margin-top:2px}
+.sh-cart-qty{display:flex;align-items:center;gap:6px;flex:0 0 auto}
+.qty-btn{
+  width:26px;height:26px;border-radius:8px;border:1px solid var(--line);
+  background:var(--bg-soft);font-size:15px;cursor:pointer;line-height:1;
+}
+.qty-btn:active{background:var(--line-soft)}
+.qty-n{min-width:20px;text-align:center;font-size:13.5px;font-weight:700;font-variant-numeric:tabular-nums}
+.sh-cart-del{width:30px;height:30px;flex:0 0 auto;border:0;background:transparent;cursor:pointer;opacity:.75;padding:0}
+.sh-cart-bar{
+  position:sticky;bottom:0;margin-top:8px;display:flex;align-items:center;
+  justify-content:space-between;gap:10px;background:var(--card);
+  border:1px solid var(--line);border-radius:16px;padding:10px 12px;
+  box-shadow:0 -6px 18px rgba(0,0,0,.08);
+}
+.sh-cart-sum{display:flex;flex-direction:column;gap:2px;min-width:0}
+.sh-cart-total{font-size:16.5px;font-weight:800;color:var(--accent-2);font-variant-numeric:tabular-nums}
+/* 钱包 */
+.sh-wallet{
+  background:linear-gradient(135deg,#1f2937,#111827);border-radius:16px;
+  padding:16px;color:#fff;margin-bottom:14px;
+}
+.sh-wallet-t{font-size:11.5px;opacity:.72;letter-spacing:.5px}
+.sh-wallet-v{font-size:30px;font-weight:800;letter-spacing:-.5px;font-variant-numeric:tabular-nums;margin-top:4px}
+.sh-wallet-sub{font-size:12px;opacity:.72;margin-top:6px}
+/* 上架表单 · 预览 */
+.sh-form-preview{display:flex;align-items:center;gap:12px}
+.sh-form-img{width:84px;height:84px;object-fit:cover;border-radius:12px;border:1px solid var(--line)}
+.sh-form-emoji{
+  width:84px;height:84px;border-radius:12px;background:linear-gradient(145deg,#f3e8ff,#e4d4fb);
+  display:flex;align-items:center;justify-content:center;font-size:40px;
+}
+/* 详情主视觉（内嵌图片/emoji 尺寸） */
+.sh-detail-visual{width:120px;height:120px;border-radius:20px;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:62px}
 .sh-order{margin-bottom:10px}
 .sh-order-top{display:flex;align-items:center;gap:11px}
 .sh-order-emoji{
