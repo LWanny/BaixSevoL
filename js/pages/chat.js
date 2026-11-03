@@ -15,6 +15,7 @@ import { taPostChatShot } from '../momentShot.js';
 import * as sched from '../scheduler.js';
 import { state as S } from '../state.js';
 import { createFreeCanvas, GRAFITTI_W, GRAFITTI_H } from '../graffiti.js';
+import { bgAdjust, openHsvSheet } from './skin.js';   // 聊天装扮面板复用（原装扮页功能）
 import { applyTaRename, applyTaAvatar } from '../nicknameAI.js';
 import { makeZip, readZip } from '../zip.js';
 
@@ -1242,7 +1243,9 @@ export default async function pageChat(view) {
             ]),
             el('button', { class: 'btn sm', onclick: pickWall }, ['选图']),
             wallUrl ? el('button', { class: 'btn sm', onclick: clearWall }, ['清除']) : null
-          ])),
+          ]),
+          // 位置与缩放（原装扮页「聊天壁纸」整块搬来）
+          bgAdjust('chatWallX', 'chatWallY', 'chatWallZoom', !!s.chatWallpaperId)),
 
         section('头像',
           avLine('TA 的头像', taAvUrl, (state.role.name || 'TA').slice(0, 1), () => pickAvatar('ta'), () => resetAvatar('ta')),
@@ -1258,7 +1261,9 @@ export default async function pageChat(view) {
             el('span', { class: 'small muted', style: { flex: 'none' }, text: '文字' }),
             chipRow([{ v: '#ffffff', label: '白', border: true }, { v: '#16181c', label: '黑' }],
               () => s.bubbleMeTxt, (v) => { s.bubbleMeTxt = v; })
-          ])),
+          ]),
+          el('button', { class: 'btn sm', style: 'margin-top:8px', onclick: () => openHsvSheet('me') },
+            ['自定义颜色（HSV 色相/饱和度/明度）'])),
 
         section('气泡 · TA方',
           chipRow(TA_COLORS, () => s.bubbleTa, (v) => { s.bubbleTa = v; }),
@@ -1266,15 +1271,32 @@ export default async function pageChat(view) {
             el('span', { class: 'small muted', style: { flex: 'none' }, text: '文字' }),
             chipRow([{ v: '#16181c', label: '黑' }, { v: '#ffffff', label: '白', border: true }],
               () => s.bubbleTaTxt, (v) => { s.bubbleTaTxt = v; })
-          ])),
+          ]),
+          el('button', { class: 'btn sm', style: 'margin-top:8px', onclick: () => openHsvSheet('ta') },
+            ['自定义颜色（HSV 色相/饱和度/明度）'])),
 
         section('气泡圆角',
           chipRow(RADIUSES, () => s.bubbleRadius, (v) => { s.bubbleRadius = v; })),
 
-        el('div', { class: 'small muted', text: '背景位置缩放、气泡自定义 CSS 等更多项在「装扮与主题」里。' })
+        // 自定义气泡 CSS（原装扮页整块搬来）
+        (() => {
+          const ta = el('textarea', {
+            class: 'input', rows: '3', value: s.bubbleCss || '',
+            placeholder: '例：border-radius:20px;box-shadow:0 2px 8px rgba(0,0,0,.1)\n也支持 .me / .friend / .message-me 等类名',
+            style: { fontFamily: 'ui-monospace,Menlo,monospace', fontSize: '12.5px', lineHeight: '1.6', resize: 'vertical' }
+          });
+          return section('自定义气泡样式（CSS）',
+            ta,
+            el('div', { class: 'row', style: { gap: '8px', marginTop: '8px' } }, [
+              el('button', { class: 'btn sm', onclick: async () => { s.bubbleCss = ta.value; await saveSkin(); await refresh(); toast('已应用气泡样式'); } }, ['应用']),
+              el('button', { class: 'btn sm', onclick: async () => { ta.value = ''; s.bubbleCss = ''; await saveSkin(); await refresh(); toast('已清空'); } }, ['清空'])
+            ]));
+        })(),
+
+        el('div', { class: 'small muted', text: '整体背景与恢复默认在「装扮与主题」页。' })
       ]),
       actions: [{
-        label: '更多装扮项（完整装扮页）', icon: 'IC-MIO-013',
+        label: '整体背景 / 恢复默认（装扮页）', icon: 'IC-MIO-013',
         onSelect: () => go('/skin')
       }]
     });

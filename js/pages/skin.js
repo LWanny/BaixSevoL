@@ -8,11 +8,6 @@ import { saveMedia, mediaURL, delMedia } from '../media.js';
 import { toast, confirmBox, sheet } from '../ui.js';
 
 const BG_PRESETS = ['#f7f7f6', '#ffffff', '#f2f2f1', '#ececea', '#e6e6e4', '#dcdcda', '#1a1c20'];
-/* 马卡龙浅色系（双方气泡共用） */
-const MACARON = [
-  '#FFD8E4', '#FFE3C9', '#FFF6BF', '#D9F2D0',
-  '#CCEAF4', '#DCD6F7', '#F6D6EC', '#EDEDEA'
-];
 
 let curView = null;
 
@@ -42,79 +37,7 @@ function build(view) {
     bgAdjust('globalBgX', 'globalBgY', 'globalBgZoom', s.globalBgImageId)
   ])));
 
-  /* ---- 聊天壁纸 ---- */
-  wrap.appendChild(section('聊天壁纸', el('div', { class: 'card' }, [
-    imagePicker('聊天背景图', '只作用于聊天页，铺在气泡后面。', s.chatWallpaperId, async (id) => { s.chatWallpaperId = id; await saveSkin(); await applySkin(); }, 'wp'),
-    bgAdjust('chatWallX', 'chatWallY', 'chatWallZoom', s.chatWallpaperId)
-  ])));
-
-  /* ---- 气泡 ---- */
-  wrap.appendChild(section('聊天气泡', el('div', { class: 'card' }, [
-    bubbleColorField('我方气泡', 'me'),
-    bubbleColorField('TA 气泡', 'ta'),
-    el('div', { class: 'param' }, [
-      el('div', { class: 'pname' }, [el('span', { text: '气泡圆角' })]),
-      el('span', { class: 'pval', text: s.bubbleRadius + 'px' }),
-      el('div', { class: 'row', style: { flex: '1 1 100%' } }, [
-        (() => { const r = el('input', { type: 'range', min: '0', max: '22', value: String(s.bubbleRadius) });
-          r.addEventListener('input', async () => { s.bubbleRadius = Number(r.value); r.parentElement.previousElementSibling.textContent = r.value + 'px'; await saveSkin(); await applySkin(); });
-          return r; })()
-      ])
-    ]),
-    (() => {
-      const ta = el('textarea', {
-        class: 'input',
-        rows: '4',
-        value: s.bubbleCss || '',
-        placeholder: '例 1：border-radius:20px;box-shadow:0 2px 8px rgba(0,0,0,.1)\n例 2：.msg-out .msg-bubble{color:#fff}\n也支持 .me / .friend / .message-me / .bubble 等常见类名',
-        style: { fontFamily: 'ui-monospace,Menlo,monospace', fontSize: '12.5px', lineHeight: '1.6', resize: 'vertical' }
-      });
-      const apply = el('button', { class: 'btn sm', onclick: async () => {
-        s.bubbleCss = ta.value;
-        await saveSkin(); await applySkin();
-        toast('已应用气泡样式');
-      } }, ['应用']);
-      const clear = el('button', { class: 'btn sm', onclick: async () => {
-        ta.value = ''; s.bubbleCss = '';
-        await saveSkin(); await applySkin();
-        toast('已清空');
-      } }, ['清空']);
-      return el('div', { class: 'field' }, [
-        el('label', { text: '自定义气泡样式（CSS）' }),
-        ta,
-        el('div', { class: 'row', style: { gap: '8px', marginTop: '8px' } }, [apply, clear]),
-        el('div', { class: 'hint', text: '只写声明会自动套到双方气泡；写选择器时，.msg-out/.msg-in/.msg-bubble/.message-me/.me/.friend/.bubble 会自动映射到本应用结构。' })
-      ]);
-    })()
-  ])));
-
-  /* ---- 聊天头像形状 ---- */
-  wrap.appendChild(section('聊天头像', el('div', { class: 'card' }, [
-    el('div', { class: 'field' }, [
-      el('label', { text: '头像形状' }),
-      el('div', { class: 'row', style: { gap: '8px' } }, [
-        shapeBtn('圆形', 'circle'),
-        shapeBtn('圆角方形', 'rounded')
-      ]),
-      el('div', { class: 'hint', text: '只影响聊天页每条消息旁的头像。' })
-    ])
-  ])));
-
-  /* ---- 头像 ---- */
-  wrap.appendChild(section('头像', el('div', { class: 'card flush' }, [
-    el('div', { class: 'list-item', onclick: async () => {
-      const f = await openFile({ accept: 'image/*' }); if (!f) return;
-      const { blob, w, h } = await compressImage(f, 512, 0.9);
-      s.avatarMeId = await saveMedia(blob, { type: 'image', w, h, source: 'avatar' });
-      await saveSkin(); await applySkin(); toast('我的头像已更新');
-    } }, [iconImg('IC-MIO-014'), el('div', { class: 'li-main' }, [el('div', { class: 'li-title', text: '更换我的头像' })]), iconImg('IC-MIO-004', 'chev')]),
-    el('div', { class: 'list-item', onclick: async () => {
-      if (!s.avatarMeId) return;
-      const yes = await confirmBox({ title: '还原头像', text: '将恢复为默认文字头像。' });
-      if (!yes) return;
-      await delMedia(s.avatarMeId); s.avatarMeId = null; await saveSkin(); await applySkin(); toast('已还原');
-    } }, [iconImg('IC-MIO-023'), el('div', { class: 'li-main' }, [el('div', { class: 'li-title', text: '还原为默认头像' })])])
-  ])));
+  /* ---- 聊天相关（壁纸 / 气泡 / 头像）已搬进「消息 → 更多 → 聊天装扮」 ---- */
 
   /* ---- 重置 ---- */
   wrap.appendChild(el('div', { style: { padding: '0 2px 20px' } }, [
@@ -140,7 +63,7 @@ function build(view) {
 }
 
 /* 背景图 / 壁纸的位置与缩放（50 = 居中，仅在有图时生效） */
-function bgAdjust(xKey, yKey, zoomKey, hasImage) {
+export function bgAdjust(xKey, yKey, zoomKey, hasImage) {
   const s = state.skin;
   const row = (label, key, min, max) => {
     const val = el('span', { class: 'pval', text: `${s[key]}%` });
@@ -165,72 +88,10 @@ function bgAdjust(xKey, yKey, zoomKey, hasImage) {
 }
 
 /* ---------------- 小部件 ---------------- */
-function shapeBtn(label, value) {
-  const s = state.skin;
-  const on = (s.avatarShape || 'rounded') === value;
-  return el('button', {
-    class: 'btn sm shape-btn' + (on ? ' primary' : ''),
-    dataset: { shape: value },
-    onclick: async () => {
-      s.avatarShape = value;
-      await saveSkin(); await applySkin();
-      document.querySelectorAll('.shape-btn').forEach((b) => {
-        b.classList.toggle('primary', b.dataset.shape === value);
-      });
-    }
-  }, [label]);
-}
 
-/* 气泡颜色：马卡龙预设 + HSV 自定义 */
-function bubbleColorField(label, side) {
-  const s = state.skin;
-  const key = side === 'me' ? 'bubbleMe' : 'bubbleTa';
-  const cur = s[key];
-  const isHex = /^#[0-9a-fA-F]{6}$/.test(cur || '');
+/* 气泡颜色：马卡龙预设 + HSV 自定义（已搬进聊天装扮面板，此处保留 openHsvSheet 供其调用） */
 
-  const curNorm = (cur || '').toUpperCase();
-  const chips = MACARON.map((c) =>
-    el('span', {
-      class: 'chip' + (curNorm === c ? ' on' : ''),
-      style: { background: c, width: '30px', height: '22px' },
-      title: c,
-      onclick: async (e) => {
-        s[key] = c;
-        s[side === 'me' ? 'bubbleMeTxt' : 'bubbleTaTxt'] = textFor(c);
-        await saveSkin(); await applySkin();
-        refreshChips(e.target.parentElement, c);
-        if (previewChip) previewChip.style.background = c;
-      }
-    })
-  );
-
-  if (isHex && !MACARON.includes(curNorm)) {
-    chips.push(el('span', {
-      class: 'chip on', title: cur,
-      style: { background: cur, width: '30px', height: '22px' },
-      onclick: async (e) => {
-        s[key] = cur; await saveSkin(); await applySkin();
-        refreshChips(e.target.parentElement, cur);
-      }
-    }));
-  }
-
-  const previewChip = el('span', {
-    class: 'chip on',
-    style: { background: isHex ? cur : 'linear-gradient(135deg,#1c1e22,#3c4048)', width: '30px', height: '22px' }
-  });
-
-  return el('div', { class: 'field' }, [
-    el('label', { text: label }),
-    el('div', { class: 'row wrap', style: { gap: '8px', marginBottom: '8px' } }, chips),
-    el('div', { class: 'row', style: { gap: '8px' } }, [
-      previewChip,
-      el('button', { class: 'btn sm', onclick: () => openHsvSheet(side) }, ['自定义颜色（色相/饱和度/明度）'])
-    ])
-  ]);
-}
-
-function openHsvSheet(side) {
+export function openHsvSheet(side) {
   const s = state.skin;
   const key = side === 'me' ? 'bubbleMe' : 'bubbleTa';
   const txtKey = side === 'me' ? 'bubbleMeTxt' : 'bubbleTaTxt';
