@@ -740,6 +740,10 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .dcard .back-lbl{font-size:11px;color:var(--txt-mute)}
 .dcard .ico,.dcard .ico-img{width:28px;height:28px;color:#8a8f98}
 .dcard.flipped .ico{color:currentColor}
+/* 牌背 · 自定义上传：整张铺图 + 底部半透明提示 */
+.dcard .dback{position:absolute;inset:0;border-radius:10px;overflow:hidden;background:#2b2540;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:8px}
+.dcard .dback .dback-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.dcard .dback .back-lbl{position:relative;z-index:1;color:rgba(255,255,255,.92);font-size:11px;background:rgba(0,0,0,.38);padding:2px 9px;border-radius:10px;line-height:1.5}
 /* 自定义牌面：翻牌时整张显示自己的图，底部压一条牌名 */
 .dcard.has-img{padding:0;overflow:hidden}
 .dcard.has-img .dface-img{position:absolute;top:0;right:0;bottom:0;left:0}

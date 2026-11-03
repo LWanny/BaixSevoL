@@ -28,6 +28,7 @@ let sess = null;          // 当前这次占卜
 let stage = 'system';     // system | spread | intent | shuffle | board
 let customSpreads = [];   // 用户补充的牌阵
 let customCards = [];     // 用户补充的牌面
+let cardBacks = { tarot: null, lenormand: null };   // 各体系牌背 imgId（此牌组所有牌共用）
 let fabOff = null;        // 悬浮按钮的清理句柄
 
 export default async function pageDivine(v) {
@@ -47,6 +48,7 @@ export default async function pageDivine(v) {
   });
   customSpreads = await kvGet('customSpreads', []) || [];
   customCards = await kvGet('customCards', []) || [];
+  cardBacks = Object.assign({ tarot: null, lenormand: null }, await kvGet('divineCardBacks', {})) || cardBacks;
   sess = null; stage = 'system';   // 每次进占卜页都从「选类」开始，不沿用上次的解读态
   render();
 }
@@ -61,6 +63,7 @@ register({
   normalPage('decks', {
     back: true, title: '牌面图鉴', sub: '塔罗 78 · 雷诺曼 36 · 可覆盖可批量导入',
     actions: [
+      { icon: 'IC-DIV-006', label: '牌背', onclick: () => backSheet() },
       { icon: 'IC-DIV-009', label: '批量导入', onclick: () => batchImportDialog() },
       { icon: 'IC-DIV-007', label: '新建', onclick: () => cardForm() }
     ]
@@ -68,6 +71,7 @@ register({
 
   const customSpreads = await kvGet('customSpreads', []) || [];
   let customCards = (await kvGet('customCards', []) || []).slice();
+  cardBacks = Object.assign({ tarot: null, lenormand: null }, await kvGet('divineCardBacks', {})) || cardBacks;
 
   let tab = 'tarot';
   const tabRow = el('div', { class: 'row', style: { gap: '6px', padding: '8px 14px', position: 'sticky', top: '0', background: 'var(--bg)', zIndex: '3', borderBottom: '1px solid var(--line)' } });
@@ -149,6 +153,24 @@ register({
   scrollBox.appendChild(list);
   view.appendChild(scrollBox);
   drawTab(); paint();
+
+  /* ---------- 牌背：上传一张图，此牌组（体系）所有牌共用 ---------- */
+  function backSheet() {
+    const pick = async (sys) => {
+      const file = await openFile({ accept: 'image/*', multiple: false });
+      if (!file) return;
+      const { blob, w, h } = await compressImage(file, 720, 0.88);
+      const imgId = await saveMedia(blob, { type: 'image', w, h, source: 'library', name: (sys === 'tarot' ? '塔罗' : '雷诺曼') + '牌背' });
+      cardBacks = { ...cardBacks, [sys]: imgId };
+      await kvSet('divineCardBacks', cardBacks);
+      toast('牌背已设置 · 此牌组所有牌共用');
+    };
+    const st = (sys) => (cardBacks[sys] ? '已设置 · 点击更换' : '未设置 · 点击上传');
+    actionSheet('设置牌背（此牌组所有牌面共用）', [
+      { label: `塔罗 · ${st('tarot')}`, icon: 'IC-DIV-002', onSelect: () => pick('tarot') },
+      { label: `雷诺曼 · ${st('lenormand')}`, icon: 'IC-DIV-003', onSelect: () => pick('lenormand') }
+    ]);
+  }
 
   /* ---------- 批量导入 ---------- */
   let numFromOne = false;   // 「编号从 1 起」开关（只影响塔罗纯编号：1→愚者 … 78→星币国王）
@@ -555,6 +577,14 @@ function flipAll() {
 }
 
 function cardBack() {
+  const bkId = cardBacks[sess?.system];
+  if (bkId) {
+    // 自定义牌背：整张铺图 + 底部半透明「点击翻牌」提示
+    return el('div', { class: 'dback' }, [
+      imgEl(bkId, 'dback-img', '牌背'),
+      el('div', { class: 'back-lbl', text: '点击翻牌' })
+    ]);
+  }
   return el('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' } }, [
     iconImg('IC-DIV-006'),
     el('div', { class: 'back-lbl', text: '点击翻牌' })
