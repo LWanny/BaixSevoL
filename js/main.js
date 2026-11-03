@@ -4,7 +4,6 @@ import { openDB } from './store.js';
 import { loadState, applySkin } from './state.js';
 import { loadIcons } from './icons.js';
 import { register, setNotFound, start, go } from './router.js';
-import { seedIfEmpty } from './seed.js';
 import { startMailbox } from './letters.js';
 import { startMomentsAI } from './momentsAI.js';
 import { startXhsAI } from './xhsdata.js';
@@ -69,7 +68,6 @@ async function boot() {
   await loadState();
   try { await loadIcons(); } catch (e) { console.warn('图标库加载失败', e); }
   await applySkin();
-  await seedIfEmpty();
 
   register({
     '/': pageHome,

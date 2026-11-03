@@ -125,10 +125,10 @@ async function buildOne(pool, params) {
   };
 }
 
-/** 单条消息的回复延迟（毫秒），由回复延迟上下限决定 */
+/** 单条消息的回复延迟（毫秒）：最短按秒、最长按分钟存储 */
 export function delayFor(params) {
   const lo = Math.max(0, Number(params.delayMin) || 0);
-  const hi = Math.max(lo, Number(params.delayMax) || 0);
+  const hi = Math.max(lo, (Number(params.delayMax) || 0) * 60);
   return rndInt(lo, hi) * 1000;
 }
 

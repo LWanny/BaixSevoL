@@ -16,7 +16,7 @@ export default async function pageRoleReply(view) {
     rowNum('回复字卡条数（最少）', '一次回复至少发几条', 'minCount', p.minCount, 1, 999),
     rowNum('回复字卡条数（最多）', '上限，须不少于最少条数', 'maxCount', p.maxCount, 1, 999),
     rowNum('回复速度（最短）', '收到消息后至少等多久', 'delayMin', p.delayMin, 0, 3600, '秒'),
-    rowNum('回复速度（最长）', '收到消息后最多等多久', 'delayMax', p.delayMax, 0, 3600, '秒'),
+    rowNum('回复速度（最长）', '收到消息后最多等多久，按分钟计', 'delayMax', p.delayMax, 0, 999, '分'),
     rowPct('已读不回概率', 'TA 可能不回复你', 'ignorePct', p.ignorePct)
   ])));
 

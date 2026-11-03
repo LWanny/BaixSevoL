@@ -12,7 +12,7 @@ export const PAIR_MAX = {
   minJoin: 'maxJoin',
   proactiveMinCount: 'proactiveMaxCount',
   proactiveIntervalMin: 'proactiveIntervalMax',
-  delayMin: 'delayMax',
+  /* delayMin（秒）与 delayMax（分钟）单位不同，不参与交叉校验，由 delayFor 内部取大 */
   replyMinCards: 'replyMaxCards',
   proactiveMinCards: 'proactiveMaxCards',
   dailyReplyMin: 'dailyReplyMax',

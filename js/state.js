@@ -8,7 +8,7 @@ export const DEFAULT_PARAMS = {
   minCount: 1,          // 回复字卡条数·最少
   maxCount: 1,          // 回复字卡条数·最多
   delayMin: 3,          // 回复速度·最短（秒）
-  delayMax: 30,         // 回复速度·最长（秒）
+  delayMax: 1,          // 回复速度·最长（分钟）
   ignorePct: 10,        // 已读不回概率 %
 
   /* ---- 字卡拼接 ---- */
@@ -31,7 +31,7 @@ export const DEFAULT_PARAMS = {
 
   /* ---- 主动发送 ---- */
   proactive: false,               // 主动发送开关
-  proactivePct: 100,              // 主动发送概率 %（每个随机时刻突然发来的概率）
+  proactivePct: 50,              // 主动发送概率 %（每个随机时刻突然发来的概率）
   proactiveIntervalMin: 30,       // 主动间隔·最短（分钟）
   proactiveIntervalMax: 30,       // 主动间隔·最长（分钟）
   proactiveMinCount: 1,           // 主动发送字卡条数·最少
@@ -48,7 +48,7 @@ export const DEFAULT_PARAMS = {
   mixPct: 0,            // 已废弃（保留兼容旧档案）；请改用下面的 5 个独立概率
   patPct: 10,           // 拍一拍触发概率 %
   choicePct: 10,        // 主动发选择题概率 %
-  callPct: 5,           // TA 在聊天回复里主动发起通话请求的概率 %
+  callPct: 35,          // TA 在聊天回复里主动发起通话请求的概率 %
   callHangupPct: 6,     // 通话中 TA 提前挂断的概率 %（每秒判定）
   callAnswerPct: 82,    // 我打给 TA 时，TA 接听概率 %
   callBusyPct: 10,      // 我打给 TA 时，TA 显示忙线的概率 %（接听未命中后）
@@ -70,7 +70,7 @@ export const DEFAULT_PARAMS = {
 
   /* ---- 对方朋友圈 ---- */
   taPostEnabled: true,          // 允许 TA 主动发朋友圈
-  taPostPct: 70,                // 每次到点时真的发出来的概率 %
+  taPostPct: 50,                // 每次到点时真的发出来的概率 %
   taPostDailyMin: 0,            // 每天最少发几条
   taPostDailyMax: 3,            // 每天最多发几条
   taPostGapMin: 60,             // 两次发布间隔·最短（分钟）
@@ -104,7 +104,7 @@ export const DEFAULT_PARAMS = {
 
   /* ---- TA 主动换我的昵称 / 头像 ---- */
   taRenameEnabled: true,
-  taRenamePct: 30,               // 每次间隔里真的换的概率 %
+  taRenamePct: 5,                // 每次间隔里真的换的概率 %
   taRenameMode: 'ask',           // 'direct' 直接换 / 'ask' 先征求同意
   taRenameGapMin: 30,            // 最短间隔 分钟
   taRenameGapMax: 180,           // 最长间隔 分钟
@@ -141,7 +141,7 @@ export const DEFAULT_PARAMS = {
   proactiveTriggerPctMin: 0,   // 触发主动写信的概率下限 %
   proactiveTriggerPctMax: 100, // 触发主动写信的概率上限 %
   typingMinMin: 1,         // 最短写信时间（分钟）
-  typingMaxMin: 2,         // 最长写信时间（分钟）
+  typingMaxMin: 60,        // 最长写信时间（分钟）
 
   /* ---- 信箱回信（我寄信后 TA 是否回） ---- */
   letterReplyPctMin: 0,    // 回信概率下限 %（我寄信后 TA 回信的概率）
@@ -313,6 +313,12 @@ export async function loadState() {
     sp.typingMaxMin = Math.max(sp.typingMinMin, sp.typingMaxMin);
     delete sp.typingMinSec;
     delete sp.typingMaxSec;
+  }
+  // 回复速度·最长 从「秒」升级为「分钟」（只跑一次，旧档案里的秒数换算成分钟）
+  if ((await kvGet('delayMaxMinVer', 0)) < 1) {
+    const n = Number(sp.delayMax);
+    if (Number.isFinite(n)) sp.delayMax = n <= 0 ? 0 : Math.max(1, Math.round(n / 60));
+    await kvSet('delayMaxMinVer', 1);
   }
   state.settings = Object.assign({}, DEFAULT_SETTINGS, await kvGet('settings', {}));
   state.skin = Object.assign({}, DEFAULT_SKIN, await kvGet('skin', {}));
