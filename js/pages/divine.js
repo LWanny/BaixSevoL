@@ -151,22 +151,29 @@ register({
   drawTab(); paint();
 
   /* ---------- 批量导入 ---------- */
+  let numFromOne = false;   // 「编号从 1 起」开关（只影响塔罗纯编号：1→愚者 … 78→星币国王）
   function batchImportDialog() {
     actionSheet('批量导入牌面图', [
       { label: '塔罗 · 选图片文件', icon: 'IC-DIV-002', onSelect: () => batchImport('tarot', false) },
       { label: '塔罗 · 整个文件夹', icon: 'IC-DIV-002', onSelect: () => batchImport('tarot', true) },
       { label: '雷诺曼 · 选图片文件', icon: 'IC-DIV-003', onSelect: () => batchImport('lenormand', false) },
       { label: '雷诺曼 · 整个文件夹', icon: 'IC-DIV-003', onSelect: () => batchImport('lenormand', true) },
+      { label: `编号从 1 起：${numFromOne ? '开' : '关'}（点切换，只影响塔罗纯编号）`, icon: 'IC-DIV-007', onSelect: () => {
+        numFromOne = !numFromOne;
+        toast(`编号从 1 起已${numFromOne ? '开启' : '关闭'}（1=愚者 … 78=星币国王）`);
+        batchImportDialog();   // 重开让用户看到开关状态
+      } },
       { label: '怎么匹配文件名？', icon: 'IC-DIV-001', onSelect: () => alertBox({
         title: '文件名匹配规则',
-        text: '选体系后，会按文件名自动匹配内置牌并保存为"覆盖版"（图片文件和整个文件夹都支持）：\n\n' +
-              '· 塔罗大阿卡那：愚者 / 魔术师 / 女祭司 ...（22 张），或数字 1~22\n' +
-              '· 塔罗小阿卡那：权杖Ace / 圣杯7 / 宝剑王后 / 星币国王 ...\n' +
-              '· 雷诺曼：骑士 / 四叶草 / 船 / 房子 ...（36 张），或数字 1~36\n\n' +
-              '文件名可含扩展名（.jpg/.png/.webp）、可含空格和下划线，例如：\n' +
-              '  愚者.png / 01.jpg / 权杖_Ace.jpeg / 骑士.webp\n\n' +
-              '文件夹模式：整个文件夹里的图片都会扫一遍，按各自文件名匹配；非图片文件自动跳过。\n\n' +
-              '匹配顺序：精确 name → 包含 name → 纯数字按序号。\n没匹配到的会单独告诉你。'
+        text: '按文件名自动对应牌（图片文件和整个文件夹都支持）：\n\n' +
+              '· 牌名：愚人.png、权杖王牌.jpg（含子串也行，如 塔罗牌-愚人.png）\n' +
+              '· 体系前缀：塔罗-愚人.png、雷诺曼-骑士.jpg、tarot-00-魔术师.png\n' +
+              '· 前缀序号：07-战车.png\n' +
+              '· 纯编号：塔罗 00–77、雷诺曼 1–36（同名跨体系按当前页签；' +
+              '塔罗编号从 0 起，如你的素材从 1 开始请打开「编号从 1 起」）\n\n' +
+              '文件名可含扩展名（.jpg/.png/.webp）、可含空格和下划线。\n' +
+              '匹配顺序：体系前缀 → 前缀序号（名字优先）→ 牌名 → 纯编号。\n' +
+              '未识别的文件会列出来，其余照常导入。'
       }) }
     ]);
   }
@@ -180,22 +187,23 @@ register({
     const nonImg = files.length - imgs.length;
     if (!imgs.length) { alertBox({ title: '没有图片', text: '所选内容里没有可用的图片文件。' }); return; }
     const deck = system === 'tarot' ? TAROT : LENORMAND;
-    const existingOverrides = new Map(customCards.filter((c) => c.override && c.system === system).map((c) => [c.id, c]));
     let ok = 0, skip = 0, dup = 0;
     const skipList = [];
 
     for (const f of imgs) {
-      const base = f.name.replace(/\.[^.]+$/, '').replace(/[_\-\s]+/g, '').trim();
-      const matched = matchBuiltinCard(base, system, deck);
-      if (!matched) { skip++; skipList.push(f.name); continue; }
-      // 防重复：同一文件命中同一 id 多次（理论上不会，但文件名包含就可能）
-      if (existingOverrides.has(matched.id)) { dup++; continue; }
+      // 只去扩展名，保留 - _ 空格等分隔符（前缀/序号规则靠它们切分，牌名匹配时再清）
+      const base = f.name.replace(/\.[^.]+$/, '').trim();
+      const hit = matchBuiltinCard(base, system, deck, numFromOne);
+      if (!hit) { skip++; skipList.push(f.name); continue; }
+      const matched = hit.card;
+      const effSys = hit.system;   // 体系前缀可改体系（如塔罗页签里导入 雷诺曼-骑士.jpg）
+      // 防重复：同体系同 id 已有覆盖 → 跳过
+      if (customCards.some((c) => c.override && c.system === effSys && c.id === matched.id)) { dup++; continue; }
 
       const { blob, w, h } = await compressImage(f, 720, 0.88);
       const imgId = await saveMedia(blob, { type: 'image', w, h, source: 'library', name: matched.name });
-      const patch = { ...matched, override: true, custom: true, imgId, system };
+      const patch = { ...matched, override: true, custom: true, imgId, system: effSys };
       customCards.push(patch);
-      existingOverrides.set(matched.id, patch);
       ok++;
     }
 
@@ -212,30 +220,51 @@ register({
   }
 });
 
-/** 按文件名匹配内置牌。匹配顺序：精确 name → 包含 → 数字序号 */
-function matchBuiltinCard(base, system, deck) {
+/** 按文件名匹配内置牌。返回 { card, system }（system 会被体系前缀覆盖），未识别返回 null。
+    匹配规则（按优先级）：
+      1. 体系前缀：塔罗-/雷诺曼-/tarot-/lenormand-（可覆盖当前页签的体系）
+      2. 前缀序号：07-战车.png → 先用名字「战车」匹配，名字没中才用序号 7
+      3. 牌名（含子串双向包含，同义词归一：王牌→Ace）：愚人.png / 塔罗牌-愚人.png / 权杖王牌.jpg
+      4. 纯编号：塔罗 00–77 = 数组索引（numFromOne 开启时 1–78 → 索引-1）；雷诺曼 1–36 → 索引-1
+      同名跨体系（塔/星星/月亮/太阳）按无前缀时传入的当前页签体系。 */
+export function matchBuiltinCard(rawBase, system, deck, numFromOne = false) {
+  if (!rawBase) return null;
+  let base = String(rawBase).trim();
+  let effSys = system;
+
+  // 1. 体系前缀（覆盖当前体系，deck 换成对应内置）
+  const pre = base.match(/^(塔罗|雷诺曼|tarot|lenormand)[-_–—:\s]*/i);
+  if (pre) {
+    effSys = /雷诺曼|lenormand/i.test(pre[1]) ? 'lenormand' : 'tarot';
+    base = base.slice(pre[0].length).trim();
+    deck = effSys === 'tarot' ? TAROT : LENORMAND;
+  }
+
+  // 2. 前缀序号：07-战车 / 00-魔术师（名字优先，序号兜底）
+  let prefixNum = null;
+  const pn = base.match(/^(\d{1,2})[-_–—:\s]+/);
+  if (pn) { prefixNum = Number(pn[1]); base = base.slice(pn[0].length).trim(); }
   if (!base) return null;
-  // 1. 精确 name
-  let m = deck.find((c) => c.name === base);
-  if (m) return m;
-  // 2. 包含 name（双向）
-  m = deck.find((c) => c.name.includes(base) || base.includes(c.name));
-  if (m) return m;
-  // 3. 纯数字 → 序号
-  const n = Number(base);
-  if (Number.isFinite(n) && n >= 1) {
-    if (system === 'tarot') {
-      // 塔罗大阿卡那编号 1~22（愚者=0 在最后一位，这里按 1~22 算 tarot-m{index}）
-      if (n <= 22) {
-        m = deck.find((c) => c.id === `tarot-m${n - 1}`);
-        if (m) return m;
-      }
-      // 塔罗小阿卡那 23~78 难直接用序号匹配，跳过
-    } else if (system === 'lenormand') {
-      if (n <= deck.length) {
-        m = deck.find((c) => c.id === `len-${n - 1}`);
-        if (m) return m;
-      }
+
+  // 3. 牌名：先清掉残留分隔符（塔罗牌-愚人 → 牌愚人），同义词归一（愚人→愚者、王牌→Ace）
+  //    后精确 → 双向包含（至少 2 字，避免单字乱配）
+  const norm = (s) => String(s || '').replace(/愚人/g, '愚者').replace(/王牌/g, 'Ace');
+  const nb = base.replace(/[-_–—:\s]+/g, '');
+  const nnb = norm(nb);
+  let m = deck.find((c) => c.name === nb || norm(c.name) === nnb)
+       || (nnb.length >= 2 && deck.find((c) => norm(c.name).includes(nnb) || nnb.includes(norm(c.name))));
+  if (m) return { card: m, system: effSys };
+
+  // 4. 序号：前缀序号，或纯数字文件名
+  const n = prefixNum !== null ? prefixNum : (/^\d+$/.test(nb) ? Number(nb) : null);
+  if (n !== null) {
+    if (effSys === 'tarot') {
+      // 塔罗编号从 0 起（00=愚者 … 77=星币国王），即数组索引；「从 1 起」时 1→0
+      const idx = numFromOne ? n - 1 : n;
+      if (idx >= 0 && idx < TAROT.length) return { card: TAROT[idx], system: 'tarot' };
+    } else if (n >= 1 && n <= LENORMAND.length) {
+      // 雷诺曼 1–36 → 索引-1
+      return { card: LENORMAND[n - 1], system: 'lenormand' };
     }
   }
   return null;
