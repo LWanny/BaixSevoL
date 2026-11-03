@@ -61,7 +61,7 @@ register({
   const view = document.getElementById('view');
   view.innerHTML = '';
   normalPage('decks', {
-    back: true, title: '牌面图鉴', sub: '塔罗 78 · 雷诺曼 36 · 可覆盖可批量导入',
+    back: true, title: '牌面图鉴', sub: '塔罗 · 雷诺曼 · 占星骰 · 我的牌组',
     actions: [
       { icon: 'IC-DIV-006', label: '牌背', onclick: () => backSheet() },
       { icon: 'IC-DIV-009', label: '批量导入', onclick: () => batchImportDialog() },
@@ -74,16 +74,27 @@ register({
   cardBacks = Object.assign({ tarot: null, lenormand: null }, await kvGet('divineCardBacks', {})) || cardBacks;
 
   let tab = 'tarot';
-  const tabRow = el('div', { class: 'row', style: { gap: '6px', padding: '8px 14px', position: 'sticky', top: '0', background: 'var(--bg)', zIndex: '3', borderBottom: '1px solid var(--line)' } });
+  let myDecks = await kvGet('divineDecks', []) || [];   // 自定义牌组（后续加的也进图鉴）
+  const tabRow = el('div', { class: 'row', style: { gap: '6px', padding: '8px 14px', position: 'sticky', top: '0', background: 'var(--bg)', zIndex: '3', borderBottom: '1px solid var(--line)', overflowX: 'auto' } });
   const list = el('div', { id: 'deck-grid', style: 'padding:10px 12px 30px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;' });
+
+  function tabDefs() {
+    return [
+      { key: 'tarot', label: '塔罗 78' },
+      { key: 'lenormand', label: '雷诺曼 36' },
+      { key: 'astro', label: '占星骰 36' },
+      ...myDecks.map((d) => ({ key: 'deck:' + d.id, label: d.name }))
+    ];
+  }
 
   function drawTab() {
     tabRow.innerHTML = '';
-    ['tarot', 'lenormand'].forEach((id) => {
-      const label = id === 'tarot' ? '塔罗 78' : '雷诺曼 36';
+    const defs = tabDefs();
+    if (!defs.some((t) => t.key === tab)) tab = 'tarot';   // 牌组被删后回退
+    defs.forEach(({ key, label }) => {
       const chip = el('div', {
-        class: 'chip' + (tab === id ? ' on' : ''), text: label,
-        onclick: () => { tab = id; drawTab(); paint(); }
+        class: 'chip' + (tab === key ? ' on' : ''), text: label,
+        onclick: () => { tab = key; drawTab(); paint(); }
       });
       tabRow.appendChild(chip);
     });
@@ -91,6 +102,8 @@ register({
 
   function paint() {
     list.innerHTML = '';
+    if (tab === 'astro') { paintAstro(); return; }
+    if (tab.startsWith('deck:')) { paintDeck(tab.slice(5)); return; }
     const deck = deckFor(tab);
     deck.forEach((c) => {
       const hasOverride = customCards.some((o) => o.id === c.id && o.override);
@@ -143,6 +156,131 @@ register({
           });
         }
       }, 200);
+    });
+  }
+
+  /* ---------- 占星骰页签：行星 / 星座 / 宫位 三组，点面编辑（存 customCards 覆盖） ---------- */
+  const ASTRO_GROUPS = [
+    ['行星', PLANETS, '🪐'],
+    ['星座', SIGNS, '♈'],
+    ['宫位', HOUSES, '🏠']
+  ];
+  function astroOverride(face) {
+    return customCards.find((o) => o.override && o.system === 'astro' && o.cardKey === face.id) || null;
+  }
+  function paintAstro() {
+    for (const [gname, arr, sym] of ASTRO_GROUPS) {
+      list.appendChild(el('div', { class: 'dk-group', text: `${gname} · ${arr.length}` }));
+      arr.forEach((face) => {
+        const ov = astroOverride(face);
+        const node = el('div', { class: 'dk-cell', onclick: () => astroForm(face) }, [
+          el('div', { class: 'dk-thumb dk-empty' }, [el('span', { class: 'dk-astro-sym', text: sym })]),
+          el('div', { class: 'dk-name', text: ov?.name || face.name }),
+          ov ? el('div', { class: 'dk-tag tag-ov', text: '已改' }) : null
+        ]);
+        list.appendChild(node);
+      });
+    }
+  }
+  function astroForm(face) {
+    const ov = astroOverride(face);
+    const name = el('input', { class: 'input', value: ov?.name || face.name, placeholder: face.name });
+    const meaning = el('input', { class: 'input', value: ov?.meaning || face.meaning, placeholder: face.meaning });
+    sheet({
+      title: '编辑骰面 · ' + (ov?.name || face.name),
+      node: el('div', {}, [
+        el('div', { class: 'field' }, [el('label', { text: '名称' }), name]),
+        el('div', { class: 'field' }, [el('label', { text: '释义' }), meaning]),
+        el('div', { class: 'small muted', text: '保存后占星骰投掷时用你改的版本。' })
+      ]),
+      actions: [{ label: '保存', icon: 'IC-MIO-003', onSelect: async () => {
+        const n = String(name.value || '').trim() || face.name;
+        const m = String(meaning.value || '').trim() || face.meaning;
+        const row = { id: 'astro:' + face.id, system: 'astro', cardKey: face.id, override: true, name: n, meaning: m, ts: Date.now() };
+        const idx = customCards.findIndex((o) => o.id === row.id);
+        if (idx >= 0) customCards[idx] = row; else customCards.push(row);
+        await kvSet('customCards', customCards);
+        paint();
+        toast('已保存 · 投掷时生效');
+      } }]
+    });
+  }
+
+  /* ---------- 自定义牌组页签：组内所有牌，点牌编辑（写回 divineDecks） ---------- */
+  function paintDeck(deckId) {
+    const deck = myDecks.find((d) => d.id === deckId);
+    if (!deck) { tab = 'tarot'; drawTab(); paint(); return; }
+    if (!deck.cards.length) { list.appendChild(el('div', { class: 'dk-group', text: '这个牌组还没有牌，去占卜选类页的「我的牌组」里加' })); return; }
+    list.appendChild(el('div', { class: 'dk-group', text: `${deck.name} · ${deck.cards.length} 张` }));
+    deck.cards.forEach((c) => {
+      const node = el('div', { class: 'dk-cell', onclick: () => deckCardForm(deck, c) }, [
+        c.imgId
+          ? el('div', { class: 'dk-thumb', style: { background: '#fff' } }, [imgEl(c.imgId, 'dk-img')])
+          : el('div', { class: 'dk-thumb dk-empty' }, [iconImg('IC-DIV-002')]),
+        el('div', { class: 'dk-name', text: c.name }),
+        el('div', { class: 'dk-tag tag-add', text: '我的牌组' })
+      ]);
+      list.appendChild(node);
+    });
+  }
+  async function deckCardForm(deck, card) {
+    const name = el('input', { class: 'input', value: card.name, placeholder: '牌名' });
+    const kw = el('input', { class: 'input', value: card.keyword || '', placeholder: '关键词' });
+    const up = el('input', { class: 'input', value: card.upright || '', placeholder: '正位释义' });
+    const rv = el('input', { class: 'input', value: card.reversed || '', placeholder: '逆位释义' });
+    let imgId = card.imgId || '';
+    const thumb = el('div', { class: 'cc-thumb' });
+    const drawThumb = () => { thumb.innerHTML = ''; thumb.appendChild(imgId ? imgEl(imgId, 'cc-img') : el('div', { class: 'cc-none', text: '未配图' })); };
+    drawThumb();
+    const pickImg = async () => {
+      const f = await openFile({ accept: 'image/*' });
+      if (!f) return;
+      const { blob, w, h } = await compressImage(f, 720, 0.88);
+      const old = imgId;
+      imgId = await saveMedia(blob, { type: 'image', w, h, source: 'library', name: name.value.trim() || '牌面' });
+      if (old && old !== imgId) await delMedia(old);
+      drawThumb(); toast('牌面图已换上');
+    };
+    const dropImg = () => { if (!imgId) return; const old = imgId; imgId = ''; drawThumb(); delMedia(old); };
+
+    sheet({
+      title: '编辑牌面 · ' + card.name,
+      node: el('div', {}, [
+        el('div', { class: 'field' }, [
+          el('label', { text: '牌面图' }),
+          el('div', { class: 'cc-pick' }, [
+            el('div', { class: 'cc-thumb-btn', onclick: pickImg }, [thumb]),
+            el('div', { class: 'cc-pick-hint' }, [
+              el('div', { class: 'small', text: '点左侧方框选一张图' }),
+              el('div', { class: 'row', style: { gap: '8px', marginTop: '8px' } }, [
+                el('button', { class: 'btn sm', onclick: pickImg }, [iconImg('IC-MIO-020'), '选图']),
+                el('button', { class: 'btn sm', onclick: dropImg }, [iconImg('IC-MIO-002'), '去掉'])
+              ])
+            ])
+          ])
+        ]),
+        el('div', { class: 'field' }, [el('label', { text: '名称' }), name]),
+        el('div', { class: 'field' }, [el('label', { text: '关键词' }), kw]),
+        el('div', { class: 'field' }, [el('label', { text: '正位释义' }), up]),
+        el('div', { class: 'field' }, [el('label', { text: '逆位释义' }), rv])
+      ]),
+      actions: [{ label: '保存', icon: 'IC-MIO-003', onSelect: async () => {
+        const n = String(name.value || '').trim();
+        if (!n) return toast('请填写名称');
+        const decks = await kvGet('divineDecks', []) || [];
+        const dd = decks.find((d) => d.id === deck.id);
+        const cc = dd?.cards.find((x) => x.id === card.id);
+        if (!dd || !cc) return toast('牌组已变化，请重进');
+        cc.name = n;
+        cc.keyword = String(kw.value || '').trim();
+        cc.upright = String(up.value || '').trim();
+        cc.reversed = String(rv.value || '').trim();
+        if (imgId !== (card.imgId || '')) cc.imgId = imgId || null;
+        await kvSet('divineDecks', decks);
+        myDecks = decks;
+        drawTab(); paint();
+        toast('已保存');
+      } }]
     });
   }
 
@@ -310,7 +448,12 @@ function stripPrefix(text) { return String(text || '').replace(/^(正位|逆位)
 
 function buildDraws() {
   if (sess.system === 'astro') {
-    const p = pick(PLANETS), s = pick(SIGNS), h = pick(HOUSES);
+    // 图鉴里改过的骰面（customCards 覆盖）在此生效
+    const cov = (face) => {
+      const ov = customCards.find((k) => k.override && k.system === 'astro' && k.cardKey === face.id);
+      return ov ? { ...face, name: ov.name || face.name, meaning: ov.meaning || face.meaning } : face;
+    };
+    const p = cov(pick(PLANETS)), s = cov(pick(SIGNS)), h = cov(pick(HOUSES));
     sess.draws = [
       { pos: '行星', name: p.name, meaning: p.meaning },
       { pos: '星座', name: s.name, meaning: s.meaning },
