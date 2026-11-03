@@ -5,7 +5,7 @@ import { el, uid, compressImage, openFile, fmtDay, readBuf, chance, rndInt, down
 import { iconImg } from '../icons.js';
 import { setUnread } from '../shell.js';
 import { go } from '../router.js';
-import { state, roleAvatarSrc, pickRoleStatus, roleStatusMeta } from '../state.js';
+import { state, roleAvatarSrc, pickRoleStatus, roleStatusMeta, applySkin, saveSkin, saveRole } from '../state.js';
 import { all, put, get, bulkPut, kvGet, kvSet } from '../store.js';
 import { mediaURL, saveMedia, audioEl, probeDuration, delMedia } from '../media.js';
 import { sheet, actionSheet, confirmBox, toast, alertBox } from '../ui.js';
@@ -126,7 +126,7 @@ export default async function pageChat(view) {
   view.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow:hidden';
 
   /* ---------------- 顶栏 ---------------- */
-  const avSrc = await roleAvatarSrc();
+  let avSrc = await roleAvatarSrc();
   let defaultMyAvSrc = state.skin.avatarMeId ? await mediaURL(state.skin.avatarMeId) : '';
   let myAvSrc = state.role.chatAvatarMeId ? await mediaURL(state.role.chatAvatarMeId) : defaultMyAvSrc;
   const avatar = el('div', { class: 'avatar' }, [
@@ -1104,8 +1104,185 @@ export default async function pageChat(view) {
   }
 
   /* ---------------- 更多菜单 ---------------- */
+  /* ---------- 聊天装扮：就地改背景 / 头像 / 气泡，不用跳去装扮页 ---------- */
+  async function openDressSheet() {
+    const s = state.skin;
+
+    /* 改完任何一项：刷 CSS 变量 + 重读头像 + 重绘消息区（即时生效） */
+    const refresh = async () => {
+      await applySkin();
+      avSrc = await roleAvatarSrc();
+      defaultMyAvSrc = s.avatarMeId ? await mediaURL(s.avatarMeId) : '';
+      myAvSrc = state.role.chatAvatarMeId ? await mediaURL(state.role.chatAvatarMeId) : defaultMyAvSrc;
+      avatar.innerHTML = '';
+      if (avSrc) avatar.appendChild(el('img', { src: avSrc }));
+      else avatar.appendChild(document.createTextNode((state.role.name || 'TA').slice(0, 1)));
+      rerenderAll();
+    };
+
+    /* 头像：TA = role.avatarId，我 = skin.avatarMeId */
+    const pickAvatar = async (who) => {
+      const f = await openFile({ accept: 'image/*' });
+      if (!f) return;
+      const { blob, w, h } = await compressImage(f, 480, 0.88);
+      if (who === 'ta') {
+        const old = state.role.avatarId;
+        state.role.avatarId = await saveMedia(blob, { type: 'image', w, h, source: 'avatar', name: 'TA头像' });
+        await saveRole();
+        if (old && old !== state.role.avatarId) delMedia(old);
+      } else {
+        const old = s.avatarMeId;
+        s.avatarMeId = await saveMedia(blob, { type: 'image', w, h, source: 'avatar', name: '我的头像' });
+        await saveSkin();
+        if (old && old !== s.avatarMeId) delMedia(old);
+      }
+      await refresh(); toast('头像已换');
+    };
+    const resetAvatar = async (who) => {
+      if (who === 'ta') { state.role.avatarId = null; await saveRole(); }
+      else { if (s.avatarMeId) delMedia(s.avatarMeId); s.avatarMeId = null; await saveSkin(); }
+      await refresh(); toast('已还原默认头像');
+    };
+
+    /* 聊天背景（chatWallpaperId） */
+    const pickWall = async () => {
+      const f = await openFile({ accept: 'image/*' });
+      if (!f) return;
+      const { blob, w, h } = await compressImage(f, 1080, 0.86);
+      const old = s.chatWallpaperId;
+      s.chatWallpaperId = await saveMedia(blob, { type: 'image', w, h, source: 'wallpaper', name: '聊天背景' });
+      await saveSkin();
+      if (old && old !== s.chatWallpaperId) delMedia(old);
+      await refresh(); toast('背景已换上');
+    };
+    const clearWall = async () => {
+      if (!s.chatWallpaperId) { toast('当前就是默认背景'); return; }
+      const old = s.chatWallpaperId;
+      s.chatWallpaperId = null; await saveSkin(); delMedia(old);
+      await refresh(); toast('已恢复默认背景');
+    };
+
+    /* 色板 chip 行（点一下即存即生效并重画高亮） */
+    const chipRow = (colors, getVal, setVal) => {
+      const row = el('div', { class: 'row', style: { gap: '8px', flexWrap: 'wrap' } });
+      const paintRow = () => {
+        row.innerHTML = '';
+        colors.forEach((c) => {
+          row.appendChild(el('div', {
+            class: 'chip' + (getVal() === c.v ? ' on' : ''),
+            style: { background: c.bg || c.v, width: '32px', height: '24px', border: c.border ? '1px solid #d0d0cc' : 'none' },
+            title: c.label,
+            onclick: async () => { setVal(c.v); await saveSkin(); await refresh(); paintRow(); }
+          }));
+        });
+      };
+      paintRow();
+      return row;
+    };
+    const section = (title, ...nodes) => el('div', { class: 'field', style: { marginBottom: '14px' } }, [
+      el('label', { text: title }), ...nodes
+    ]);
+
+    const ME_COLORS = [
+      { v: 'linear-gradient(135deg,#1c1e22,#3c4048)', label: '默认深灰' },
+      { v: '#16181c', label: '纯黑', border: true },
+      { v: '#1f6feb', label: '蓝' },
+      { v: '#7c3aed', label: '紫' },
+      { v: '#db2777', label: '玫红' },
+      { v: '#059669', label: '绿' }
+    ];
+    const TA_COLORS = [
+      { v: '#ffffff', label: '白', border: true },
+      { v: '#fff7e6', label: '米黄', border: true },
+      { v: '#e8f4ff', label: '浅蓝', border: true },
+      { v: '#ffeef5', label: '浅粉', border: true },
+      { v: '#f3ecff', label: '浅紫', border: true },
+      { v: '#16181c', label: '纯黑' }
+    ];
+    const RADIUSES = [{ v: 8, label: '小' }, { v: 15, label: '中' }, { v: 24, label: '大' }, { v: 30, label: '圆润' }];
+    const SHAPES = [{ v: 'circle', label: '圆形' }, { v: 'rounded', label: '圆角方' }];
+
+    const wallUrl = s.chatWallpaperId ? await mediaURL(s.chatWallpaperId) : '';
+    const taAvUrl = state.role.avatarId ? await mediaURL(state.role.avatarId) : '';
+    const myAvUrl = s.avatarMeId ? await mediaURL(s.avatarMeId) : '';
+
+    const avPreview = (url, fallback) => el('div', {
+      style: {
+        width: '44px', height: '44px', borderRadius: 'var(--avatar-radius)', flex: 'none',
+        background: '#f0efea', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        overflow: 'hidden', fontSize: '17px', color: 'var(--txt-mute)'
+      }
+    }, [url ? el('img', { src: url, style: { width: '100%', height: '100%', objectFit: 'cover' } }) : fallback]);
+    const avLine = (label, url, fallback, pick, reset) => el('div', {
+      class: 'row', style: { gap: '10px', alignItems: 'center', marginBottom: '8px' }
+    }, [
+      avPreview(url, fallback),
+      el('div', { style: { flex: '1', minWidth: '0' } }, [
+        el('div', { class: 'small', text: label }),
+        el('div', { class: 'small muted', text: url ? '已设置 · 点替换' : '默认文字头像' })
+      ]),
+      el('button', { class: 'btn sm', onclick: pick }, ['选图']),
+      url ? el('button', { class: 'btn sm', onclick: reset }, ['还原']) : null
+    ]);
+
+    sheet({
+      title: '聊天装扮',
+      node: el('div', {}, [
+        section('聊天背景',
+          el('div', { class: 'row', style: { gap: '10px', alignItems: 'center' } }, [
+            el('div', {
+              style: {
+                width: '64px', height: '44px', borderRadius: '8px', flex: 'none', border: '1px solid var(--line)',
+                background: wallUrl ? `url("${wallUrl}") center/cover` : 'var(--bg-soft)'
+              }
+            }),
+            el('div', { style: { flex: '1', minWidth: '0' } }, [
+              el('div', { class: 'small', text: wallUrl ? '自定义背景' : '默认背景' }),
+              el('div', { class: 'small muted', text: '铺在消息区后面' })
+            ]),
+            el('button', { class: 'btn sm', onclick: pickWall }, ['选图']),
+            wallUrl ? el('button', { class: 'btn sm', onclick: clearWall }, ['清除']) : null
+          ])),
+
+        section('头像',
+          avLine('TA 的头像', taAvUrl, (state.role.name || 'TA').slice(0, 1), () => pickAvatar('ta'), () => resetAvatar('ta')),
+          avLine('我的头像', myAvUrl, (state.role.chatNicknameMe || '我').slice(0, 1), () => pickAvatar('me'), () => resetAvatar('me')),
+          el('div', { class: 'row', style: { gap: '8px', alignItems: 'center' } }, [
+            el('span', { class: 'small muted', style: { flex: 'none' }, text: '形状' }),
+            chipRow(SHAPES, () => s.avatarShape, (v) => { s.avatarShape = v; })
+          ])),
+
+        section('气泡 · 我方',
+          chipRow(ME_COLORS, () => s.bubbleMe, (v) => { s.bubbleMe = v; }),
+          el('div', { class: 'row', style: { gap: '8px', alignItems: 'center', marginTop: '8px' } }, [
+            el('span', { class: 'small muted', style: { flex: 'none' }, text: '文字' }),
+            chipRow([{ v: '#ffffff', label: '白', border: true }, { v: '#16181c', label: '黑' }],
+              () => s.bubbleMeTxt, (v) => { s.bubbleMeTxt = v; })
+          ])),
+
+        section('气泡 · TA方',
+          chipRow(TA_COLORS, () => s.bubbleTa, (v) => { s.bubbleTa = v; }),
+          el('div', { class: 'row', style: { gap: '8px', alignItems: 'center', marginTop: '8px' } }, [
+            el('span', { class: 'small muted', style: { flex: 'none' }, text: '文字' }),
+            chipRow([{ v: '#16181c', label: '黑' }, { v: '#ffffff', label: '白', border: true }],
+              () => s.bubbleTaTxt, (v) => { s.bubbleTaTxt = v; })
+          ])),
+
+        section('气泡圆角',
+          chipRow(RADIUSES, () => s.bubbleRadius, (v) => { s.bubbleRadius = v; })),
+
+        el('div', { class: 'small muted', text: '背景位置缩放、气泡自定义 CSS 等更多项在「装扮与主题」里。' })
+      ]),
+      actions: [{
+        label: '更多装扮项（完整装扮页）', icon: 'IC-MIO-013',
+        onSelect: () => go('/skin')
+      }]
+    });
+  }
+
   function moreMenu() {
     actionSheet('更多', [
+      { label: '聊天装扮', icon: 'IC-MIO-013', onSelect: openDressSheet },
       { label: '让他截图发朋友圈', icon: 'IC-MOM-001', onSelect: taShotMoments },
       { label: '我的表情库', icon: 'IC-CHT-008', onSelect: openStickerPicker },
       { label: '让 TA 随机发一张字卡', icon: 'IC-CRD-002', onSelect: forceRandomCard },
