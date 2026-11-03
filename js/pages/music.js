@@ -21,6 +21,16 @@ import {
 
 let view = null;
 let songs = [];
+/* 歌词页状态：面板开着时随播放进度逐行高亮 */
+let lyricBox = null;        // 歌词滚动容器
+let lyricEls = [];          // 行节点
+let lyricLines = [];        // [{t, text}]
+let lyricIdx = -2;
+let lyricSong = null;       // 面板当前显示的歌曲
+let lyricCover = null;      // 面板封面节点
+let lyricTitle = null;      // 面板标题节点
+let lyricArtist = null;     // 面板歌手节点
+let lyricFollow = false;    // 面板是否跟随播放进度
 let playlists = [];
 let cards = [];
 let tab = 'me';              // me | ta
@@ -40,12 +50,15 @@ export default async function pageMusic(v) {
   view = v;
   fullPage({
     back: true, title: '音乐', sub: '网易云 · 本地音频 · 一起听',
-    actions: [{ label: '添加音乐', onclick: addMenu }]
+    actions: [
+      { label: '歌词', onclick: () => openLyrics() },
+      { label: '添加音乐', onclick: addMenu }
+    ]
   });
 
   audio = new Audio();
   audio.preload = 'metadata';
-  audio.addEventListener('timeupdate', paintProgress);
+  audio.addEventListener('timeupdate', () => { paintProgress(); syncLyric(); });
   audio.addEventListener('ended', () => next());
   audio.addEventListener('play', paintControls);
   audio.addEventListener('pause', paintControls);
@@ -321,9 +334,10 @@ function startTogetherLoop() {
 
 /* ---------------- 播放器 ---------------- */
 function playerBar() {
+  const openLyric = { onclick: () => openLyrics(), style: { cursor: 'pointer' } };
   return el('div', { class: 'music-player' }, [
-    el('div', { class: 'mp-cover' }, [iconImg('IC-MIO-016')]),
-    el('div', { class: 'mp-main' }, [
+    el('div', { class: 'mp-cover', ...openLyric }, [iconImg('IC-MIO-016')]),
+    el('div', { class: 'mp-main', ...openLyric }, [
       el('div', { class: 'mp-t', text: cur.title || '未命名' }),
       el('div', { class: 'mp-s' }, [
         el('span', { class: 'mp-time', id: 'mp-cur', text: '00:00' }),
@@ -406,6 +420,160 @@ function paintProgress() {
   fill.style.width = dur ? Math.min(100, (pos / dur) * 100) + '%' : '0%';
   if (t) t.textContent = fmtSec(pos);
   if (d) d.textContent = fmtSec(dur);
+}
+
+/* ============================================================
+   歌词页：解析（LRC / 纯文本）· 打开 · 逐行高亮 · 编辑
+   ============================================================ */
+function parseLyric(text) {
+  const out = [];
+  for (const raw of String(text || '').split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = line.match(/^\[(\d{1,2}):(\d{1,2})(?:[.:](\d{1,3}))?\]\s*(.*)$/);
+    if (m) {
+      const frac = m[3] ? Number('0.' + m[3]) : 0;
+      out.push({ t: Number(m[1]) * 60 + Number(m[2]) + frac, text: (m[4] || '').trim() || line });
+    } else {
+      out.push({ t: null, text: line });
+    }
+  }
+  if (!out.length) return out;
+  const hasStamp = out.some((l) => l.t !== null);
+  if (!hasStamp) {
+    /* 纯文本：按歌曲时长均分（没有时长则不随进度高亮） */
+    const dur = audio?.duration || 0;
+    out.forEach((l, i) => { l.t = dur ? (i / out.length) * dur : null; });
+  } else {
+    /* 混合：没有时间戳的行跟随前一行 */
+    let last = 0;
+    out.forEach((l) => { if (l.t === null) l.t = last; else last = l.t; });
+  }
+  return out;
+}
+
+/* 打开歌词面板（s 默认当前播放；rowMenu 里可指定某首歌） */
+function openLyrics(s) {
+  const song = s || cur;
+  if (!song) { toast('先放一首歌'); return; }
+  const box = el('div', { class: 'ml-box', id: 'ml-box' });
+  lyricBox = box;
+  lyricCover = el('div', { class: 'ml-cover' });
+  lyricTitle = el('div', { class: 'ml-title' });
+  lyricArtist = el('div', { class: 'ml-artist' });
+  lyricSong = song;
+  lyricFollow = song === cur;      // 打开的正是当前播放的歌才跟着进度走
+  lyricHeader(song);
+  rebuildLyric();
+
+  sheet({
+    title: '歌词',
+    node: el('div', { class: 'ml-wrap' }, [lyricCover, lyricTitle, lyricArtist, box]),
+    actions: [
+      { label: '编辑歌词', icon: 'IC-CRD-006', sub: '支持 LRC [00:12.34] 或每行一句', onSelect: () => editLyricSheet(lyricSong || song) },
+      { label: '关闭', icon: 'IC-CHT-005', onSelect: () => {} }
+    ],
+    onClose: () => {
+      lyricBox = null; lyricEls = []; lyricIdx = -2;
+      lyricSong = null; lyricCover = null; lyricTitle = null; lyricArtist = null;
+      lyricFollow = false;
+    }
+  });
+}
+
+/* 面板头部：封面 / 标题 / 歌手（面板开着切歌时跟着换） */
+function lyricHeader(song) {
+  if (lyricTitle) lyricTitle.textContent = song.title || '未命名';
+  if (lyricArtist) lyricArtist.textContent = song.artist || '未知歌手';
+  const cov = lyricCover;
+  if (!cov) return;
+  cov.innerHTML = '';
+  cov.appendChild(iconImg('IC-MIO-016'));   // 图没来之前先占位
+  if (!song.mediaId) return;
+  const img = el('img', { alt: '' });
+  mediaURL(song.mediaId).then((u) => { if (u && cov.isConnected) { img.src = u; cov.replaceChildren(img); } });
+}
+
+/* 重建歌词行（没有歌词给空态） */
+function rebuildLyric() {
+  const box = lyricBox;
+  if (!box) return;
+  lyricLines = parseLyric((lyricSong && lyricSong.lyric) || '');
+  lyricIdx = -2;
+  box.innerHTML = '';
+  lyricEls = [];
+  if (!lyricLines.length) {
+    box.appendChild(el('div', { class: 'ml-empty' }, [
+      el('div', { text: '还没有歌词' }),
+      el('div', { class: 'small muted', style: { marginTop: '6px' }, text: '点下面「编辑歌词」粘贴 LRC 或每行一句' })
+    ]));
+  } else {
+    lyricLines.forEach((l) => {
+      const n = el('div', { class: 'ml-line', text: l.text });
+      box.appendChild(n);
+      lyricEls.push(n);
+    });
+  }
+  syncLyric(true);
+}
+
+/* 播放进度 → 高亮当前行并滚动到中间（面板开着才跑） */
+function syncLyric(force = false) {
+  if (!lyricBox || !lyricBox.isConnected) return;
+  /* 面板开着时切了歌 → 换绑新歌的歌词与头部 */
+  if (cur && lyricSong && lyricSong.id !== cur.id) {
+    if (!lyricFollow) return;        // 面板看的是另一首歌，不跟着播
+    lyricSong = cur;
+    lyricHeader(cur);
+    rebuildLyric();
+    return;
+  }
+  if (cur && lyricSong) lyricFollow = true;   // 面板的歌正好在播 → 开始跟随
+  if (!lyricFollow || !lyricLines.length) return;
+  const t = audio?.currentTime || 0;
+  let idx = -1;
+  for (let i = 0; i < lyricLines.length; i++) {
+    if (lyricLines[i].t !== null && lyricLines[i].t <= t + 0.08) idx = i;
+  }
+  if (!force && idx === lyricIdx) return;
+  lyricIdx = idx;
+  lyricEls.forEach((n, i) => n.classList.toggle('on', i === idx));
+  const line = lyricEls[idx];
+  if (line && lyricBox) {
+    const top = Math.max(0, line.offsetTop - lyricBox.clientHeight / 2 + line.clientHeight / 2);
+    if (typeof lyricBox.scrollTo === 'function') lyricBox.scrollTo({ top, behavior: force ? 'auto' : 'smooth' });
+    else lyricBox.scrollTop = top;
+  }
+}
+
+/* 编辑歌词：LRC 或纯文本 → 存回歌曲 */
+function editLyricSheet(song) {
+  const ta = el('textarea', {
+    class: 'input', style: 'min-height:170px;white-space:pre;font-family:monospace;font-size:12.5px',
+    placeholder: '[00:12.34]第一句\n[00:16.00]第二句\n\n或者每行一句（无时间戳）'
+  });
+  ta.value = song.lyric || '';
+  sheet({
+    title: '编辑歌词 · ' + (song.title || ''),
+    node: el('div', {}, [
+      el('div', { class: 'hint', text: '支持 LRC 时间戳；纯文本会按歌曲时长自动均分滚动。' }),
+      el('div', { class: 'field' }, [ta])
+    ]),
+    actions: [
+      {
+        label: '保存', icon: 'IC-MIO-021', onSelect: async () => {
+          const v = ta.value.trim();
+          await put('songs', { ...song, lyric: v });
+          const i = songs.findIndex((x) => x.id === song.id);
+          if (i >= 0) songs[i] = { ...songs[i], lyric: v };
+          Object.assign(song, { lyric: v });
+          toast('歌词已保存');
+          /* 编辑面板是从歌词页里开的（会先关歌词页）→ 保存后自动重开 */
+          setTimeout(() => openLyrics(song), 300);
+        }
+      }
+    ]
+  });
 }
 
 /* ============================================================
@@ -719,6 +887,7 @@ async function pickPlaylistFor(song) {
 /* ---------------- 歌曲菜单 ---------------- */
 function rowMenu(s) {
   const items = [{ label: '播放', icon: 'IC-MIO-029', onSelect: () => play(s) }];
+  items.push({ label: '编辑歌词', icon: 'IC-CRD-006', sub: s.lyric ? '已有歌词，点击修改' : '还没有歌词', onSelect: () => openLyrics(s) });
   items.push({ label: '放进歌单', icon: 'IC-MIO-022', onSelect: () => pickPlaylistFor(s) });
 
   if ((s.addedBy || 'me') === 'me') {

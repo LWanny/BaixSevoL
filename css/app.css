@@ -2538,6 +2538,30 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 }
 /* 详情主视觉（内嵌图片/emoji 尺寸） */
 .sh-detail-visual{width:120px;height:120px;border-radius:20px;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:62px}
+/* 音乐 · 歌词页 */
+.ml-wrap{display:flex;flex-direction:column;align-items:center;gap:4px;padding-bottom:2px}
+.ml-cover{
+  width:96px;height:96px;border-radius:18px;overflow:hidden;
+  background:linear-gradient(145deg,#ede9fe,#ddd6fe);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 8px 24px rgba(0,0,0,.14);margin-bottom:4px;
+}
+.ml-cover img{width:100%;height:100%;object-fit:cover;display:block}
+.ml-title{font-size:16px;font-weight:700}
+.ml-artist{font-size:12.5px;color:var(--txt-dim);margin-bottom:4px}
+.ml-box{
+  width:100%;height:min(44vh,320px);overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:10px 6px 44px;scroll-behavior:smooth;
+  mask-image:linear-gradient(transparent,#000 8%,#000 92%,transparent);
+  -webkit-mask-image:linear-gradient(transparent,#000 8%,#000 92%,transparent);
+}
+.ml-line{
+  padding:9px 8px;font-size:14px;color:var(--txt-dim);text-align:center;
+  line-height:1.6;border-radius:10px;
+  transition:color .25s,font-size .25s,transform .25s;
+}
+.ml-line.on{color:var(--accent);font-size:16.5px;font-weight:800;transform:scale(1.02)}
+.ml-empty{text-align:center;padding:44px 0;color:var(--txt-dim);font-size:14px}
 .sh-order{margin-bottom:10px}
 .sh-order-top{display:flex;align-items:center;gap:11px}
 .sh-order-emoji{
