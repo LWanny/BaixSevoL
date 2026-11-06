@@ -3,7 +3,7 @@
    策略：本站资源走 stale-while-revalidate（先用缓存、后台更新）；导航请求优先网络，失败回落缓存。
    说明：本 SW 只缓存静态外壳，不接触 IndexedDB 里的聊天、字卡与媒体数据。 */
 
-const VERSION = 'zkcx-v67';
+const VERSION = 'zkcx-v68';
 const CORE = [
   './',
   './index.html',
@@ -42,17 +42,17 @@ self.addEventListener('fetch', (e) => {
 
   if (req.mode === 'navigate') {
     e.respondWith(
-      fetch(req)
+      fetch(req, { cache: 'no-cache' })   // 每次都向服务器确认，部署完立刻拿到新版外壳
         .then((res) => { cachePut(req, res.clone()); return res; })
         .catch(() => caches.match(req).then((r) => r || caches.match('./index.html')))
     );
     return;
   }
 
-  // 代码类资源：网络优先，确保每次刷新都拿到最新
+  // 代码类资源：绕过浏览器 HTTP 缓存（GitHub Pages max-age=600 会让旧 js 残留 10 分钟），网络优先，失败回落缓存
   if (isCode(url)) {
     e.respondWith(
-      fetch(req)
+      fetch(req, { cache: 'no-cache' })
         .then((res) => { cachePut(req, res.clone()); return res; })
         .catch(() => caches.match(req))
     );
