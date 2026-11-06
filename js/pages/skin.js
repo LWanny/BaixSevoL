@@ -24,7 +24,7 @@ function build(view) {
   const s = state.skin;
 
   /* ---- 整体背景 ---- */
-  wrap.appendChild(section('整体背景', el('div', { class: 'card' }, [
+  const globalCard = el('div', { class: 'card' }, [
     el('div', { class: 'field' }, [
       el('label', { text: '背景颜色' }),
       el('div', { class: 'row wrap', style: { gap: '8px', marginBottom: '8px' } }, BG_PRESETS.map((c) =>
@@ -35,11 +35,31 @@ function build(view) {
     ]),
     imagePicker('全局背景图', '全局背景图片会铺满整个应用。', s.globalBgImageId, async (id) => { s.globalBgImageId = id; await saveSkin(); await applySkin(); }, 'bg'),
     bgAdjust('globalBgX', 'globalBgY', 'globalBgZoom', s.globalBgImageId, 'globalBgImgOp')
-  ])));
+  ]);
+  /* 提示 + 一键恢复：哪些页面没在跟随全局 */
+  const nOwn = Object.keys(s.pageBgs || {}).filter((k) => s.pageBgs[k]).length;
+  const nOwnImg = Object.keys(s.pageBgs || {}).filter((k) => s.pageBgs[k] && s.pageBgs[k].imgId).length;
+  if (nOwn) {
+    globalCard.appendChild(el('div', { class: 'hint', style: { marginTop: '10px' } }, [
+      nOwnImg
+        ? `有 ${nOwn} 个页面单独设置了背景（其中 ${nOwnImg} 个选了自己的图，换全局图不影响它们）；其余页面都跟着这里走。`
+        : `有 ${nOwn} 个页面单独设置了背景颜色，但都没选自己的图，换全局图它们也会跟着变。`
+    ]));
+    if (nOwnImg) {
+      globalCard.appendChild(el('button', { class: 'btn sm', style: { marginTop: '8px' }, onclick: async () => {
+        const yes = await confirmBox({ title: '全部恢复跟随全局', text: `清除 ${nOwn} 个页面的单独背景设置，所有软件都跟着「整体背景」走。`, okText: '恢复跟随' });
+        if (!yes) return;
+        s.pageBgs = {};
+        await saveSkin(); await applySkin(); renderCurrent();
+        toast('所有页面已恢复跟随全局');
+      } }, ['全部恢复跟随全局']));
+    }
+  }
+  wrap.appendChild(section('整体背景', globalCard));
 
   /* ---- 页面背景：每个软件单独设置，没设置的跟随全局 ---- */
   wrap.appendChild(section('页面背景', el('div', { class: 'card' }, [
-    el('div', { class: 'small muted', style: { margin: '0 0 8px' }, text: '给某个软件单独设背景图 / 颜色 / 透明度；带色的表示已单独设置，没设置的跟着上面「整体背景」走。' }),
+    el('div', { class: 'small muted', style: { margin: '0 0 8px' }, text: '给某个软件单独设背景图 / 颜色 / 透明度；带色的表示已单独设置，没设置的跟着上面「整体背景」走。不给某页选图时，该页也仍显示全局背景图。' }),
     el('div', { class: 'row wrap', style: { gap: '6px' } }, PAGE_BG_LIST.map(([p, label]) =>
       el('span', {
         class: 'chip' + ((s.pageBgs && s.pageBgs[p]) ? ' on' : ''),
@@ -272,7 +292,7 @@ function openPageBg(path, label) {
     toast('已移除图片');
   } }, ['移除图片']);
   imgBox.appendChild(el('div', { class: 'row', style: { gap: '8px' } }, [pickBtn, rmBtn]));
-  imgBox.appendChild(el('div', { class: 'hint', text: '不选图就只用下面的颜色。「移除图片」只是解除本页绑定，不会删掉共用的图片。' }));
+  imgBox.appendChild(el('div', { class: 'hint', text: '不选图时，本页仍显示「整体背景」的全局图，只用下面的颜色打底。「移除图片」只是解除本页绑定，不会删掉共用的图片。' }));
 
   const paint = () => {
     preview.innerHTML = '';

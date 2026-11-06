@@ -402,11 +402,16 @@ export function pageBgFor(path) {
       x: num(s.globalBgX, 50), y: num(s.globalBgY, 50)
     };
   }
+  /* 页面单独设置里没选图片 → 图片仍跟着全局图走（只用本页颜色打底），
+     这样在「整体背景」换图后，没单独设图的页面也会跟着换 */
+  const own = !!p.imgId;
   return {
-    imgId: p.imgId || null,
+    imgId: own ? p.imgId : (s.globalBgImageId || null),
     color: p.color || s.globalBgColor || '#f7f7f6',
-    op: num(p.op, 100), zoom: num(p.zoom, 100),
-    x: num(p.x, 50), y: num(p.y, 50)
+    op: num(own ? p.op : s.globalBgImgOp, 100),
+    zoom: num(own ? p.zoom : s.globalBgZoom, 100),
+    x: num(own ? p.x : s.globalBgX, 50),
+    y: num(own ? p.y : s.globalBgY, 50)
   };
 }
 
