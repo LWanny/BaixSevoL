@@ -14,16 +14,21 @@ import { TA_FAV_CATS, taFavCat } from '../tafav.js';
 
 let view = null;
 let rows = [];
-let owner = 'ta';        // ta | me
+let owner = 'ta';        // ta | me（由路由参数决定，两个软件各看各的）
+let cat = 'all';         // 他的收藏里的板块：all | liked | upset | wanted | told
 let openId = null;       // 当前展开的收藏
 
 const stamp = (r) => r.updatedAt || r.ts || 0;
 
 export default async function pageFavorites(v, params = {}) {
   view = v;
-  if (params.owner === 'me' || params.owner === 'ta') owner = params.owner;
+  // 「收藏」软件只放我的；只有 ?owner=ta 才打开他的收藏
+  owner = params.owner === 'ta' ? 'ta' : 'me';
+  cat = 'all';
   fullPage({
-    back: true, title: '收藏', sub: '他的收藏 · 我的收藏',
+    back: true,
+    title: owner === 'ta' ? '他的收藏' : '我的收藏',
+    sub: owner === 'ta' ? '只有他的 · 点板块切换' : '只有我的 · 他的东西不在这里',
     actions: [{ label: '新增收藏', onclick: () => openEditor(null) }]
   });
   await load();
@@ -68,17 +73,15 @@ async function paint() {
     ])
   ]));
 
-  /* 归属切换 */
-  page.appendChild(el('div', { class: 'fav-tabs' }, [
-    tabBtn('ta', '他的收藏', taRows.length),
-    tabBtn('me', '我的收藏', meRows.length)
-  ]));
-
+  /* 归属切换：两个软件彻底分开，这里不再切 */
   if (owner === 'ta') {
-    page.appendChild(el('div', { class: 'hint', style: { textAlign: 'center', marginBottom: '12px' }, text: '他偶尔会收下你说的话，但不会在聊天里提醒你' }));
-    TA_FAV_CATS.forEach((cat) => {
-      const items = list.filter((r) => taFavCat(r.category).key === cat.key);
-      page.appendChild(catSection(cat, items));
+    page.appendChild(el('div', { class: 'hint', style: { textAlign: 'center', margin: '10px 0 0' }, text: '他偶尔会收下你说的话，但不会在聊天里提醒你' }));
+    /* 板块：点一下只看那一类 */
+    page.appendChild(boards(list));
+    const cats = cat === 'all' ? TA_FAV_CATS : TA_FAV_CATS.filter((c) => c.key === cat);
+    cats.forEach((c) => {
+      const items = list.filter((r) => taFavCat(r.category).key === c.key);
+      page.appendChild(catSection(c, items));
     });
   } else if (!list.length) {
     page.appendChild(el('div', { class: 'empty' }, [
@@ -94,11 +97,17 @@ async function paint() {
   view.appendChild(page);
 }
 
-function tabBtn(key, label, n) {
-  return el('button', {
-    class: 'fav-tab' + (owner === key ? ' on' : ''), type: 'button',
-    onclick: () => { owner = key; openId = null; paint(); }
-  }, [label, el('span', { class: 'fav-tab-n', text: String(n) })]);
+/* 板块切换：全部 / 他喜欢的 / 他不高兴的 / 他想收藏的 / 他想告诉你的 */
+function boards(list) {
+  const cnt = (key) => list.filter((r) => key === 'all' || taFavCat(r.category).key === key).length;
+  const mk = (key, label) => el('button', {
+    class: 'chip' + (cat === key ? ' on' : ''), type: 'button',
+    onclick: () => { cat = key; openId = null; paint(); }
+  }, [label, el('span', { class: 'fav-board-n', text: String(cnt(key)) })]);
+  return el('div', { class: 'wt-chips fav-boards' }, [
+    mk('all', '全部'),
+    ...TA_FAV_CATS.map((c) => mk(c.key, c.label))
+  ]);
 }
 
 function catSection(cat, items) {

@@ -1990,6 +1990,8 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .fav-sec-n{font-size:10.5px;color:var(--txt-mute);flex:0 0 auto}
 .fav-sec-body{display:flex;flex-direction:column;gap:10px}
 .fav-sec-empty{padding:14px 12px;border:1px dashed var(--line);border-radius:var(--radius);font-size:11.5px;color:var(--txt-mute);text-align:center}
+.fav-boards{margin:12px 0 4px}
+.fav-board-n{margin-left:5px;font-size:10.5px;font-weight:600;opacity:.5}
 
 /* ---------- 相册 ---------- */
 .al-hero{display:grid;grid-template-columns:repeat(3,1fr);text-align:center;padding:15px 8px}
