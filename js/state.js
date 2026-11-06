@@ -436,7 +436,8 @@ export async function applySkin(previewPath) {
 
   document.getElementById('app').style.backgroundColor = b.color;
 
-  applyBubbleCss(s.bubbleCss);
+  /* 返回有没有真的匹配到气泡节点，供「应用」按钮提示 */
+  return applyBubbleCss(s.bubbleCss);
 }
 
 /* 背景图缩放：100 沿用 cover（和之前一致），其余按百分比缩放 */
@@ -456,18 +457,34 @@ function imgPos(x, y) {
    1) 只写声明（不含 {）→ 自动套到双方气泡
    2) 写选择器 → 把常见模板类名映射到本应用的 .msg/.bub 结构 */
 const BUBBLE_ALIAS = {
-  'msg-out': '.msg.me',
-  'msg-in': '.msg.ta',
+  /* 常见聊天模板的叫法（.message-received / .message-sent 等）→ 本应用的气泡 */
+  'message-received': '.bub.ta',
+  'message-sent': '.bub.me',
+  'message-in': '.bub.ta',
+  'message-out': '.bub.me',
+  'msg-received': '.bub.ta',
+  'msg-sent': '.bub.me',
+  'bubble-received': '.bub.ta',
+  'bubble-sent': '.bub.me',
   'message-me': '.bub.me',
   'message-ta': '.bub.ta',
   'message-friend': '.bub.ta',
+  'msg-out': '.msg.me',
+  'msg-in': '.msg.ta',
   'msg-bubble': '.content',
+  'reply-content': '.quote',
+  reply: '.quote',
+  received: '.bub.ta',
+  sent: '.bub.me',
   friend: '.bub.ta',
   bubble: '.content',
   me: '.bub.me',
   ta: '.bub.ta'
 };
+/* 长名优先匹配，避免 .message-sent 被 .message 或 .sent 提前截断 */
+const ALIAS_KEYS = Object.keys(BUBBLE_ALIAS).sort((a, b) => b.length - a.length);
 
+/** 返回这段 CSS 有没有真的落到气泡上（没匹配到类名时给调用方提示用） */
 function applyBubbleCss(raw) {
   let node = document.getElementById('custom-bubble-css');
   const css = String(raw || '').replace(/<\/?style[^>]*>/gi, '').trim();
@@ -476,26 +493,28 @@ function applyBubbleCss(raw) {
     node.id = 'custom-bubble-css';
     document.head.appendChild(node);
   }
-  if (!css) { node.textContent = ''; return; }
+  if (!css) { node.textContent = ''; return true; }
+  /* 只写声明 → 直接套到双方气泡 */
   if (css.indexOf('{') === -1) {
     node.textContent = `.bub.me .content,.bub.ta .content{${css}}`;
-    return;
+    return true;
   }
-  let out = css.replace(
-    /(^|[\s,>+~({}])\.(msg-out|msg-in|message-me|message-ta|message-friend|msg-bubble|friend|bubble|me|ta)\b/g,
-    (m, pre, key) => pre + BUBBLE_ALIAS[key]
-  );
+  const aliasRe = new RegExp('(^|[\\s,>+~({}])\\.(' + ALIAS_KEYS.join('|') + ')\\b', 'g');
+  let out = css.replace(aliasRe, (m, pre, key) => pre + BUBBLE_ALIAS[key]);
   /* 兜底：只写到气泡容器（.bub）时，自动指向内部 .content；单独写的 .content 补上 .bub 作用域 */
   out = out.replace(/([^{}]+)\{/g, (m, sel) => sel.split(',').map(fixBubbleSel).join(',') + '{');
   node.textContent = out;
+  return /\.(bub|content|quote|msg)\b/.test(out);
 }
 
 function fixBubbleSel(s) {
   const t = s.trim();
   if (!t) return t;
   if (t === '.content') return '.bub > .content';
-  if (!t.includes('.bub') || t.includes('.content')) return t;
-  return t + ' > .content';
+  /* 只有"写到气泡本身"的选择器才自动补内层 .content；
+     带后代的（如 .bub.ta .quote、.bub.me .nm）保持原样 */
+  if (/\.(bub)(\.me|\.ta)?\s*$/.test(t)) return t.replace(/\s*$/, ' > .content');
+  return t;
 }
 
 /** 角色头像元素的 HTML 生成 */

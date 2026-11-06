@@ -1161,9 +1161,10 @@ export default async function pageChat(view) {
   async function openDressSheet() {
     const s = state.skin;
 
-    /* 改完任何一项：刷 CSS 变量 + 重读头像 + 重绘消息区（即时生效） */
+    /* 改完任何一项：刷 CSS 变量 + 重读头像 + 重绘消息区（即时生效）
+       返回自定义气泡 CSS 是否真的匹配到了气泡节点 */
     const refresh = async () => {
-      await applySkin();
+      const bubOk = await applySkin();
       avSrc = await roleAvatarSrc();
       defaultMyAvSrc = s.avatarMeId ? await mediaURL(s.avatarMeId) : '';
       myAvSrc = state.role.chatAvatarMeId ? await mediaURL(state.role.chatAvatarMeId) : defaultMyAvSrc;
@@ -1171,6 +1172,7 @@ export default async function pageChat(view) {
       if (avSrc) avatar.appendChild(el('img', { src: avSrc }));
       else avatar.appendChild(document.createTextNode((state.role.name || 'TA').slice(0, 1)));
       rerenderAll();
+      return bubOk;
     };
 
     /* 头像：TA = role.avatarId，我 = skin.avatarMeId */
@@ -1334,13 +1336,17 @@ export default async function pageChat(view) {
         (() => {
           const ta = el('textarea', {
             class: 'input', rows: '3', value: s.bubbleCss || '',
-            placeholder: '例：border-radius:20px;box-shadow:0 2px 8px rgba(0,0,0,.1)\n也支持 .me / .friend / .message-me 等类名',
+            placeholder: '例：border-radius:20px;box-shadow:0 2px 8px rgba(0,0,0,.1)\n类名支持 .message-received / .message-sent / .me / .friend / .reply-content 等写法',
             style: { fontFamily: 'ui-monospace,Menlo,monospace', fontSize: '12.5px', lineHeight: '1.6', resize: 'vertical' }
           });
           return section('自定义气泡样式（CSS）',
             ta,
             el('div', { class: 'row', style: { gap: '8px', marginTop: '8px' } }, [
-              el('button', { class: 'btn sm', onclick: async () => { s.bubbleCss = ta.value; await saveSkin(); await refresh(); toast('已应用气泡样式'); } }, ['应用']),
+              el('button', { class: 'btn sm', onclick: async () => {
+                s.bubbleCss = ta.value; await saveSkin();
+                const ok = await refresh();
+                toast(ok ? '已应用气泡样式' : '这段 CSS 没匹配到气泡：把类名换成 .message-received / .message-sent / .me / .content 这类');
+              } }, ['应用']),
               el('button', { class: 'btn sm', onclick: async () => { ta.value = ''; s.bubbleCss = ''; await saveSkin(); await refresh(); toast('已清空'); } }, ['清空'])
             ]));
         })(),
