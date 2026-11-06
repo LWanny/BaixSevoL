@@ -696,7 +696,7 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
   font-size:9.5px;line-height:15px;font-weight:600;text-align:center;
   box-shadow:0 0 0 2px var(--bg-elev);
 }
-.mn-act.on{color:var(--accent-2)}
+.mn-act.on{color:#fa5151}          /* 已点赞：红色实心爱心（微信红） */
 .mn-act.fav{color:#d9a418}
 .mn-act.danger:active{color:var(--danger)}
 /* 底部一栏：动态 / TA的主页 / 我的主页 */

@@ -165,8 +165,8 @@ export default async function pageMoments(view) {
     /* 底部操作行：左「点赞 / 评论」，右「收藏 / 删除」（纯图标按钮） */
     const likedByMe = m.likes.some((l) => l.who === 'me');
     const likeBtn = el('button', { class: 'mn-act' + (likedByMe ? ' on' : ''), title: '点赞', onclick: () => toggleLike(m) }, [
-      iconImg('IC-MOM-003'),
-      m.likes.length ? el('i', { class: 'n', text: String(m.likes.length) }) : null
+      /* 点过赞 = 红色实心爱心，不再用角标显示次数 */
+      iconImg(likedByMe ? 'IC-MOM-007' : 'IC-MOM-003')
     ]);
     const cmtBtn = el('button', { class: 'mn-act', title: '评论', onclick: () => openComment(m) }, [iconImg('IC-MOM-004')]);
     const favBtn = el('button', { class: 'mn-act' + (m.fav ? ' fav' : ''), title: m.fav ? '取消收藏' : '收藏', onclick: () => toggleFav(m) }, [iconImg('IC-MIO-038')]);

@@ -10,7 +10,7 @@
     "MOD": "情绪态度",
     "MIO": "通用"
   },
-  "count": 97,
+  "count": 100,
   "icons": [
     {
       "id": "IC-CHT-001",
@@ -819,6 +819,16 @@
       "category": "MOM",
       "categoryName": "朋友圈",
       "file": "assets/icons/moments/IC-MOM-006.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MOM-007",
+      "name": "红心",
+      "desc": "已点赞 · 红色实心爱心",
+      "category": "MOM",
+      "categoryName": "朋友圈",
+      "file": "assets/icons/moments/IC-MOM-007.svg",
       "replaced": false,
       "replacement": null
     },
