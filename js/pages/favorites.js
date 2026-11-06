@@ -84,7 +84,7 @@ async function paint() {
     page.appendChild(el('div', { class: 'empty' }, [
       iconImg('IC-MIO-020'),
       el('div', { class: 'e-h', text: '我还没有收藏' }),
-      el('div', { class: 'e-p', text: '点右上角「＋」，留住想记住的片段' })
+      el('div', { class: 'e-p', text: '点右上角「新增收藏」，留住想记住的片段' })
     ]));
   } else {
     list.forEach((r) => page.appendChild(card(r)));

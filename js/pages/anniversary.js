@@ -53,7 +53,7 @@ function paint() {
     page.appendChild(el('div', { class: 'empty' }, [
       iconImg('IC-MIO-017'),
       el('div', { class: 'e-h', text: '还没有纪念日' }),
-      el('div', { class: 'e-p', text: '点右上角「＋」，把重要的日子记下来' })
+      el('div', { class: 'e-p', text: '点右上角「添加」，把重要的日子记下来' })
     ]));
   } else {
     page.appendChild(el('div', { class: 'an-sec-h' }, [

@@ -100,7 +100,7 @@ function render(view) {
       list.appendChild(el('div', { class: 'empty' }, [
         iconImg('IC-CRD-001'),
         el('div', { class: 'e-h', text: cards.length ? '这里没有匹配的字卡' : '字卡库还是空的' }),
-        el('div', { class: 'e-p', text: cards.length ? '换个分组或清空搜索试试' : '点右上角「+」新建，或从 JSON / 纯文本导入' }),
+        el('div', { class: 'e-p', text: cards.length ? '换个分组或清空搜索试试' : '点右上角「新建字卡」新建，或用「导入」批量加进来' }),
         cards.length ? null : el('div', { class: 'row', style: { justifyContent: 'center', marginTop: '14px', gap: '8px' } }, [
           el('button', { class: 'btn sm primary', onclick: importMenu }, ['导入字卡']),
           el('button', { class: 'btn sm', onclick: newCard }, ['新建字卡'])

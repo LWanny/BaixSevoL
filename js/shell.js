@@ -5,6 +5,7 @@
 
 import { el } from './util.js';
 import { go, back } from './router.js';
+import { iconImg, iconUrl } from './icons.js';
 
 /** 主页面顺序（决定 swipe 里的 slot 序号）；hideBar=true 的页面不显示底部栏（专注模式） */
 export const TABS = [
@@ -45,7 +46,11 @@ export function setTopbar(opts = {}) {
   ]));
 
   (opts.actions || []).forEach((a) => {
-    bar.appendChild(el('button', { class: 'tb-btn', title: a.label || '', onclick: a.onclick }, ['＋']));
+    /* 顶栏按钮不再一律画「＋」：有图标画图标，没图标就写按钮名字，一眼能看出是干什么的 */
+    const ico = a.icon && iconUrl(a.icon) ? iconImg(a.icon) : null;
+    bar.appendChild(el('button', { class: 'tb-btn' + (ico ? '' : ' wide'), title: a.label || '', onclick: a.onclick }, [
+      ico || (a.label ? el('span', { class: 'tb-txt', text: a.label }) : '＋')
+    ]));
   });
 }
 

@@ -64,7 +64,7 @@ function paint() {
     page.appendChild(el('div', { class: 'empty' }, [
       iconImg('IC-MIO-037'),
       el('div', { class: 'e-h', text: rows.length ? '这一栏还是空的' : '书架还是空的' }),
-      el('div', { class: 'e-p', text: '点右上角「＋」，把想读的书放进来' })
+      el('div', { class: 'e-p', text: '点右上角「添加」，把想读的书放进来' })
     ]));
   } else {
     list.forEach((r) => page.appendChild(card(r)));

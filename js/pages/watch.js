@@ -66,7 +66,7 @@ function paint() {
     page.appendChild(el('div', { class: 'empty' }, [
       iconImg('IC-MIO-036'),
       el('div', { class: 'e-h', text: rows.length ? '这一栏还是空的' : '还没有观影记录' }),
-      el('div', { class: 'e-p', text: '点右上角「＋」，把想看的片子收进来' })
+      el('div', { class: 'e-p', text: '点右上角「添加」，把想看的片子收进来' })
     ]));
   } else {
     list.forEach((r) => page.appendChild(card(r)));

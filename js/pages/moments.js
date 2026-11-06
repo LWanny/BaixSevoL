@@ -68,7 +68,7 @@ export default async function pageMoments(view) {
     const feed = el('div', { class: 'mn-feed' });
     if (!list.length) {
       feed.appendChild(el('div', { class: 'mn-post' }, [
-        el('div', { class: 'mn-empty', text: mode === 'ta' ? `${taName()}还没有发过动态。` : '还没有动态，点右上角 ＋ 发布第一条。' })
+        el('div', { class: 'mn-empty', text: mode === 'ta' ? `${taName()}还没有发过动态。` : '还没有动态，点右上角「发布」发第一条。' })
       ]));
     } else {
       for (const m of list) feed.appendChild(await postNode(m));

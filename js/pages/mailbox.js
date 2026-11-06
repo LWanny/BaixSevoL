@@ -51,7 +51,7 @@ export default async function pageMailbox(view) {
     if (!items.length) {
       list.appendChild(el('div', { class: 'mail-empty' }, [
         el('div', { class: 'e-h', text: tab === 'in' ? '还没有收到信' : '还没有寄出信' }),
-        el('div', { class: 'e-p', text: tab === 'in' ? 'TA 写来的信会出现在这里' : '点右上角「＋」写一封信给 TA' })
+        el('div', { class: 'e-p', text: tab === 'in' ? 'TA 写来的信会出现在这里' : '点右上角「写一封信」，给 TA 写第一封信' })
       ]));
       return;
     }
