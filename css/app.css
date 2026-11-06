@@ -68,15 +68,18 @@ a{color:var(--accent-2);text-decoration:none}
   position:fixed;inset:0;display:flex;flex-direction:column;
   max-width:560px;margin:0 auto;
   background-color:var(--global-bg-color);
+  isolation:isolate;
+  overflow:hidden;
+}
+/* 背景图独立成一层（负 z-index：压在 #app 的背景色之上、所有内容之下），
+   透明度由 --global-bg-img-op 控制：100 = 原样，越小越淡、露出背景色 */
+#app::before{
+  content:'';position:absolute;inset:0;z-index:-1;
   background-image:var(--global-bg-image);
   background-size:var(--global-bg-size,cover);background-position:var(--global-bg-pos,center);
   background-repeat:no-repeat;
-  overflow:hidden;
-}
-/* 背景图上压一层半透明的「全局背景色」：图看得见，字也读得清（没图时透明） */
-#app::before{
-  content:'';position:absolute;inset:0;z-index:0;
-  background:var(--global-bg-veil,transparent);pointer-events:none;
+  opacity:var(--global-bg-img-op,1);
+  pointer-events:none;
 }
 #topbar{
   flex:0 0 auto;height:calc(var(--topbar-h) + var(--safe-t));padding-top:var(--safe-t);

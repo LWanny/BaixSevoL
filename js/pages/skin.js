@@ -34,7 +34,7 @@ function build(view) {
       el('input', { class: 'input', type: 'color', value: s.globalBgColor || '#f7f7f6', oninput: async (e) => { s.globalBgColor = e.target.value; await saveSkin(); await applySkin(); } })
     ]),
     imagePicker('全局背景图', '全局背景图片会铺满整个应用。', s.globalBgImageId, async (id) => { s.globalBgImageId = id; await saveSkin(); await applySkin(); }, 'bg'),
-    bgAdjust('globalBgX', 'globalBgY', 'globalBgZoom', s.globalBgImageId)
+    bgAdjust('globalBgX', 'globalBgY', 'globalBgZoom', s.globalBgImageId, 'globalBgImgOp')
   ])));
 
   /* ---- 聊天相关（壁纸 / 气泡 / 头像）已搬进「消息 → 更多 → 聊天装扮」 ---- */
@@ -50,7 +50,7 @@ function build(view) {
         bubbleMe: 'linear-gradient(135deg,#1c1e22,#3c4048)', bubbleMeTxt: '#ffffff',
         bubbleTa: '#ffffff', bubbleTaTxt: '#16181c', bubbleRadius: 15,
         avatarShape: 'rounded', bubbleCss: '', avatarMeId: keepMe,
-        globalBgX: 50, globalBgY: 50, globalBgZoom: 100,
+        globalBgX: 50, globalBgY: 50, globalBgZoom: 100, globalBgImgOp: 100,
         chatWallX: 50, chatWallY: 50, chatWallZoom: 100
       });
       await saveSkin(); await applySkin();
@@ -62,8 +62,8 @@ function build(view) {
   view.appendChild(wrap);
 }
 
-/* 背景图 / 壁纸的位置与缩放（50 = 居中，仅在有图时生效） */
-export function bgAdjust(xKey, yKey, zoomKey, hasImage) {
+/* 背景图 / 壁纸的位置、缩放与透明度（50 = 居中，仅在有图时生效） */
+export function bgAdjust(xKey, yKey, zoomKey, hasImage, opKey = null) {
   const s = state.skin;
   const row = (label, key, min, max) => {
     const val = el('span', { class: 'pval', text: `${s[key]}%` });
@@ -79,11 +79,15 @@ export function bgAdjust(xKey, yKey, zoomKey, hasImage) {
       el('div', { class: 'row', style: { flex: '1 1 100%' } }, [r])
     ]);
   };
-  return el('div', {}, [
-    hasImage ? null : el('div', { class: 'hint', text: '上传图片后下面三项才生效。' }),
+  const rows = [
     row('水平位置（50 = 居中）', xKey, 0, 100),
     row('垂直位置（50 = 居中）', yKey, 0, 100),
     row('缩放比例（100 = 铺满）', zoomKey, 50, 200)
+  ];
+  if (opKey) rows.push(row('透明度（100 = 原样，越小越淡）', opKey, 0, 100));
+  return el('div', {}, [
+    hasImage ? null : el('div', { class: 'hint', text: '上传图片后下面几项才生效。' }),
+    ...rows
   ]);
 }
 

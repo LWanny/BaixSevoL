@@ -221,7 +221,7 @@ export const DEFAULT_SKIN = {
   avatarShape: 'rounded',        // 聊天头像形状：circle 圆形 / rounded 圆角方形
   bubbleCss: '',                 // 自定义气泡 CSS（声明或选择器两种写法）
   /* 图片位置与缩放：50 = 居中，100 = 原始铺满（仅对上传的图生效） */
-  globalBgX: 50, globalBgY: 50, globalBgZoom: 100,
+  globalBgX: 50, globalBgY: 50, globalBgZoom: 100, globalBgImgOp: 100,
   chatWallX: 50, chatWallY: 50, chatWallZoom: 100,
   avatarMeId: null,
   avatarTaId: null
@@ -389,8 +389,9 @@ export async function applySkin() {
   r.setProperty('--global-bg-image', bgUrl ? `url("${bgUrl}")` : 'none');
   r.setProperty('--global-bg-size', bgUrl ? imgSize(s.globalBgZoom) : 'cover');
   r.setProperty('--global-bg-pos', bgUrl ? imgPos(s.globalBgX, s.globalBgY) : 'center');
-  /* 有背景图时压一层半透明的全局背景色，压住图但不挡死（没图就不压，露出 #app 的纯色） */
-  r.setProperty('--global-bg-veil', bgUrl ? veilColor(s.globalBgColor || '#f7f7f6') : 'transparent');
+  /* 背景图透明度：100 = 原样，越小越淡、混进背景色（0 = 等于没图） */
+  const op = Number(s.globalBgImgOp);
+  r.setProperty('--global-bg-img-op', String(Math.min(1, Math.max(0, (Number.isFinite(op) ? op : 100) / 100))));
 
   const wpUrl = s.chatWallpaperId ? await mediaURL(s.chatWallpaperId) : '';
   r.setProperty('--chat-wallpaper', wpUrl ? `url("${wpUrl}")` : 'none');
@@ -413,14 +414,6 @@ function imgPos(x, y) {
   const nx = Number.isFinite(Number(x)) ? Number(x) : 50;
   const ny = Number.isFinite(Number(y)) ? Number(y) : 50;
   return nx === 50 && ny === 50 ? 'center' : `${nx}% ${ny}%`;
-}
-
-/* 背景图上的蒙版色：把「全局背景色」变半透明（#app::before 用） */
-function veilColor(hex) {
-  const m = /^#([0-9a-f]{6})$/i.exec(String(hex || '').trim());
-  if (!m) return 'transparent';
-  const n = parseInt(m[1], 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},.45)`;
 }
 
 /* 自定义气泡 CSS：支持两种写法
