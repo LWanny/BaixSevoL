@@ -8,6 +8,7 @@ import { startMailbox } from './letters.js';
 import { startMomentsAI } from './momentsAI.js';
 import { startXhsAI } from './xhsdata.js';
 import { startAnnivAI } from './annivdata.js';
+import { startProactive } from './scheduler.js';
 import { toast } from './ui.js';
 
 import pageHome from './pages/home.js';
@@ -129,6 +130,7 @@ async function boot() {
   startAnnivAI();
   startNicknameAI();
   startGraffitiAI();
+  startProactive();       // 20 秒一跳：主动消息 / TA 提问 / 备忘录到点弹窗等都挂在这里（各自有开关）
   maybeNotice();
 }
 

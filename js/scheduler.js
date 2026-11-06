@@ -41,6 +41,7 @@ export async function addMessage(msg) {
   // 他说不定会悄悄收下这句话；成功与否都不打扰聊天
   if (m.role === 'me') {
     maybeCollectByTa(m).catch(() => {});
+    maybeMemoChatRemind().catch(() => {});
     if (m.type === 'text') maybePickInspiration({ text: m.text, source: 'chat', sourceId: m.id }).catch(() => {});
   }
   if (m.role === 'ta' || m.role === 'sys') {
@@ -220,7 +221,7 @@ export function stopProactive() {
   document.removeEventListener('visibilitychange', tickAll);
 }
 
-function tickAll() { tickProactive(); tickTaAsk(); tickShop().catch(() => {}); }
+function tickAll() { tickProactive(); tickTaAsk(); tickMemoDue(); tickShop().catch(() => {}); }
 
 /** 随机一个主动发送间隔（毫秒），由最短 / 最长间隔决定 */
 function proactiveGap(p) {
@@ -288,6 +289,65 @@ export async function catchUpProactive() {
   await kvSet('lastProactive', now);
   await kvSet('nextProactiveAt', now + proactiveGap(p));
   for (let i = 0; i < missed; i++) await fireProactive(p);
+}
+
+/* ---------- 备忘录 · 两种提醒（到点弹窗 / 聊天中随机） ---------- */
+let memoPopupBusy = false;
+
+/** 到点弹窗：每 20 秒查一次，最早的那条到期就弹 */
+async function tickMemoDue() {
+  if (memoPopupBusy) return;
+  if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+  try {
+    const rows = await all('memos');
+    const now = Date.now();
+    const due = rows.filter((m) => m.remindAt && !m.remindDone && m.remindAt <= now)
+      .sort((a, b) => a.remindAt - b.remindAt);
+    if (!due.length) return;
+    const m = due[0];
+    memoPopupBusy = true;
+    const { confirmBox } = await import('./ui.js');
+    const lines = String(m.text || '').split('\n').filter((x) => x.trim());
+    const first = (lines[0] || '（空备忘）').slice(0, 60);
+    const rest = lines.slice(1).join(' ').slice(0, 60);
+    const ok = await confirmBox({
+      title: '备忘录 · 到点提醒',
+      text: rest ? `${first}\n${rest}` : first,
+      okText: '知道了', cancelText: '推迟 10 分钟'
+    });
+    if (ok) m.remindDone = true;
+    else m.remindAt = Date.now() + 10 * 60000;
+    m.updatedAt = Date.now();
+    await put('memos', m);
+  } catch { /* 弹层失败，下一轮再试 */ }
+  finally { memoPopupBusy = false; }
+}
+
+/** 聊天中随机提醒：你每发一条消息，给开着提醒的备忘各掷一次（默认 2%），
+    命中就让 TA 在聊天里提一句；同一条备忘每天最多提醒一次，每条消息最多提醒 1 条 */
+async function maybeMemoChatRemind() {
+  const rows = await all('memos');
+  const today = dayKey();
+  const cand = rows.filter((m) => m.chatRemind && Number(m.chatPct) > 0
+    && (!m.lastChatRemind || dayKey(new Date(m.lastChatRemind)) !== today));
+  if (!cand.length) return;
+  for (const m of cand.sort(() => Math.random() - 0.5)) {
+    if (!chance(Number(m.chatPct))) continue;
+    const lines = String(m.text || '').split('\n').filter((x) => x.trim());
+    const short = (lines[0] || '（空备忘）').slice(0, 40);
+    await addMessage({
+      role: 'ta', type: 'text',
+      text: pick([
+        `突然想起，你记的「${short}」别忘了 📌`,
+        `对了，你备忘录里那条「${short}」还作数吗？`,
+        `（备忘提醒）${short}`
+      ])
+    });
+    m.lastChatRemind = Date.now();
+    m.updatedAt = Date.now();
+    await put('memos', m);
+    break;
+  }
 }
 
 /* ---------- TA 的询问：每天随机时间、按当日随机概率提一问 ---------- */
