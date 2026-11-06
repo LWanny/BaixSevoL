@@ -2474,6 +2474,10 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
   background:var(--accent);color:#fff;vertical-align:1px;
 }
 .sh-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding-bottom:16px}
+/* 搜索 + 分类 */
+.sh-tools{display:flex;gap:8px}
+.sh-search{flex:1;height:36px;border-radius:999px;padding:0 15px;font-size:12.5px}
+.sh-chips{margin:10px 0 12px}
 .sh-tile{
   background:var(--bg-elev);border:1px solid var(--line-soft);border-radius:14px;
   padding:9px 10px 10px;cursor:pointer;transition:transform .15s;
@@ -2492,17 +2496,18 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .sh-detail-name{font-size:16px;font-weight:700}
 .sh-detail-desc{font-size:12.5px;color:var(--txt-dim);line-height:1.7}
 .sh-detail-price{font-size:19px;font-weight:800;color:var(--accent-2);font-variant-numeric:tabular-nums}
-/* 商品卡 · 快速加购按钮 */
+/* 商品卡 · 快速加购按钮（跟价格排一行的两端，不跟分类角标叠在一起） */
 .sh-tile{position:relative}
 .sh-add{
-  position:absolute;right:8px;bottom:8px;width:30px;height:30px;border-radius:50%;
-  border:1px solid var(--line);background:var(--card);font-size:15px;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.10);
+  flex:0 0 auto;width:28px;height:28px;border-radius:9px;
+  border:1px solid var(--line);background:var(--card);font-size:14px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
 }
-.sh-add:active{transform:scale(.9)}
-/* 图片型商品视觉（卡/详情/订单/购物车共用） */
+.sh-add:active{transform:scale(.94)}
+.sh-row-r{display:flex;align-items:center;gap:7px}
+/* 图片型商品视觉（卡/详情/订单/购物车共用）：图片装进固定小盒，长图不撑破卡片 */
+.sh-visual{overflow:hidden}
 .sh-img{width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit}
-.sh-tile .sh-emoji.sh-img,.sh-cart-emoji.sh-img,.sh-order-emoji.sh-img{border-radius:inherit}
 /* 购物车 */
 .sh-cart{display:flex;flex-direction:column;gap:8px;padding-bottom:120px}
 .sh-cart-row{
@@ -2590,6 +2595,32 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .sh-order-acts .btn.sm:first-child{margin-left:auto}
 .sh-del{color:var(--danger);background:transparent;border:1px solid var(--line)}
 
+/* ---------- 储藏室（礼物存货 + 双方心愿单） ---------- */
+.st-seg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.st-seg .sh-seg-btn{font-size:12.5px;padding:9px 0}
+.st-list{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
+.st-row{display:flex;align-items:center;gap:11px}
+.st-emoji{
+  flex:0 0 auto;width:48px;height:48px;border-radius:12px;overflow:hidden;
+  display:flex;align-items:center;justify-content:center;font-size:24px;
+}
+.st-main{flex:1;min-width:0}
+.st-name{font-size:13.5px;font-weight:600;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-sub{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11.5px;color:var(--txt-dim);margin-top:3px}
+.st-price{color:var(--accent-2);font-weight:700;font-variant-numeric:tabular-nums}
+.st-tag{display:inline-block;margin-top:6px;font-size:10.5px;color:var(--txt-mute);background:var(--bg-elev2);border-radius:7px;padding:2px 8px}
+.st-tag.gift{color:#c48a1a;background:rgba(196,138,26,.12)}
+.st-note{margin-top:5px;font-size:11.5px;color:var(--txt-dim);line-height:1.55}
+.st-acts{flex:0 0 auto;display:flex;flex-direction:column;gap:7px}
+.st-acts .btn.sm{height:29px;padding:0 11px}
+.st-head{margin:6px 2px 9px}
+.st-head .t{font-size:13.5px;font-weight:700}
+.st-head .s{font-size:11.5px;color:var(--txt-dim);margin-top:2px}
+.st-empty{
+  font-size:12px;color:var(--txt-dim);text-align:center;background:var(--bg-elev);
+  border:1px dashed var(--line);border-radius:14px;padding:20px 14px;margin-bottom:14px;
+}
+
 /* 聊天里的礼物卡片 */
 .bub .content.gift-msg{display:flex;align-items:center;gap:10px;min-width:180px}
 .gift-emoji{
@@ -2599,6 +2630,22 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .gift-main{min-width:0}
 .gift-name{font-size:13.5px;font-weight:600;line-height:1.4}
 .gift-sub{font-size:10.5px;opacity:.66;margin-top:2px}
+.gift-note{font-size:11.5px;opacity:.72;margin-top:5px;line-height:1.55}
+
+/* 聊天里 TA 的心愿卡片（带【送 TA】） */
+.bub .content.wish-msg{display:flex;flex-wrap:wrap;align-items:center;gap:10px;min-width:190px}
+.wish-emoji{
+  flex:0 0 auto;width:50px;height:50px;border-radius:11px;
+  display:flex;align-items:center;justify-content:center;font-size:26px;
+}
+.wish-main{flex:1;min-width:104px}
+.wish-tag{display:inline-block;font-size:10px;padding:2px 7px;border-radius:6px;background:var(--accent-soft);color:var(--accent-2)}
+.wish-name{font-size:13.5px;font-weight:600;line-height:1.4;margin-top:5px}
+.wish-price{font-size:15px;font-weight:800;color:var(--accent-2);margin-top:2px;font-variant-numeric:tabular-nums}
+.wish-text{font-size:11.5px;opacity:.66;margin-top:4px;line-height:1.5}
+.wish-act{width:100%;display:flex;justify-content:flex-end}
+.wish-btn{min-width:82px}
+.wish-btn.taken{opacity:.55;pointer-events:none}
 
 /* ---------- 游戏厅 ---------- */
 .gm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px;padding-bottom:16px}

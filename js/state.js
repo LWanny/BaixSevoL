@@ -255,6 +255,7 @@ export const DEFAULT_WIDGETS = {
     { id: 'app_album',   type: 'app', order: 20, span: 1, config: { path: '/album',   label: '相册',     icon: 'IC-MIO-015' } },
     { id: 'app_xhs',     type: 'app', order: 20.5, span: 1, config: { path: '/xhs',   label: '小粉书',   icon: 'IC-MOM-005' } },
     { id: 'app_shop',    type: 'app', order: 20.6, span: 1, config: { path: '/shop',  label: '商城',     icon: 'IC-MIO-039' } },
+    { id: 'app_store',   type: 'app', order: 20.65, span: 1, config: { path: '/store', label: '储藏室',  icon: 'IC-MIO-044' } },
     { id: 'app_games',   type: 'app', order: 20.7, span: 1, config: { path: '/games', label: '游戏厅',   icon: 'IC-MIO-040' } },
     { id: 'app_pdd',     type: 'app', order: 20.8, span: 1, config: { path: '/pdd',   label: '拼夕夕',   icon: 'IC-MIO-041' } },
     { id: 'app_tong',    type: 'app', order: 20.9, span: 1, config: { path: '/tong',  label: '通牌',     icon: 'IC-MIO-042' } },
@@ -341,12 +342,12 @@ export async function loadState() {
    把老的已保存主屏布局也补上这几个入口，只补一次。
    通话已改为聊天内的功能（输入栏「＋」→ 通话），不再作为独立软件，
    因此历史布局里遗留的 app_call 入口会被移除。 */
-const HOME_APPS_VER = 14;
+const HOME_APPS_VER = 15;
 const NEW_HOME_APP_IDS = [
   'app_music', 'app_quiz', 'app_memo',
   'app_period', 'app_ledger', 'app_pomodoro', 'app_watch', 'app_books',
   'app_favorites', 'app_ta_favorites', 'app_album', 'app_xhs', 'app_anniversary',
-  'app_shop', 'app_games', 'app_pdd', 'app_tong', 'app_echo'
+  'app_shop', 'app_store', 'app_games', 'app_pdd', 'app_tong', 'app_echo'
 ];
 async function migrateHomeApps() {
   const home = state.widgets.home || [];

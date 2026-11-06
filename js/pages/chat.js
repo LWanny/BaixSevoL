@@ -13,6 +13,7 @@ import { openCallMenu, callHistory, triggerIncoming } from '../call.js';
 import { openBulkImport } from '../bulkimport.js';
 import { taPostChatShot } from '../momentShot.js';
 import * as sched from '../scheduler.js';
+import { buyWishForTa } from '../shopcore.js';
 import { state as S } from '../state.js';
 import { createFreeCanvas, GRAFITTI_W, GRAFITTI_H } from '../graffiti.js';
 import { bgAdjust, openHsvSheet } from './skin.js';   // 聊天装扮面板复用（原装扮页功能）
@@ -253,10 +254,52 @@ export default async function pageChat(view) {
       /* 商城礼物：一份小小的礼物卡片 */
       const bg = m.bg || ['#fde8d8', '#f4c197'];
       content.classList.add('gift-msg');
-      content.appendChild(el('div', { class: 'gift-emoji', style: { background: `linear-gradient(145deg,${bg[0]},${bg[1]})` }, text: m.emoji || '🎁' }));
+      /* 图片/emoji 都装进固定小盒子，长图也不会挤到价格 */
+      let gvis;
+      if (m.imgId) {
+        gvis = el('div', { class: 'gift-emoji sh-visual' });
+        const gim = el('img', { class: 'sh-img', alt: m.giftName || '礼物' });
+        mediaURL(m.imgId).then((u) => { if (u) gim.src = u; });
+        gvis.appendChild(gim);
+      } else {
+        gvis = el('div', { class: 'gift-emoji', style: { background: `linear-gradient(145deg,${bg[0]},${bg[1]})` }, text: m.emoji || '🎁' });
+      }
+      content.appendChild(gvis);
       content.appendChild(el('div', { class: 'gift-main' }, [
         el('div', { class: 'gift-name', text: m.giftName || '一份小礼物' }),
-        el('div', { class: 'gift-sub', text: '来自商城 · ¥' + money(m.price) })
+        el('div', { class: 'gift-sub', text: m.giftSub || ('来自商城 · ¥' + money(m.price)) }),
+        m.note ? el('div', { class: 'gift-note', text: '“' + m.note + '”' }) : null
+      ]));
+    } else if (m.type === 'wish') {
+      /* TA 的心愿卡片：点【送 TA】即可买下送出，送出后自动移出心愿单 */
+      const bg = m.bg || ['#efe3f7', '#cdb3e3'];
+      content.classList.add('wish-msg');
+      let wvis;
+      if (m.imgId) {
+        wvis = el('div', { class: 'wish-emoji sh-visual' });
+        const wim = el('img', { class: 'sh-img', alt: m.name || '' });
+        mediaURL(m.imgId).then((u) => { if (u) wim.src = u; });
+        wvis.appendChild(wim);
+      } else {
+        wvis = el('div', { class: 'wish-emoji', style: { background: `linear-gradient(145deg,${bg[0]},${bg[1]})` }, text: m.emoji || '🎁' });
+      }
+      content.appendChild(wvis);
+      content.appendChild(el('div', { class: 'wish-main' }, [
+        el('div', { class: 'wish-tag', text: m.wishGone ? '心愿 · 已移除' : (m.wishTaken ? '心愿 · 已送出' : '心愿单 · 想要') }),
+        el('div', { class: 'wish-name', text: m.name || '一件商品' }),
+        el('div', { class: 'wish-price', text: '¥' + money(m.price) }),
+        m.wishText ? el('div', { class: 'wish-text', text: m.wishText }) : null
+      ]));
+      content.appendChild(el('div', { class: 'wish-act' }, [
+        (m.wishTaken || m.wishGone)
+          ? el('button', { class: 'btn sm wish-btn taken', disabled: true }, [m.wishGone ? '已移除' : '已送出'])
+          : el('button', { class: 'btn sm primary wish-btn', onclick: async (e) => {
+              e.stopPropagation();
+              if (m.wishTaken || m.wishGone) return;
+              const res = await buyWishForTa(m.wishId);
+              if (!res.ok) { toast(res.msg || '送不出去'); return; }
+              rerenderAll();
+            } }, ['送 TA'])
       ]));
     } else if (m.type === 'transfer') {
       content.classList.add('pay', 'pay-transfer');

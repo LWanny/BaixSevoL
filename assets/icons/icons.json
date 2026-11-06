@@ -10,7 +10,7 @@
     "MOD": "情绪态度",
     "MIO": "通用"
   },
-  "count": 96,
+  "count": 97,
   "icons": [
     {
       "id": "IC-CHT-001",
@@ -989,6 +989,16 @@
       "category": "MIO",
       "categoryName": "通用",
       "file": "assets/icons/misc/IC-MIO-043.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-044",
+      "name": "储藏室",
+      "desc": "储藏室 · 装礼物和心愿的箱子",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-044.svg",
       "replaced": false,
       "replacement": null
     }

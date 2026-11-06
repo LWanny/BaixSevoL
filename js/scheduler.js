@@ -9,6 +9,7 @@ import { uid, chance, rndInt, pick } from './util.js';
 import { notify } from './notify.js';
 import { maybeCollectByTa } from './tafav.js';
 import { maybePickInspiration } from './inspiration.js';
+import { tickShop } from './shopcore.js';
 
 const bus = new EventTarget();
 export const on = (evt, fn) => bus.addEventListener(evt, fn);
@@ -219,7 +220,7 @@ export function stopProactive() {
   document.removeEventListener('visibilitychange', tickAll);
 }
 
-function tickAll() { tickProactive(); tickTaAsk(); }
+function tickAll() { tickProactive(); tickTaAsk(); tickShop().catch(() => {}); }
 
 /** 随机一个主动发送间隔（毫秒），由最短 / 最长间隔决定 */
 function proactiveGap(p) {

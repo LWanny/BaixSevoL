@@ -224,7 +224,7 @@ function refreshChips(container, active) {
 /* ---------------- 页面背景：每个软件可单独设置（不设置就跟随全局） ---------------- */
 const PAGE_BG_LIST = [
   ['/mailbox', '信箱'], ['/moments', '朋友圈'], ['/cards', '字卡库'], ['/divine', '占卜'],
-  ['/decks', '牌面图鉴'], ['/music', '音乐'], ['/shop', '商城'], ['/ledger', '记账'],
+  ['/decks', '牌面图鉴'], ['/music', '音乐'], ['/shop', '商城'], ['/store', '储藏室'], ['/ledger', '记账'],
   ['/ledger-stats', '记账统计'], ['/games', '游戏厅'], ['/favorites', '收藏'], ['/anniversary', '纪念日'],
   ['/books', '书架'], ['/watch', '观影'], ['/xhs', '小粉书'], ['/pdd', '拼夕夕'],
   ['/album', '相册'], ['/memo', '备忘录'], ['/fate', '抉择'], ['/period', '经期记录'],

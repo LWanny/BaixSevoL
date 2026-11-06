@@ -1,45 +1,31 @@
 /* 商城 · 本地小卖部
    内置商品 + 我上架的自定义商品（可删，内置的也可隐藏）；
-   购物车批量结算、钱包余额支付（模拟充值）；
+   分类筛选 + 搜索、购物车批量结算、钱包余额支付（模拟充值）；
    购买生成订单存 orders 表，物流按经过时间自动推进：
-   待发货 → 配送中 → 已签收；签收前后都可以「送给 TA」。 */
+   待发货 → 配送中 → 已签收；签收前后都可以「送给 TA」（还能附一句话）。
+   顶栏「设置」管 TA 的送礼 / 心愿单 / 自己购物概率与商品数据导入导出。 */
 
-import { el, uid, fmtDay, openFile, compressImage } from '../util.js';
+import { el, uid, fmtDay, openFile, readText, compressImage } from '../util.js';
 import { iconImg } from '../icons.js';
 import { fullPage } from '../shell.js';
+import { go } from '../router.js';
 import { all, put, del, kvGet, kvSet } from '../store.js';
 import { mediaURL, saveMedia, delMedia } from '../media.js';
 import { sheet, confirmBox, toast } from '../ui.js';
 import { state } from '../state.js';
 import * as sched from '../scheduler.js';
+import {
+  GOODS, CATS, KV_CUSTOM, KV_CART, KV_HIDDEN, KV_WALLET, DEFAULT_WALLET,
+  yuan, round2, tileVisual, getShopSet, saveShopSet,
+  toggleWishMine, inWishMine, shopDemo, exportShopData, importShopData
+} from '../shopcore.js';
+import { section } from './roleParts.js';
 
-/* ---------------- 内置商品 ---------------- */
-const GOODS = [
-  { id: 'g_milk',   name: '奶茶兑换券',  price: 9.9,   cat: '零食', emoji: '🧋', bg: ['#fde8d8', '#f4c197'], desc: '买一杯，顺手也替 TA 点一杯' },
-  { id: 'g_cake',   name: '小蛋糕',     price: 25.5,  cat: '零食', emoji: '🍰', bg: ['#fce4ec', '#f0b6c8'], desc: '下午茶限定，会化，得快点吃' },
-  { id: 'g_choco',  name: '巧克力礼盒',  price: 69,    cat: '零食', emoji: '🍫', bg: ['#f3dfd2', '#cfa08c'], desc: '丝滑的，甜的，适合分着吃' },
-  { id: 'g_bear',   name: '小熊玩偶',    price: 39.9,  cat: '礼物', emoji: '🧸', bg: ['#f5e6cf', '#d9b98a'], desc: '抱着睡刚刚好，冬天不凉手' },
-  { id: 'g_flower', name: '一小束花',    price: 33,    cat: '礼物', emoji: '💐', bg: ['#efe3f7', '#cdb3e3'], desc: '没有特别的日子也可以送' },
-  { id: 'g_letter', name: '手写贺卡',    price: 5.2,   cat: '礼物', emoji: '💌', bg: ['#fde2e4', '#f4a9b0'], desc: '字迹比内容更值钱' },
-  { id: 'g_ear',    name: '蓝牙耳机',    price: 199,   cat: '数码', emoji: '🎧', bg: ['#e2e8f0', '#a9b8cc'], desc: '一起听歌，得一对才叫一起听' },
-  { id: 'g_lamp',   name: '星空小夜灯',  price: 49.9,  cat: '数码', emoji: '🌌', bg: ['#dfe6f5', '#9fb0e0'], desc: '关灯以后，天花板就是银河' },
-  { id: 'g_case',   name: '情侣手机壳',  price: 29.9,  cat: '数码', emoji: '📱', bg: ['#e8f0e2', '#b3ccb4'], desc: '一人一个，藏在口袋里的仪式感' },
-  { id: 'g_plant',  name: '多肉盆栽',    price: 19.9,  cat: '生活', emoji: '🪴', bg: ['#e4efdd', '#b1cfa0'], desc: '好养活，象征意义大于实际' },
-  { id: 'g_mug',    name: '马克杯',     price: 22,    cat: '生活', emoji: '☕', bg: ['#f0e8dc', '#cbb59a'], desc: '喝水喝牛奶都行，杯壁厚实' },
-  { id: 'g_note',   name: '手账本+贴纸', price: 12.5,  cat: '生活', emoji: '📒', bg: ['#fdf3d1', '#e8cf87'], desc: '把日子一页一页贴起来' },
-  { id: 'g_scarf',  name: '围巾',      price: 59,    cat: '穿搭', emoji: '🧣', bg: ['#fbe3e0', '#e7b1a8'], desc: '降温之前先准备好' },
-  { id: 'g_hoodie', name: '连帽卫衣',    price: 119,   cat: '穿搭', emoji: '🧥', bg: ['#e3ecf6', '#b0c3da'], desc: 'oversize 一点更好看' },
-  { id: 'g_socks',  name: '成对袜子',    price: 15.8,  cat: '穿搭', emoji: '🧦', bg: ['#eee8f6', '#c5b8dd'], desc: '看不见的地方也要成双' }
-];
-const CATS = ['零食', '礼物', '数码', '生活', '穿搭'];
-const KV_CUSTOM = 'shopCustom';
-const KV_CART = 'shopCart';
-const KV_HIDDEN = 'shopHidden';
-const KV_WALLET = 'shopWallet';
-const DEFAULT_WALLET = 520;   // 首次进商城送的虚拟余额
-
-const yuan = (n) => '¥' + Number(n || 0).toFixed(2);
-const round2 = (n) => Math.round(Number(n) * 100) / 100;
+let view = null;
+let tab = 'goods';       // goods | cart | orders
+let cat = '全部';
+let q = '';              // 搜索词（逛逛页）
+let timer = 0;
 
 /* ---------------- 状态 ---------------- */
 let custom = [];        // 我上架的商品
@@ -64,9 +50,15 @@ const saveWallet = () => kvSet(KV_WALLET, wallet);
 function goodsList() {
   return GOODS.filter((g) => !hidden.has(g.id)).concat(custom);
 }
-const findGoods = (id) => goodsList().find((g) => g.id === id);
 const cartCount = () => cart.reduce((s, i) => s + i.qty, 0);
 const cartTotal = () => round2(cart.reduce((s, i) => s + Number(i.price) * i.qty, 0));
+
+/* 所有出现过的分类（内置 + 自定义，去重保序） */
+function allCats() {
+  const out = [...CATS];
+  goodsList().forEach((g) => { if (g.cat && !out.includes(g.cat)) out.push(g.cat); });
+  return out;
+}
 
 /* 物流状态：按下单经过的时间推进 */
 function stateOf(o) {
@@ -78,25 +70,11 @@ function stateOf(o) {
 }
 const STATE_TONE = { paid: 'ship', ship: 'ship', done: 'done', gifted: 'gift' };
 
-/* 商品主视觉：优先图片，其次 emoji 渐变 */
-function tileVisual(g, cls) {
-  if (g.imgId) {
-    const img = el('img', { class: cls + ' sh-img', alt: g.name });
-    mediaURL(g.imgId).then((u) => { if (u) img.src = u; });
-    return img;
-  }
-  return el('div', { class: cls, style: { background: `linear-gradient(145deg,${g.bg?.[0] || '#f3f3f2'},${g.bg?.[1] || '#e4e4e2'})` }, text: g.emoji || '🎁' });
-}
-
-let view = null;
-let tab = 'goods';       // goods | cart | orders
-let cat = '全部';
-let timer = 0;
-
 export default async function pageShop(v) {
   view = v;
   fullPage({ back: true, title: '商城', sub: '本地小卖部 · 纯属虚构消费', actions: [
     { icon: 'IC-MIO-005', label: '钱包', onclick: walletSheet },
+    { icon: 'IC-MIO-001', label: '设置', onclick: () => settingsSheet() },
     { icon: 'IC-MIO-003', label: '上架', onclick: () => goodsForm() }
   ] });
   await loadState4();
@@ -117,43 +95,17 @@ async function paint() {
   view.innerHTML = '';
   const page = el('div', { class: 'page shop' });
 
-  /* 顶部分栏：逛逛 / 购物车 / 订单 */
+  /* 顶部分栏：逛逛 / 购物车 / 订单 + 储藏室入口（订单后面不再挂数字） */
   const seg = el('div', { class: 'sh-seg' }, [
     segBtn('goods', '逛逛', null),
     segBtn('cart', '购物车', cartCount() || null),
-    segBtn('orders', '订单', orders.length || null)
+    segBtn('orders', '订单', null),
+    el('button', { class: 'sh-seg-btn sh-seg-store', title: '储藏室', onclick: () => go('/store') }, ['储藏室'])
   ]);
   page.appendChild(seg);
 
   if (tab === 'goods') {
-    const chips = el('div', { class: 'wt-chips' });
-    ['全部', ...CATS].forEach((c) => chips.appendChild(el('button', {
-      class: 'chip' + (cat === c ? ' on' : ''), type: 'button',
-      onclick: () => { cat = c; paint(); }
-    }, [c])));
-    page.appendChild(chips);
-
-    const list = goodsList().filter((g) => cat === '全部' || g.cat === cat);
-    const grid = el('div', { class: 'sh-grid' });
-    list.forEach((g) => {
-      const tile = el('div', { class: 'sh-tile', onclick: () => openGoods(g) }, [
-        tileVisual(g, 'sh-emoji'),
-        el('div', { class: 'sh-name', text: g.name }),
-        el('div', { class: 'sh-row' }, [
-          el('span', { class: 'sh-price', text: yuan(g.price) }),
-          el('span', { class: 'sh-cat', text: g.cat })
-        ])
-      ]);
-      /* 快速加购：卡右下角小按钮 */
-      tile.appendChild(el('button', {
-        class: 'sh-add', type: 'button', title: '加入购物车',
-        onclick: (e) => { e.stopPropagation(); addCart(g); }
-      }, ['🛒']));
-      grid.appendChild(tile);
-    });
-    page.appendChild(grid);
-    if (!list.length) page.appendChild(el('div', { class: 'empty' }, [el('div', { class: 'e-h', text: '这个分类暂时没有商品' })]));
-    page.appendChild(el('div', { class: 'hint', style: { textAlign: 'center', marginTop: '12px' }, text: '点右下角 🛒 快速加购 · 顶栏「上架」添加你的商品' }));
+    await paintGoods(page);
   } else if (tab === 'cart') {
     paintCart(page);
   } else {
@@ -183,13 +135,86 @@ function segBtn(key, label, badge) {
   ]);
 }
 
+/* ---------------- 逛逛：搜索 + 分类 + 商品网格 ---------------- */
+async function paintGoods(page) {
+  /* 搜索框：只重画下面的列表，输入时不会丢焦点 */
+  const search = el('input', { class: 'input sh-search', placeholder: '搜商品 / 分类 / 描述', value: q });
+  page.appendChild(el('div', { class: 'sh-tools' }, [search]));
+
+  const chipsBox = el('div', { class: 'wt-chips sh-chips' });
+  page.appendChild(chipsBox);
+
+  const listBox = el('div', { class: 'sh-list' });
+  page.appendChild(listBox);
+
+  const filtered = () => {
+    const k = q.trim().toLowerCase();
+    return goodsList().filter((g) =>
+      (cat === '全部' || g.cat === cat) &&
+      (!k ||
+        String(g.name || '').toLowerCase().includes(k) ||
+        String(g.desc || '').toLowerCase().includes(k) ||
+        String(g.cat || '').toLowerCase().includes(k) ||
+        (g.emoji || '') === k)
+    );
+  };
+
+  function repaintChips() {
+    chipsBox.innerHTML = '';
+    ['全部', ...allCats()].forEach((c) => chipsBox.appendChild(el('button', {
+      class: 'chip' + (cat === c ? ' on' : ''), type: 'button',
+      onclick: () => { cat = c; repaintChips(); repaintList(); }
+    }, [c])));
+  }
+
+  function repaintList() {
+    const list = filtered();
+    listBox.innerHTML = '';
+    const grid = el('div', { class: 'sh-grid' });
+    list.forEach((g) => {
+      const addBtn = el('button', {
+        class: 'sh-add', type: 'button', title: '加入购物车',
+        onclick: (e) => { e.stopPropagation(); addCart(g); }
+      }, ['🛒']);
+      /* 卡片结构：图 / 名字 / （价格 …… 分类 + 快速加购）
+         分类角标和购物车按钮排在一行的两端，不再叠在一起 */
+      grid.appendChild(el('div', { class: 'sh-tile', onclick: () => openGoods(g) }, [
+        tileVisual(g, 'sh-emoji'),
+        el('div', { class: 'sh-name', text: g.name }),
+        el('div', { class: 'sh-row' }, [
+          el('span', { class: 'sh-price', text: yuan(g.price) }),
+          el('span', { class: 'sh-row-r' }, [
+            el('span', { class: 'sh-cat', text: g.cat }),
+            addBtn
+          ])
+        ])
+      ]));
+    });
+    listBox.appendChild(grid);
+    if (!list.length) {
+      listBox.appendChild(el('div', { class: 'empty' }, [
+        el('div', { class: 'e-h', text: cat === '全部' && q ? '没找到相关商品' : '这个分类暂时没有商品' }),
+        el('div', { class: 'e-p', text: cat !== '全部' || q ? '换个分类或搜索词试试' : '点顶栏「上架」添加你的商品' })
+      ]));
+    }
+    listBox.appendChild(el('div', {
+      class: 'hint', style: { textAlign: 'center', marginTop: '12px' },
+      text: '点价格旁的 🛒 快速加购 · 顶栏「设置」管 TA 的送礼与心愿 · 首页「储藏室」收着所有礼物'
+    }));
+  }
+
+  search.addEventListener('input', () => { q = search.value; repaintList(); });
+  repaintChips();
+  repaintList();
+}
+
 /* ---------------- 购物车 ---------------- */
 function paintCart(page) {
   if (!cart.length) {
     page.appendChild(el('div', { class: 'empty' }, [
       iconImg('IC-MIO-039'),
       el('div', { class: 'e-h', text: '购物车是空的' }),
-      el('div', { class: 'e-p', text: '逛逛里点商品右下角的 🛒 加进来' })
+      el('div', { class: 'e-p', text: '逛逛里点商品价格旁的 🛒 加进来' })
     ]));
     return;
   }
@@ -225,7 +250,7 @@ async function addCart(g) {
   else cart.push({ goodsId: g.id, name: g.name, price: g.price, emoji: g.emoji, bg: g.bg, imgId: g.imgId || null, cat: g.cat, qty: 1 });
   await saveCart();
   toast('已加入购物车：' + g.name);
-  if (tab === 'cart') paint(); else paint();   // 刷新徽标
+  paint();   // 刷新徽标
 }
 
 async function changeQty(idx, delta) {
@@ -312,6 +337,130 @@ async function walletSheet() {
   sheet({ title: '钱包', node, actions: [{ label: '关闭', icon: 'IC-CHT-005', onSelect: () => {} }] });
 }
 
+/* ============================================================
+   商城设置：TA 的送礼 / 心愿单 / 自己购物概率 + 数据导入导出
+   ============================================================ */
+function setRow(title, desc, ...ctl) {
+  return el('div', { class: 'set-row' }, [
+    el('div', { class: 'set-main' }, [
+      el('div', { class: 'set-t', text: title }),
+      desc ? el('div', { class: 'set-s', text: desc }) : null
+    ]),
+    el('div', { class: 'set-ctl' }, ctl)
+  ]);
+}
+
+async function settingsSheet() {
+  const s = await getShopSet();
+  const ui = {};                       // 概率 key → { sync(v) }，上下限互相拖动时同步对面
+  const save = () => saveShopSet();
+
+  const toggleRow = (key, title, desc) => {
+    const sw = el('button', { class: 'sw' + (s[key] ? ' on' : ''), type: 'button' });
+    sw.addEventListener('click', () => {
+      sw.classList.toggle('on');
+      s[key] = sw.classList.contains('on');
+      save();
+    });
+    return setRow(title, desc, sw);
+  };
+
+  /* 概率行：滑杆 + 数字输入双向联动；下限拖过上限会把上限一起抬上去（反之亦然） */
+  const pctRow = (key, loKey, hiKey, title, desc) => {
+    const range = el('input', { class: 'set-range', type: 'range', min: '0', max: '100', step: '1' });
+    const num = el('input', { class: 'set-num set-pct-num', type: 'number', inputmode: 'numeric', min: '0', max: '100', step: '1' });
+    num.style.width = '54px';
+    range.value = String(s[key]);
+    num.value = String(s[key]);
+    const sync = (v) => { range.value = String(v); num.value = String(v); };
+    const commit = (v) => {
+      v = Math.min(100, Math.max(0, Math.round(Number(v) || 0)));
+      if (key === loKey && v > s[hiKey]) { s[hiKey] = v; ui[hiKey]?.sync(v); }
+      if (key === hiKey && v < s[loKey]) { s[loKey] = v; ui[loKey]?.sync(v); }
+      s[key] = v;
+      save();
+      return v;
+    };
+    range.addEventListener('input', () => { const v = Number(range.value); sync(v); s[key] = v; save(); });
+    range.addEventListener('change', () => sync(commit(range.value)));
+    num.addEventListener('focus', () => num.select());
+    num.addEventListener('input', () => {
+      const raw = num.value.trim();
+      if (raw === '') return;
+      const v = Number(raw);
+      if (!Number.isFinite(v)) return;
+      const c = Math.min(100, Math.max(0, Math.round(v)));
+      sync(c); s[key] = c; save();
+    });
+    num.addEventListener('blur', () => sync(commit(num.value)));
+    ui[key] = { sync };
+    return setRow(title, desc, range, num, el('span', { class: 'set-val set-pct-suf', text: '%' }));
+  };
+
+  const btnRow = (title, desc, label, fn) => setRow(title, desc,
+    el('button', { class: 'btn sm', type: 'button', onclick: fn }, [label]));
+
+  const node = el('div', { class: 'shop-set' }, [
+    section('他送我礼物', el('div', { class: 'set-card' }, [
+      toggleRow('taGiftEnabled', '让 TA 主动送我礼物', '打开后 TA 会隔三差五买件礼物送你，礼物进储藏室「他送给我的」，聊天里也会收到卡片'),
+      pctRow('taGiftPctMin', 'taGiftPctMin', 'taGiftPctMax', '送我礼物概率 · 下限', '每次机会都在「下限~上限」之间抽一个概率'),
+      pctRow('taGiftPctMax', 'taGiftPctMin', 'taGiftPctMax', '送我礼物概率 · 上限', '设为 0 即不会送')
+    ])),
+
+    section('心愿单', el('div', { class: 'set-card' }, [
+      toggleRow('wishEnabled', '心愿单功能', 'TA 可能买我心愿单里的礼物送我；TA 也会把想要的商品加进自己的心愿单'),
+      pctRow('wishBuyMineMin', 'wishBuyMineMin', 'wishBuyMineMax', 'TA 买下我心愿单商品的概率 · 下限', '命中后 TA 买下它送我，这份心愿自动从心愿单移除'),
+      pctRow('wishBuyMineMax', 'wishBuyMineMin', 'wishBuyMineMax', 'TA 买下我心愿单商品的概率 · 上限', ''),
+      pctRow('wishAddTaMin', 'wishAddTaMin', 'wishAddTaMax', 'TA 加进自己心愿单的概率 · 下限', 'TA 挑一件想要的商品记进「TA 的心愿单」'),
+      pctRow('wishAddTaMax', 'wishAddTaMin', 'wishAddTaMax', 'TA 加进自己心愿单的概率 · 上限', ''),
+      pctRow('wishChatMin', 'wishChatMin', 'wishChatMax', 'TA 的心愿发到聊天的概率 · 下限', 'TA 加心愿时按概率发一张卡片到聊天，你点【送 TA】即可买下送出'),
+      pctRow('wishChatMax', 'wishChatMin', 'wishChatMax', 'TA 的心愿发到聊天的概率 · 上限', '')
+    ])),
+
+    section('TA 自己的花销', el('div', { class: 'set-card' }, [
+      pctRow('taSelfGiftMin', 'taSelfGiftMin', 'taSelfGiftMax', 'TA 自己买礼物给自己的概率 · 下限', '命中后 TA 买一件给自己，进储藏室「他自己买的」，并在聊天里说一声'),
+      pctRow('taSelfGiftMax', 'taSelfGiftMin', 'taSelfGiftMax', 'TA 自己买礼物给自己的概率 · 上限', '上限设 0 = 关闭'),
+      pctRow('taHoardMin', 'taHoardMin', 'taHoardMax', 'TA 自己买（囤货）的概率 · 下限', '随机囤一件商品存着，不发消息'),
+      pctRow('taHoardMax', 'taHoardMin', 'taHoardMax', 'TA 自己买（囤货）的概率 · 上限', '上限设 0 = 关闭')
+    ])),
+
+    section('试一试', el('div', { class: 'set-card' }, [
+      btnRow('让 TA 现在试一次', '按当前打开的开关直接演示一回，不用干等', '试一次', async () => {
+        const msg = await shopDemo();
+        toast(msg || '先把上面的开关打开，我才知道演哪一出');
+      }),
+      el('div', { class: 'hint', style: { padding: '10px 0 14px' }, text: '每个行为每隔几分钟掷一次骰子，命中才发生；所有礼物都收在首页「储藏室」。' })
+    ])),
+
+    section('商品数据', el('div', { class: 'set-card' }, [
+      btnRow('导出商品数据', '我上架的商品 + 图片 + 被隐藏的内置商品，存成一个 JSON', '导出', async () => {
+        try {
+          const n = await exportShopData();
+          toast(n ? `已导出 ${n} 件自定义商品` : '没有自定义商品可导出');
+        } catch (e) { toast('导出失败：' + (e && e.message)); }
+      }),
+      btnRow('导入商品数据', '选择之前导出的 JSON，同 id 覆盖、其余追加，图片一起还原', '导入', async () => {
+        const f = await openFile({ accept: '.json,application/json' });
+        if (!f) return;
+        try {
+          const data = JSON.parse(await readText(f));
+          const r = await importShopData(data);
+          await loadState4();
+          tab = 'goods';
+          await paint();
+          toast(`导入完成：新增 ${r.added} 件 · 更新 ${r.updated} 件`);
+        } catch (e) { toast('导入失败：' + (e && e.message)); }
+      })
+    ]))
+  ]);
+
+  sheet({
+    title: '商城设置',
+    node,
+    actions: [{ label: '完成', icon: 'IC-MIO-021', onSelect: () => {} }]
+  });
+}
+
 /* ---------------- 上架（添加商品） ---------------- */
 function goodsForm(g) {   // 传 g=编辑，不传=新建
   let name = g?.name || '';
@@ -330,7 +479,7 @@ function goodsForm(g) {   // 传 g=编辑，不传=新建
   const catChips = el('div', { class: 'row', style: { gap: '8px', flexWrap: 'wrap' } });
   const paintCats = () => {
     catChips.innerHTML = '';
-    CATS.forEach((c) => catChips.appendChild(el('button', {
+    allCats().forEach((c) => catChips.appendChild(el('button', {
       class: 'chip' + (catV === c ? ' on' : ''), type: 'button',
       onclick: () => { catV = c; paintCats(); }
     }, [c])));
@@ -403,8 +552,9 @@ function goodsForm(g) {   // 传 g=编辑，不传=新建
 }
 
 /* ---------------- 商品详情 + 购买 ---------------- */
-function openGoods(g) {
+async function openGoods(g) {
   const mine = g.id.startsWith('cg_');
+  const inWish = await inWishMine(g.id);
   sheet({
     title: g.name,
     node: el('div', { class: 'sh-detail' }, [
@@ -417,7 +567,15 @@ function openGoods(g) {
     actions: [
       { label: '加入购物车', icon: 'IC-MIO-039', sub: '到「购物车」页签一起结算', onSelect: () => addCart(g) },
       { label: `直接购买（${yuan(g.price)}）`, icon: 'IC-MIO-039', onSelect: () => buy(g) },
-      { label: '买下来并送给 TA', icon: 'IC-MOD-005', sub: `作为礼物发到聊天，${state.role.name || 'TA'} 会回应`, onSelect: () => buyAndGift(g) },
+      { label: '买下来并送给 TA', icon: 'IC-MOD-005', sub: '可以带一句话给 TA（也可以不写）', onSelect: () => buyAndGift(g) },
+      {
+        label: inWish ? '移出我的心愿单' : '加入我的心愿单', icon: 'IC-MIO-020',
+        sub: inWish ? 'TA 就不会买它送你了' : 'TA 可能按概率买下它送给你',
+        onSelect: async () => {
+          const added = await toggleWishMine(g);
+          toast(added ? '已加入我的心愿单' : '已移出我的心愿单');
+        }
+      },
       { label: mine ? '编辑商品' : null, icon: 'IC-CRD-006', onSelect: mine ? () => goodsForm(g) : undefined },
       { label: '删除商品', icon: 'IC-CRD-007', danger: true, sub: mine ? '从商城移除我上架的这件' : '从列表隐藏这件内置商品', onSelect: () => removeGoods(g) }
     ].filter((a) => a.label)
@@ -471,18 +629,15 @@ async function buyAndGift(g) {
   const done = await buy(g);
   if (!done) return;
   const orders = await loadOrders();
-  await giftOrder(orders[0]);
+  await giftFlow(orders[0]);
 }
 
 /* ---------------- 订单 ---------------- */
 function orderCard(o) {
   const st = stateOf(o);
-  const visual = o.imgId
-    ? (() => { const img = el('img', { class: 'sh-order-emoji sh-img', alt: '' }); mediaURL(o.imgId).then((u) => { if (u) img.src = u; }); return img; })()
-    : el('div', { class: 'sh-order-emoji', style: { background: `linear-gradient(145deg,${o.bg?.[0] || '#eee'},${o.bg?.[1] || '#ddd'})` }, text: o.emoji });
   return el('div', { class: 'card sh-order' }, [
     el('div', { class: 'sh-order-top' }, [
-      visual,
+      tileVisual(o, 'sh-order-emoji'),
       el('div', { class: 'sh-order-main' }, [
         el('div', { class: 'sh-order-name', text: o.name }),
         el('div', { class: 'small muted', text: fmtDay(o.ts) + (o.items?.length > 1 ? ` · ${o.items.length} 种` : '') }),
@@ -490,10 +645,11 @@ function orderCard(o) {
       ]),
       el('span', { class: 'badge sh-state st-' + STATE_TONE[st.key], text: st.label })
     ]),
+    o.note ? el('div', { class: 'sh-order-note', text: '带的话：' + o.note }) : null,
     el('div', { class: 'sh-order-acts' }, [
       st.key === 'paid' ? el('span', { class: 'small muted', text: '商家拣货中…' }) : null,
       st.key === 'ship' ? el('span', { class: 'small muted', text: '包裹正在路上…' }) : null,
-      !o.gifted ? el('button', { class: 'btn sm', onclick: () => giftOrder(o) }, [iconImg('IC-MOD-005'), '送给 TA']) : null,
+      !o.gifted ? el('button', { class: 'btn sm', onclick: () => giftFlow(o) }, [iconImg('IC-MOD-005'), '送给 TA']) : null,
       st.key === 'done' && !o.gifted ? el('span', { class: 'small muted', text: '也可以留给自己哦' }) : null,
       el('button', { class: 'btn sm sh-del', onclick: () => removeOrder(o) }, [iconImg('IC-CRD-007'), '删除'])
     ])
@@ -507,14 +663,36 @@ async function removeOrder(o) {
   paint();
 }
 
-/* ---------------- 送给 TA：礼物消息进聊天，TA 会回应 ---------------- */
-async function giftOrder(o) {
+/* ---------------- 送给 TA：先问要不要带一句话 ---------------- */
+function giftFlow(o) {
+  const ta = state.role.name || 'TA';
+  const note = el('textarea', {
+    class: 'input', style: { minHeight: '78px', resize: 'vertical', lineHeight: '1.6' },
+    maxlength: '120', placeholder: `给 ${ta} 留一句话（可不写）`
+  });
+  note.value = o.note || '';
+  sheet({
+    title: '送礼物给 ' + ta,
+    node: el('div', {}, [
+      el('div', { class: 'hint', style: { padding: '4px 0 12px' }, text: `「${o.name}」· ${yuan(o.price)}，会以礼物卡片发到聊天` }),
+      el('div', { class: 'field' }, [el('label', { text: '带给他的话（选填）' }), note])
+    ]),
+    actions: [
+      { label: '写一句话送出', icon: 'IC-MOD-005', onSelect: () => giftOrder(o, note.value.trim()) },
+      { label: '不写了，直接送', icon: 'IC-MIO-005', onSelect: () => giftOrder(o, '') }
+    ]
+  });
+}
+
+/* 礼物消息进聊天，TA 会回应 */
+async function giftOrder(o, note = '') {
   const m = await sched.addMessage({
     role: 'me', type: 'gift',
-    giftName: o.name, emoji: o.emoji, bg: o.bg || ['#eee', '#ddd'], price: o.price
+    giftName: o.name, emoji: o.emoji, bg: o.bg || ['#eee', '#ddd'],
+    price: o.price, imgId: o.imgId || null, note: note || ''
   });
-  await put('orders', Object.assign({}, o, { gifted: true }));
-  toast(`已把「${o.name}」送给 ${state.role.name || 'TA'}`);
+  await put('orders', Object.assign({}, o, { gifted: true, note: note || '' }));
+  toast(note ? `已把「${o.name}」和你的话送给 ${state.role.name || 'TA'}` : `已把「${o.name}」送给 ${state.role.name || 'TA'}`);
   tab = 'orders';
   paint();
   await sched.replyTo(m);   // TA 慢慢想怎么回应，不挡订单状态
