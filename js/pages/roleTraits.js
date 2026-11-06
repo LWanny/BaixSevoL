@@ -2,6 +2,7 @@
 
 import { el } from '../util.js';
 import { fullPage } from '../shell.js';
+import { go } from '../router.js';
 import { state } from '../state.js';
 import { setupRoleUi, section } from './roleParts.js';
 
@@ -19,16 +20,14 @@ export default async function pageRoleTraits(view) {
   ])));
 
   wrap.appendChild(section('昵称 / 头像互动', el('div', { class: 'set-card' }, [
-    rowToggle('允许 TA 换我的昵称', '只在聊天里生效；通话、占卜等仍显示桌面昵称', 'taRenameEnabled', p.taRenameEnabled),
-    rowPct('换昵称概率', '每个间隔里真的换的概率', 'taRenamePct', p.taRenamePct),
-    rowSeg('换昵称方式', '直接换 / 先征求同意', 'taRenameMode', p.taRenameMode, [['direct', '直接换'], ['ask', '征求同意']]),
-    rowNum('换昵称间隔（最短）', '', 'taRenameGapMin', p.taRenameGapMin, 1, 9999, '分'),
-    rowNum('换昵称间隔（最长）', '', 'taRenameGapMax', p.taRenameGapMax, 1, 9999, '分'),
-    rowToggle('允许 TA 换我的头像', '只在聊天里生效', 'taChangeAvatarEnabled', p.taChangeAvatarEnabled),
-    rowPct('换头像概率', '', 'taChangeAvatarPct', p.taChangeAvatarPct),
-    rowSeg('换头像方式', '直接换 / 先征求同意', 'taChangeAvatarMode', p.taChangeAvatarMode, [['direct', '直接换'], ['ask', '征求同意']]),
-    rowNum('换头像间隔（最短）', '', 'taChangeAvatarGapMin', p.taChangeAvatarGapMin, 1, 9999, '分'),
-    rowNum('换头像间隔（最长）', '', 'taChangeAvatarGapMax', p.taChangeAvatarGapMax, 1, 9999, '分')
+    el('div', {
+      class: 'hint', style: { padding: '10px 12px 4px', margin: 0, lineHeight: '1.7' },
+      text: '四种换改（TA 换我的 / TA 换它自己的昵称与头像）的开关、概率区间、「每天最多几次」和导入入口，都搬到「昵称 / 头像库」页面了。'
+    }),
+    el('div', { class: 'set-row' }, [
+      el('div', { class: 'set-main' }, [el('div', { class: 'set-t', text: '打开昵称 / 头像库' })]),
+      el('div', { class: 'set-ctl' }, [el('button', { class: 'btn sm primary', onclick: () => go('/avatarLib') }, ['前往'])])
+    ])
   ])));
 
   wrap.appendChild(section('涂鸦', el('div', { class: 'set-card' }, [

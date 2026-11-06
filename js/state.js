@@ -102,17 +102,24 @@ export const DEFAULT_PARAMS = {
   inspirationPct: 15,            // 每次可拾取机会的概率 %
   inspirationUsePct: 25,         // TA 生成回复时直接用灵感句子的概率 %
 
-  /* ---- TA 主动换我的昵称 / 头像 ---- */
-  taRenameEnabled: true,
-  taRenamePct: 5,                // 每次间隔里真的换的概率 %
-  taRenameMode: 'ask',           // 'direct' 直接换 / 'ask' 先征求同意
-  taRenameGapMin: 30,            // 最短间隔 分钟
-  taRenameGapMax: 180,           // 最长间隔 分钟
-  taChangeAvatarEnabled: true,
-  taChangeAvatarPct: 25,
+  /* ---- 头像昵称库 · 四种换改（都只从你导入的库里抽，库空就不换） ---- */
+  swapDailyMax: 1,               // 每天最多换几次（四种行为合计，按天计数）
+  taRenameEnabled: true,         // TA 主动给我换昵称（用「我的昵称库」）
+  taRenamePctMin: 0,             // 概率下限 %
+  taRenamePctMax: 7,             // 概率上限 %
+  taRenameMode: 'ask',           // 'direct' 直接换 / 'ask' 弹窗征求我同意
+  taChangeAvatarEnabled: true,   // TA 主动给我换头像（用「我的头像库」）
+  taChangeAvatarPctMin: 0,
+  taChangeAvatarPctMax: 7,
   taChangeAvatarMode: 'ask',
-  taChangeAvatarGapMin: 60,
-  taChangeAvatarGapMax: 240,
+  taSelfNickEnabled: true,       // TA 给自己换昵称（用「TA 的昵称库」）
+  taSelfNickPctMin: 0,
+  taSelfNickPctMax: 7,
+  taSelfNickMode: 'direct',      // direct 直接换（发条通知） / ask 征求我同意
+  taSelfAvatarEnabled: true,     // TA 给自己换头像（用「TA 的头像库」）
+  taSelfAvatarPctMin: 0,
+  taSelfAvatarPctMax: 7,
+  taSelfAvatarMode: 'direct',
 
   /* ---- 涂鸦 ---- */
   taGraffitiEnabled: true,

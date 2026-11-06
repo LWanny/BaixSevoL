@@ -11,6 +11,8 @@ import { all, put, del } from '../store.js';
 import { saveMedia, mediaURL } from '../media.js';
 import { sheet, toast, confirmBox } from '../ui.js';
 import { state } from '../state.js';
+import { setupRoleUi, section } from './roleParts.js';
+import { swapDemo } from '../nicknameAI.js';
 
 const TABS = [
   { key: 'ta',   type: 'nickname', label: 'TA 的昵称库' },
@@ -44,9 +46,11 @@ function paint() {
   const page = el('div', { class: 'page tight', style: { paddingBottom: '28px' } });
 
   page.appendChild(el('div', { class: 'an-hint', style: { padding: '10px 14px 4px', color: 'var(--txt-mute)', fontSize: '11.5px', lineHeight: '1.7' } }, [
-    '这些是 TA 给我换昵称/头像时会用到的候选。',
+    'TA 的昵称库 / 头像库 → TA 给自己换时从这里抽；',
     el('br'),
-    '库是空的也没关系，TA 会从字卡库或已有图片里兜底。'
+    '我的昵称库 / 头像库 → TA 主动给你换时从这里抽。',
+    el('br'),
+    '这里空着 TA 就不会换（没有兜底），点下面按钮导入即可。'
   ]));
 
   const tabBar = el('div', { class: 'an-sec-h', style: { padding: '4px 14px 10px', marginTop: '0', overflowX: 'auto', display: 'flex', gap: '6px' } });
@@ -65,7 +69,7 @@ function paint() {
   const head = el('div', { class: 'row', style: { padding: '0 14px 6px' } });
   head.appendChild(el('span', { class: 'small muted', text: `共 ${list.length} 条` }));
   head.appendChild(el('span', { class: 'spacer' }));
-  head.appendChild(el('button', { class: 'btn sm primary', onclick: () => openAdd(tab) }, [tab.type === 'avatar' ? '导入头像' : '添加昵称']));
+  head.appendChild(el('button', { class: 'btn sm primary', onclick: () => openAdd(tab) }, [tab.type === 'avatar' ? '导入头像（可多选）' : '导入昵称（可多行）']));
   page.appendChild(head);
 
   const wrap = el('div', { class: 'card flush', style: { margin: '0 14px' } });
@@ -100,7 +104,72 @@ function paint() {
   ]));
   page.appendChild(curBox);
 
+  paintSettings(page);
+
   viewEl.appendChild(page);
+}
+
+/* ---------------- 换改规则：开关 / 概率区间 / 每天最多几次 ---------------- */
+function rowButton(name, desc, label, fn) {
+  return el('div', { class: 'set-row' }, [
+    el('div', { class: 'set-main' }, [
+      el('div', { class: 'set-t', text: name }),
+      desc ? el('div', { class: 'set-s', text: desc }) : null
+    ]),
+    el('div', { class: 'set-ctl' }, [el('button', { class: 'btn sm', onclick: fn }, [label])])
+  ]);
+}
+
+function paintSettings(page) {
+  const p = state.role.params;
+  const { rowPct, rowNum, rowToggle, rowSeg } = setupRoleUi(p);
+  const group = (title, sub, rows) => page.appendChild(section(title, el('div', { class: 'set-card' }, [
+    sub ? el('div', { class: 'hint', style: { padding: '8px 12px 0', margin: 0, lineHeight: '1.7' }, text: sub }) : null,
+    ...rows
+  ])));
+
+  group('每天最多几次', '四种行为合计的当日上限', [
+    rowNum('每天最多几次', '过了零点重新计数；默认 1', 'swapDailyMax', p.swapDailyMax, 1, 20, '次'),
+    el('div', {
+      class: 'hint', style: { padding: '10px 12px 12px', margin: 0 },
+      text: '每次机会先按「下限~上限」随机取一个概率掷骰子，命中且当天还有次数、对应库里有货，才会真的换。'
+    })
+  ]);
+
+  group('TA 主动给我换昵称', '用「我的昵称库」', [
+    rowToggle('开关', '关闭后 TA 不会再动你的聊天昵称', 'taRenameEnabled', p.taRenameEnabled),
+    rowPct('概率下限', '每次机会按「下限~上限」随机取一个概率', 'taRenamePctMin', p.taRenamePctMin),
+    rowPct('概率上限', '默认最高 7%', 'taRenamePctMax', p.taRenamePctMax),
+    rowSeg('方式', '直接换，还是先弹窗问你', 'taRenameMode', p.taRenameMode, [['direct', '直接换'], ['ask', '先问我']])
+  ]);
+
+  group('TA 主动给我换头像', '用「我的头像库」', [
+    rowToggle('开关', '关闭后 TA 不会再动你的聊天头像', 'taChangeAvatarEnabled', p.taChangeAvatarEnabled),
+    rowPct('概率下限', '', 'taChangeAvatarPctMin', p.taChangeAvatarPctMin),
+    rowPct('概率上限', '默认最高 7%', 'taChangeAvatarPctMax', p.taChangeAvatarPctMax),
+    rowSeg('方式', '直接换，还是先弹窗问你', 'taChangeAvatarMode', p.taChangeAvatarMode, [['direct', '直接换'], ['ask', '先问我']])
+  ]);
+
+  group('TA 给自己换昵称', '用「TA 的昵称库」', [
+    rowToggle('开关', '关闭后 TA 永远用现在这个昵称', 'taSelfNickEnabled', p.taSelfNickEnabled),
+    rowPct('概率下限', '', 'taSelfNickPctMin', p.taSelfNickPctMin),
+    rowPct('概率上限', '默认最高 7%', 'taSelfNickPctMax', p.taSelfNickPctMax),
+    rowSeg('方式', '直接换（发条通知），还是征求你同意', 'taSelfNickMode', p.taSelfNickMode, [['direct', '直接换'], ['ask', '先问我']])
+  ]);
+
+  group('TA 给自己换头像', '用「TA 的头像库」', [
+    rowToggle('开关', '关闭后 TA 永远用现在这张头像', 'taSelfAvatarEnabled', p.taSelfAvatarEnabled),
+    rowPct('概率下限', '', 'taSelfAvatarPctMin', p.taSelfAvatarPctMin),
+    rowPct('概率上限', '默认最高 7%', 'taSelfAvatarPctMax', p.taSelfAvatarPctMax),
+    rowSeg('方式', '直接换（发条通知），还是征求你同意', 'taSelfAvatarMode', p.taSelfAvatarMode, [['direct', '直接换'], ['ask', '先问我']])
+  ]);
+
+  group('试一试', '不用干等下一次掷骰子', [
+    rowButton('让 TA 现在试一次', '不掷概率、不占当天次数，跑一个已打开的行为', '试一次', async () => {
+      const msg = await swapDemo();
+      toast(msg || '先把上面任意一个开关打开');
+    })
+  ]);
 }
 
 async function resetChatMe() {
@@ -147,18 +216,30 @@ function openAdd(tab) {
 }
 
 function openAddNick(role) {
-  const input = el('input', { class: 'input', placeholder: '昵称（不超过 8 字）', maxlength: 8 });
+  const input = el('textarea', {
+    class: 'input', style: { minHeight: '96px', lineHeight: '1.7', resize: 'vertical' },
+    placeholder: '每行一个昵称（每个不超过 8 字，最多一次 50 条）'
+  });
   const ctl = sheet({
-    title: role === 'ta' ? '添加一个昵称到 TA 昵称库' : '添加一个昵称到我的昵称库',
-    node: el('div', { style: { padding: '4px 0 10px' } }, [input]),
+    title: role === 'ta' ? '导入昵称到 TA 昵称库' : '导入昵称到我的昵称库',
+    node: el('div', { style: { padding: '4px 0 10px' } }, [
+      input,
+      el('div', { class: 'hint', text: '粘贴一串昵称，用换行 / 逗号 / 顿号隔开都行。' })
+    ]),
     actions: [{
-      label: '添加', icon: 'IC-MIO-021',
+      label: '导入', icon: 'IC-MIO-021',
       onSelect: async () => {
-        const txt = (input.value || '').trim();
-        if (!txt) return toast('写个昵称吧');
-        await put('nicknamePool', { id: uid(), role, name: txt, ts: Date.now() });
+        const lines = String(input.value || '')
+          .split(/[\n,，、;；]+/)
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .slice(0, 50);
+        if (!lines.length) return toast('写个昵称吧');
+        for (const t of lines) {
+          await put('nicknamePool', { id: uid(), role, name: t.slice(0, 8), ts: Date.now() });
+        }
         ctl.close(); await reload(); paint();
-        toast('已添加');
+        toast(`已导入 ${lines.length} 条昵称`);
       }
     }]
   });

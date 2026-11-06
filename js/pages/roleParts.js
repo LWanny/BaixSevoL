@@ -19,6 +19,11 @@ export const PAIR_MAX = {
   proactivePctMin: 'proactivePctMax',
   proactiveTriggerPctMin: 'proactiveTriggerPctMax',
   taAskPctMin: 'taAskPctMax',
+  /* 头像昵称库 · 四种换改的概率区间 */
+  taRenamePctMin: 'taRenamePctMax',
+  taChangeAvatarPctMin: 'taChangeAvatarPctMax',
+  taSelfNickPctMin: 'taSelfNickPctMax',
+  taSelfAvatarPctMin: 'taSelfAvatarPctMax',
   typingMinMin: 'typingMaxMin',
   letterReplyPctMin: 'letterReplyPctMax',
   letterReplyDelayMin: 'letterReplyDelayMax',
@@ -28,8 +33,6 @@ export const PAIR_MAX = {
   commentCardMin: 'commentCardMax',
   commentDelayMinSec: 'commentDelayMaxMin',
   replyDelayMinSec: 'replyDelayMaxMin',
-  taRenameGapMin: 'taRenameGapMax',
-  taChangeAvatarGapMin: 'taChangeAvatarGapMax',
   taGraffitiGapMin: 'taGraffitiGapMax'
 };
 const PAIR_MIN = {};

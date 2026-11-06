@@ -17,7 +17,7 @@ import { buyWishForTa } from '../shopcore.js';
 import { state as S } from '../state.js';
 import { createFreeCanvas, GRAFITTI_W, GRAFITTI_H } from '../graffiti.js';
 import { bgAdjust, openHsvSheet } from './skin.js';   // 聊天装扮面板复用（原装扮页功能）
-import { applyTaRename, applyTaAvatar } from '../nicknameAI.js';
+import { applyTaRename, applyTaAvatar, applyTaSelfRename, applyTaSelfAvatar } from '../nicknameAI.js';
 import { makeZip, readZip } from '../zip.js';
 
 let cleanups = [];
@@ -378,6 +378,15 @@ export default async function pageChat(view) {
                 await applyTaAvatar(m.choice.newChatAvatarMediaId);
                 rerenderAll();
                 refreshMyAvatars();
+              }
+              /* TA 征求同意：它给自己换昵称 / 换头像 */
+              if (m.choice?.newTaNickname) {
+                await applyTaSelfRename(m.choice.newTaNickname);
+                rerenderAll();
+              }
+              if (m.choice?.newTaAvatarMediaId) {
+                await applyTaSelfAvatar(m.choice.newTaAvatarMediaId);
+                rerenderAll();
               }
             }
           }
