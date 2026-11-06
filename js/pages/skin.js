@@ -3,7 +3,7 @@
 import { el, openFile, compressImage } from '../util.js';
 import { iconImg } from '../icons.js';
 import { fullPage } from '../shell.js';
-import { state, saveSkin, applySkin } from '../state.js';
+import { state, saveSkin, applySkin, pageBgFor } from '../state.js';
 import { saveMedia, mediaURL, delMedia } from '../media.js';
 import { toast, confirmBox, sheet } from '../ui.js';
 
@@ -37,6 +37,17 @@ function build(view) {
     bgAdjust('globalBgX', 'globalBgY', 'globalBgZoom', s.globalBgImageId, 'globalBgImgOp')
   ])));
 
+  /* ---- 页面背景：每个软件单独设置，没设置的跟随全局 ---- */
+  wrap.appendChild(section('页面背景', el('div', { class: 'card' }, [
+    el('div', { class: 'small muted', style: { margin: '0 0 8px' }, text: '给某个软件单独设背景图 / 颜色 / 透明度；带色的表示已单独设置，没设置的跟着上面「整体背景」走。' }),
+    el('div', { class: 'row wrap', style: { gap: '6px' } }, PAGE_BG_LIST.map(([p, label]) =>
+      el('span', {
+        class: 'chip' + ((s.pageBgs && s.pageBgs[p]) ? ' on' : ''),
+        text: label, title: p,
+        onclick: () => openPageBg(p, label)
+      })))
+  ])));
+
   /* ---- 聊天相关（壁纸 / 气泡 / 头像）已搬进「消息 → 更多 → 聊天装扮」 ---- */
 
   /* ---- 重置 ---- */
@@ -51,6 +62,7 @@ function build(view) {
         bubbleTa: '#ffffff', bubbleTaTxt: '#16181c', bubbleRadius: 15,
         avatarShape: 'rounded', bubbleCss: '', avatarMeId: keepMe,
         globalBgX: 50, globalBgY: 50, globalBgZoom: 100, globalBgImgOp: 100,
+        pageBgs: {},
         chatWallX: 50, chatWallY: 50, chatWallZoom: 100
       });
       await saveSkin(); await applySkin();
@@ -62,16 +74,18 @@ function build(view) {
   view.appendChild(wrap);
 }
 
-/* 背景图 / 壁纸的位置、缩放与透明度（50 = 居中，仅在有图时生效） */
-export function bgAdjust(xKey, yKey, zoomKey, hasImage, opKey = null) {
-  const s = state.skin;
+/* 背景图 / 壁纸的位置、缩放与透明度（50 = 居中，仅在有图时生效）
+   src：要改的对象（默认 state.skin，每页背景编辑传草稿）；onChange：改完怎么保存（默认存整包装扮） */
+export function bgAdjust(xKey, yKey, zoomKey, hasImage, opKey = null, src = null, onChange = null) {
+  const s = src || state.skin;
   const row = (label, key, min, max) => {
     const val = el('span', { class: 'pval', text: `${s[key]}%` });
     const r = el('input', { type: 'range', min: String(min), max: String(max), value: String(s[key]) });
     r.addEventListener('input', async () => {
       s[key] = Number(r.value);
       val.textContent = r.value + '%';
-      await saveSkin(); await applySkin();
+      if (onChange) await onChange();
+      else { await saveSkin(); await applySkin(); }
     });
     return el('div', { class: 'param' }, [
       el('div', { class: 'pname' }, [el('span', { text: label })]),
@@ -86,7 +100,7 @@ export function bgAdjust(xKey, yKey, zoomKey, hasImage, opKey = null) {
   ];
   if (opKey) rows.push(row('透明度（100 = 原样，越小越淡）', opKey, 0, 100));
   return el('div', {}, [
-    hasImage ? null : el('div', { class: 'hint', text: '上传图片后下面几项才生效。' }),
+    hasImage ? null : el('div', { class: 'small muted', style: { margin: '0 0 6px' }, text: '上传图片后下面几项才生效。' }),
     ...rows
   ]);
 }
@@ -205,6 +219,106 @@ function textFor(color) {
 function refreshChips(container, active) {
   if (!container) return;
   Array.from(container.querySelectorAll('.chip')).forEach((c) => c.classList.toggle('on', c.title === active || c.dataset.val === active));
+}
+
+/* ---------------- 页面背景：每个软件可单独设置（不设置就跟随全局） ---------------- */
+const PAGE_BG_LIST = [
+  ['/mailbox', '信箱'], ['/moments', '朋友圈'], ['/cards', '字卡库'], ['/divine', '占卜'],
+  ['/decks', '牌面图鉴'], ['/music', '音乐'], ['/shop', '商城'], ['/ledger', '记账'],
+  ['/ledger-stats', '记账统计'], ['/games', '游戏厅'], ['/favorites', '收藏'], ['/anniversary', '纪念日'],
+  ['/books', '书架'], ['/watch', '观影'], ['/xhs', '小粉书'], ['/pdd', '拼夕夕'],
+  ['/album', '相册'], ['/memo', '备忘录'], ['/fate', '抉择'], ['/period', '经期记录'],
+  ['/pomodoro', '番茄钟'], ['/tong', '通牌'], ['/echo', '回声'], ['/inspiration', '灵感拾取'],
+  ['/compose', '写信']
+];
+
+/** 打开某个软件的背景编辑面板（改完立刻按该页背景预览） */
+function openPageBg(path, label) {
+  const sk = state.skin;
+  let dirty = false;
+  const draft = { ...pageBgFor(path) };
+
+  const commit = async () => {
+    dirty = true;
+    sk.pageBgs = sk.pageBgs || {};
+    sk.pageBgs[path] = {
+      imgId: draft.imgId || null,
+      color: draft.color || '',
+      op: Number(draft.op), zoom: Number(draft.zoom),
+      x: Number(draft.x), y: Number(draft.y)
+    };
+    await saveSkin();
+    await applySkin(path);      // 预览目标页的背景
+  };
+
+  /* 图片：只换绑定，不删媒体（这张图可能和全局 / 别的页面共用） */
+  const imgBox = el('div', { class: 'field' }, [el('label', { text: '背景图片' })]);
+  const preview = el('div', { style: { marginBottom: '8px', borderRadius: '10px', overflow: 'hidden', background: '#f0f0ee' } });
+  imgBox.appendChild(preview);
+  const pickBtn = el('button', { class: 'btn sm', onclick: async () => {
+    const f = await openFile({ accept: 'image/*' });
+    if (!f) return;
+    const { blob, w, h } = await compressImage(f, 1600, 0.86);
+    const id = await saveMedia(blob, { type: 'image', w, h, source: 'pagebg' });
+    draft.imgId = id;
+    paint();
+    await commit();
+    toast('已应用');
+  } }, [draft.imgId ? '更换' : '选择图片']);
+  const rmBtn = el('button', { class: 'btn sm', onclick: async () => {
+    draft.imgId = null;
+    paint();
+    await commit();
+    toast('已移除图片');
+  } }, ['移除图片']);
+  imgBox.appendChild(el('div', { class: 'row', style: { gap: '8px' } }, [pickBtn, rmBtn]));
+  imgBox.appendChild(el('div', { class: 'hint', text: '不选图就只用下面的颜色。「移除图片」只是解除本页绑定，不会删掉共用的图片。' }));
+
+  const paint = () => {
+    preview.innerHTML = '';
+    const has = !!draft.imgId;
+    preview.style.display = has ? 'block' : 'none';
+    preview.style.height = has ? '120px' : '0';
+    pickBtn.textContent = has ? '更换' : '选择图片';
+    rmBtn.style.display = has ? '' : 'none';
+    if (has) mediaURL(draft.imgId).then((u) => { if (u && draft.imgId) preview.appendChild(el('img', { src: u, style: { width: '100%', height: '100%', objectFit: 'cover' } })); });
+  };
+  paint();
+
+  /* 颜色 */
+  const colorInput = el('input', { class: 'input', type: 'color', value: draft.color || '#f7f7f6', oninput: async (e) => { draft.color = e.target.value; await commit(); } });
+  const chips = el('div', { class: 'row wrap', style: { gap: '8px', marginBottom: '8px' } }, BG_PRESETS.map((c) =>
+    el('span', {
+      class: 'chip' + ((draft.color || '') === c ? ' on' : ''), style: { background: c, width: '30px', height: '22px' }, title: c, dataset: { val: c },
+      onclick: async (e) => { draft.color = c; colorInput.value = c; await commit(); refreshChips(e.target.parentElement, c); }
+    })));
+  const colorField = el('div', { class: 'field' }, [el('label', { text: '背景颜色' }), chips, colorInput]);
+
+  sheet({
+    title: '页面背景 · ' + label,
+    node: el('div', {}, [
+      el('div', { class: 'small muted', style: { margin: '0 0 8px' }, text: '只改「' + label + '」这一个页面，改完立刻预览，其它页面不受影响。' }),
+      imgBox,
+      colorField,
+      bgAdjust('x', 'y', 'zoom', !!draft.imgId, 'op', draft, commit)
+    ]),
+    actions: [{
+      label: '恢复跟随全局背景',
+      sub: '取消这个页面的单独设置',
+      danger: true,
+      onSelect: async () => {
+        dirty = true;
+        delete (sk.pageBgs || {})[path];
+        await saveSkin();
+        await applySkin();
+        toast('已恢复跟随全局');
+      }
+    }],
+    onClose: () => {
+      applySkin().catch(() => {});   // 关掉后回到装扮页自己的背景
+      if (dirty) renderCurrent();    // 刷新「已单独设置」的标记
+    }
+  });
 }
 
 function imagePicker(label, desc, mediaId, onSet, kind) {

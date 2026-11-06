@@ -68,6 +68,8 @@ async function boot() {
   await loadState();
   try { await loadIcons(); } catch (e) { console.warn('图标库加载失败', e); }
   await applySkin();
+  // 切页面时重算背景（每条路由可以有自己的背景设置）
+  window.addEventListener('hashchange', () => { applySkin().catch(() => {}); });
 
   register({
     '/': pageHome,

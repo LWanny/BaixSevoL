@@ -222,6 +222,7 @@ export const DEFAULT_SKIN = {
   bubbleCss: '',                 // 自定义气泡 CSS（声明或选择器两种写法）
   /* 图片位置与缩放：50 = 居中，100 = 原始铺满（仅对上传的图生效） */
   globalBgX: 50, globalBgY: 50, globalBgZoom: 100, globalBgImgOp: 100,
+  pageBgs: {},                     // 每页单独背景：{ '/music': {imgId,color,op,zoom,x,y} }
   chatWallX: 50, chatWallY: 50, chatWallZoom: 100,
   avatarMeId: null,
   avatarTaId: null
@@ -373,11 +374,39 @@ export const saveSettings = () => kvSet('settings', state.settings);
 export const saveSkin = () => kvSet('skin', state.skin);
 export const saveWidgets = () => kvSet('widgets', state.widgets);
 
-/** 把装扮写进 CSS 变量 */
-export async function applySkin() {
+/* ---------- 背景（全局默认 + 每条路由可单独覆盖） ---------- */
+const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
+
+function currentPath() {
+  const h = location.hash.replace(/^#/, '').split('?')[0];
+  return h || '/';
+}
+
+/** 某条路由生效的背景：该页有单独设置就用它，否则跟随全局 */
+export function pageBgFor(path) {
+  const s = state.skin;
+  const p = (s.pageBgs || {})[path];
+  if (!p) {
+    return {
+      imgId: s.globalBgImageId || null,
+      color: s.globalBgColor || '#f7f7f6',
+      op: num(s.globalBgImgOp, 100), zoom: num(s.globalBgZoom, 100),
+      x: num(s.globalBgX, 50), y: num(s.globalBgY, 50)
+    };
+  }
+  return {
+    imgId: p.imgId || null,
+    color: p.color || s.globalBgColor || '#f7f7f6',
+    op: num(p.op, 100), zoom: num(p.zoom, 100),
+    x: num(p.x, 50), y: num(p.y, 50)
+  };
+}
+
+export async function applySkin(previewPath) {
   const s = state.skin;
   const r = document.documentElement.style;
-  r.setProperty('--global-bg-color', s.globalBgColor || '#f7f7f6');
+  const b = pageBgFor(typeof previewPath === 'string' ? previewPath : currentPath());
+  r.setProperty('--global-bg-color', b.color);
   r.setProperty('--bubble-me', s.bubbleMe || DEFAULT_SKIN.bubbleMe);
   r.setProperty('--bubble-me-txt', s.bubbleMeTxt || '#fff');
   r.setProperty('--bubble-ta', s.bubbleTa || DEFAULT_SKIN.bubbleTa);
@@ -385,20 +414,19 @@ export async function applySkin() {
   r.setProperty('--bubble-radius', (s.bubbleRadius || 15) + 'px');
   r.setProperty('--avatar-radius', s.avatarShape === 'circle' ? '50%' : '9px');
 
-  const bgUrl = s.globalBgImageId ? await mediaURL(s.globalBgImageId) : '';
+  const bgUrl = b.imgId ? await mediaURL(b.imgId) : '';
   r.setProperty('--global-bg-image', bgUrl ? `url("${bgUrl}")` : 'none');
-  r.setProperty('--global-bg-size', bgUrl ? imgSize(s.globalBgZoom) : 'cover');
-  r.setProperty('--global-bg-pos', bgUrl ? imgPos(s.globalBgX, s.globalBgY) : 'center');
+  r.setProperty('--global-bg-size', bgUrl ? imgSize(b.zoom) : 'cover');
+  r.setProperty('--global-bg-pos', bgUrl ? imgPos(b.x, b.y) : 'center');
   /* 背景图透明度：100 = 原样，越小越淡、混进背景色（0 = 等于没图） */
-  const op = Number(s.globalBgImgOp);
-  r.setProperty('--global-bg-img-op', String(Math.min(1, Math.max(0, (Number.isFinite(op) ? op : 100) / 100))));
+  r.setProperty('--global-bg-img-op', String(Math.min(1, Math.max(0, num(b.op, 100) / 100))));
 
   const wpUrl = s.chatWallpaperId ? await mediaURL(s.chatWallpaperId) : '';
   r.setProperty('--chat-wallpaper', wpUrl ? `url("${wpUrl}")` : 'none');
   r.setProperty('--chat-wallpaper-size', wpUrl ? imgSize(s.chatWallZoom) : 'cover');
   r.setProperty('--chat-wallpaper-pos', wpUrl ? imgPos(s.chatWallX, s.chatWallY) : 'center');
 
-  document.getElementById('app').style.backgroundColor = s.globalBgColor || '#f7f7f6';
+  document.getElementById('app').style.backgroundColor = b.color;
 
   applyBubbleCss(s.bubbleCss);
 }
