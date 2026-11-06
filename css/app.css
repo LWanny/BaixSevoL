@@ -73,6 +73,11 @@ a{color:var(--accent-2);text-decoration:none}
   background-repeat:no-repeat;
   overflow:hidden;
 }
+/* 背景图上压一层半透明的「全局背景色」：图看得见，字也读得清（没图时透明） */
+#app::before{
+  content:'';position:absolute;inset:0;z-index:0;
+  background:var(--global-bg-veil,transparent);pointer-events:none;
+}
 #topbar{
   flex:0 0 auto;height:calc(var(--topbar-h) + var(--safe-t));padding-top:var(--safe-t);
   display:flex;align-items:center;gap:8px;padding-left:8px;padding-right:8px;
@@ -80,10 +85,11 @@ a{color:var(--accent-2);text-decoration:none}
   border-bottom:1px solid var(--line-soft);position:relative;z-index:20;
 }
 #topbar.hidden{display:none}
-/* ---------- 横向滑动容器 ---------- */
+/* ---------- 横向滑动容器 ----------
+   这里不能画不透明背景，否则会把 #app 的全局背景图整块盖住（只有底部露出一条） */
 #view{
   flex:1 1 auto;overflow:hidden;position:relative;
-  background:var(--global-bg-color);
+  background:transparent;
 }
 #view.full{padding-bottom:0}
 .swipe-track{

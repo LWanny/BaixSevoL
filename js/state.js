@@ -389,6 +389,8 @@ export async function applySkin() {
   r.setProperty('--global-bg-image', bgUrl ? `url("${bgUrl}")` : 'none');
   r.setProperty('--global-bg-size', bgUrl ? imgSize(s.globalBgZoom) : 'cover');
   r.setProperty('--global-bg-pos', bgUrl ? imgPos(s.globalBgX, s.globalBgY) : 'center');
+  /* 有背景图时压一层半透明的全局背景色，压住图但不挡死（没图就不压，露出 #app 的纯色） */
+  r.setProperty('--global-bg-veil', bgUrl ? veilColor(s.globalBgColor || '#f7f7f6') : 'transparent');
 
   const wpUrl = s.chatWallpaperId ? await mediaURL(s.chatWallpaperId) : '';
   r.setProperty('--chat-wallpaper', wpUrl ? `url("${wpUrl}")` : 'none');
@@ -411,6 +413,14 @@ function imgPos(x, y) {
   const nx = Number.isFinite(Number(x)) ? Number(x) : 50;
   const ny = Number.isFinite(Number(y)) ? Number(y) : 50;
   return nx === 50 && ny === 50 ? 'center' : `${nx}% ${ny}%`;
+}
+
+/* 背景图上的蒙版色：把「全局背景色」变半透明（#app::before 用） */
+function veilColor(hex) {
+  const m = /^#([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+  if (!m) return 'transparent';
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},.45)`;
 }
 
 /* 自定义气泡 CSS：支持两种写法
