@@ -1789,6 +1789,19 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .pd-legend .lg.on{background:var(--accent)}
 .pd-legend .lg.pre{border:1px dashed var(--txt-mute);background:none}
 .pd-legend .lg.fertile{background:rgba(47,158,106,.55)}
+/* 经期 · 四项统计 + 近半年趋势 */
+.pd-stats{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line-soft);border:1px solid var(--line-soft);border-radius:16px;overflow:hidden;margin-top:10px}
+.pd-stat{background:var(--bg);padding:12px 14px}
+.pd-stat .k{font-size:11.5px;color:var(--txt-mute)}
+.pd-stat .v{font-size:18px;font-weight:700;margin-top:3px;letter-spacing:-.01em}
+.pd-trend{padding:14px 14px 10px}
+.pd-tr-row{display:flex;align-items:center;gap:10px;margin-bottom:7px}
+.pd-tr-m{width:36px;flex:none;font-size:11px;color:var(--txt-mute);text-align:right}
+.pd-tr{position:relative;flex:1;height:13px;border-radius:7px;background:var(--bg-sunken);overflow:hidden}
+.pd-tr i{position:absolute;top:0;bottom:0}
+.pd-tr i.real{background:var(--accent);opacity:.9;border-radius:7px}
+.pd-tr i.pre{background:var(--accent);opacity:.28;border-radius:7px}
+.pd-legend .lg.soft{background:var(--accent);opacity:.4}
 
 /* ---------- 记账 ---------- */
 .ld-hero{
