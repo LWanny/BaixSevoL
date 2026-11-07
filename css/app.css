@@ -737,10 +737,11 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .spread-row{display:flex;align-items:center;justify-content:center;gap:12px}
 .dcard.blank{visibility:hidden;pointer-events:none}
 .dcard{
-  width:84px;height:132px;border-radius:11px;cursor:pointer;position:relative;
+  width:84px;height:142px;border-radius:11px;cursor:pointer;position:relative;
   background:linear-gradient(150deg,#ffffff,#ececea);border:1px solid #dcdcd9;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
   transition:transform .35s,box-shadow .35s;transform-style:preserve-3d;
+  box-shadow:0 6px 16px rgba(70,55,25,.10);
 }
 .dcard:active{transform:translateY(-4px)}
 .dcard.flipped{background:linear-gradient(150deg,#ffffff,#f4f4f2);border-color:#c9c9c6}
@@ -751,31 +752,41 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .dcard .back-lbl{font-size:11px;color:var(--txt-mute)}
 .dcard .ico,.dcard .ico-img{width:28px;height:28px;color:#8a8f98}
 .dcard.flipped .ico{color:currentColor}
-/* 牌背 · 自定义上传：整张铺图 + 底部半透明提示 */
+/* 牌背 · 图片：整张铺图（图上不压提示，提示在下方操作条） */
 .dcard .dback{position:absolute;inset:0;border-radius:10px;overflow:hidden;background:#2b2540;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:8px}
 .dcard .dback .dback-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .dcard .dback .back-lbl{position:relative;z-index:1;color:rgba(255,255,255,.92);font-size:11px;background:rgba(0,0,0,.38);padding:2px 9px;border-radius:10px;line-height:1.5}
-/* 自定义牌面：翻牌时整张显示自己的图，底部压一条牌名 */
+/* 自定义牌面：翻牌时整张显示自己的图（牌名显示在牌下方） */
 .dcard.has-img{padding:0;overflow:hidden}
 .dcard.has-img .dface-img{position:absolute;top:0;right:0;bottom:0;left:0}
 .dcard-img{display:block;width:100%;height:100%;object-fit:cover}
-.dcard-cap{
-  position:absolute;left:0;right:0;bottom:0;padding:4px 5px;text-align:center;
-  background:rgba(255,255,255,.84);font-size:10.5px;font-weight:600;line-height:1.3;
-}
-.dcard-cap .cap-ori{color:var(--txt-mute);font-weight:400}
 .dcard.rev .dcard-img{transform:rotate(180deg)}
-/* board 翻开卡右上角的小铅笔（编辑） */
+/* 牌面上不放任何遮挡：牌名 / 正反 / 编辑入口都在牌的下方（.dcell-meta） */
 .dface-root{width:100%;height:100%;position:relative}
 .dface-body{width:100%;height:100%;display:flex;align-items:center;justify-content:center}
-.dface-edit{
-  position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;
-  border:none;background:rgba(255,255,255,.85);color:var(--txt-mute);
-  display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;
-  opacity:0;transition:opacity .2s;box-shadow:0 1px 3px rgba(0,0,0,.1);
-}
-.dcard:hover .dface-edit,.dface-edit:focus{opacity:1}
-.dface-edit svg{width:12px;height:12px}
+/* 每张牌 = 牌 + 下方说明：金色序号 / 位置名 / 翻开后「牌名 · 正反」（参考逐牌释义版式） */
+.dcell{display:flex;flex-direction:column;align-items:center;gap:6px;width:84px}
+.dcell.blank{visibility:hidden;pointer-events:none}
+.dcell-meta{display:flex;flex-direction:column;align-items:center;gap:1px;width:100%}
+.dm-no{font-size:10px;font-weight:700;letter-spacing:2px;color:#b08d3e}
+.dm-pos{font-size:12.5px;font-weight:600;color:var(--txt);line-height:1.4;text-align:center}
+.dm-name{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px;min-height:16px;font-size:11px;color:var(--txt-mute);line-height:1.4;text-align:center}
+.dm-edit{width:20px;height:20px;border:none;border-radius:50%;background:transparent;color:var(--txt-mute);display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;opacity:.6}
+.dm-edit:hover{opacity:1;background:var(--line-soft)}
+.dm-edit svg{width:12px;height:12px}
+/* 解读 · 逐牌释义：左侧小牌图 + 右侧「01 位置 · 牌名 · 正反」+ 关键词 + 释义 */
+.rd-entry{display:flex;gap:10px;padding-bottom:12px;margin-bottom:12px;border-bottom:1px dashed var(--line-soft)}
+.rd-entry.last{border-bottom:none;padding-bottom:0;margin-bottom:4px}
+.rd-thumb{flex:none;width:44px;height:74px;border-radius:6px;overflow:hidden;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
+.rd-img{display:block;width:100%;height:100%;object-fit:cover}
+.rd-ph{font-size:11px;color:var(--txt-mute)}
+.rd-main{flex:1;min-width:0}
+.rd-head{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px;margin-bottom:4px}
+.rd-no{font-size:11px;font-weight:700;color:#b08d3e;letter-spacing:1px}
+.rd-pos{font-size:13.5px;font-weight:600;color:var(--txt)}
+.rd-dot{color:var(--txt-mute)}
+.rd-name{font-size:12.5px;color:#b08d3e}
+.rd-name.rev{color:var(--warn)}
 /* 牌阵格子编辑器 */
 .sf-form{padding-bottom:8px}
 .sf-grid-wrap{margin-top:4px}

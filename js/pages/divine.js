@@ -753,14 +753,16 @@ function renderBoard(wrap) {
   rows.forEach((r) => {
     const line = el('div', { class: 'spread-row' });
     r.forEach((v) => {
-      if (v == null || v > sess.draws.length) { line.appendChild(el('div', { class: 'dcard blank' })); return; }
+      if (v == null || v > sess.draws.length) { line.appendChild(el('div', { class: 'dcell blank' })); return; }
       const i = v - 1;
       const d = sess.draws[i];
-      line.appendChild(el('div', {
+      const card = el('div', {
         class: 'dcard' + (sess.revealed[i] ? ' flipped' : '') + (d.reversed ? ' rev' : '') + (hasFace(d) ? ' has-img' : ''),
         'data-i': String(i),
         onclick: (e) => flipCard(i, e.currentTarget)
-      }, [sess.revealed[i] ? cardFace(d, i) : cardBack()]));
+      }, [sess.revealed[i] ? cardFace(d, i) : cardBack()]);
+      // 牌 = 纯牌面，序号 / 位置 / 牌名 · 正反显示在牌的下方，不压在图上
+      line.appendChild(el('div', { class: 'dcell' }, [card, cellMeta(i)]));
     });
     board.appendChild(line);
   });
@@ -770,7 +772,7 @@ function renderBoard(wrap) {
 
   if (!sess.revealed.every(Boolean)) {
     wrap.appendChild(el('div', { class: 'flip-bar' }, [
-      el('div', { class: 'small muted', text: '逐张轻触翻牌' }),
+      el('div', { class: 'small muted', text: '点击牌背，依次翻开所有牌' }),
       el('button', { class: 'btn', onclick: flipAll }, [iconImg('IC-DIV-006'), '一键全翻'])
     ]));
   }
@@ -785,22 +787,29 @@ function flipAll() {
   toast('牌面已全部翻开');
 }
 
+/** 牌下方的说明：序号 + 位置，翻开后追加「牌名 · 正位/逆位」（牌面上不放任何遮挡） */
+function cellMeta(i) {
+  const d = sess.draws[i];
+  const shown = sess.revealed[i];
+  return el('div', { class: 'dcell-meta' }, [
+    el('div', { class: 'dm-no', text: String(i + 1).padStart(2, '0') }),
+    el('div', { class: 'dm-pos', text: d.pos }),
+    // 名字行始终占位（翻开前为空），避免翻牌瞬间牌面跳动
+    el('div', { class: 'dm-name' }, shown ? [
+      el('span', { text: d.name + (d.orient ? ' · ' + d.orient : '') }),
+      sess.system !== 'astro'
+        ? el('button', { class: 'dm-edit', title: '编辑这张牌', onclick: (e) => { e.stopPropagation(); openDrawEditor(i); } }, [iconImg('IC-MIO-022')])
+        : null
+    ] : [])
+  ]);
+}
+
 function cardBack() {
   const bkId = cardBacks[sess?.system];
-  if (bkId) {
-    // 自定义牌背：整张铺图 + 底部半透明「点击翻牌」提示
-    return el('div', { class: 'dback' }, [
-      imgEl(bkId, 'dback-img', '牌背'),
-      el('div', { class: 'back-lbl', text: '点击翻牌' })
-    ]);
-  }
+  // 图片牌背：纯图，不压任何提示（翻牌提示在下方操作条）
+  if (bkId) return el('div', { class: 'dback' }, [imgEl(bkId, 'dback-img', '牌背')]);
   // 塔罗内置默认牌背（韦特背面）
-  if (sess?.system === 'tarot') {
-    return el('div', { class: 'dback' }, [
-      el('img', { class: 'dback-img', src: TAROT_BACK_SRC, alt: '牌背' }),
-      el('div', { class: 'back-lbl', text: '点击翻牌' })
-    ]);
-  }
+  if (sess?.system === 'tarot') return el('div', { class: 'dback' }, [el('img', { class: 'dback-img', src: TAROT_BACK_SRC, alt: '牌背' })]);
   return el('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' } }, [
     iconImg('IC-DIV-006'),
     el('div', { class: 'back-lbl', text: '点击翻牌' })
@@ -812,13 +821,8 @@ function cardFace(d, i) {
   const wrap = el('div', { class: 'dface-body' });
   const face = faceNode(d, 'dcard-img', d.name);
   if (face) {
-    wrap.appendChild(el('div', { class: 'dface-img' }, [
-      face,
-      el('div', { class: 'dcard-cap' }, [
-        el('span', { text: d.name }),
-        d.orient ? el('span', { class: 'cap-ori', text: ' · ' + d.orient }) : null
-      ])
-    ]));
+    // 牌面只有牌面本身：牌名 / 正反 / 编辑入口都放在卡下方（cellMeta），图上不加任何遮罩
+    wrap.appendChild(el('div', { class: 'dface-img' }, [face]));
   } else {
     wrap.appendChild(el('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' } }, [
       el('div', { class: 'nm', text: d.name }),
@@ -827,10 +831,6 @@ function cardFace(d, i) {
     ]));
   }
   root.appendChild(wrap);
-  if (sess?.system !== 'astro') {
-    const editBtn = el('button', { class: 'dface-edit', title: '编辑这张牌', onclick: (e) => { e.stopPropagation(); openDrawEditor(i); } }, [iconImg('IC-MIO-022')]);
-    root.appendChild(editBtn);
-  }
   return root;
 }
 
@@ -842,6 +842,12 @@ function flipCard(i, node) {
   node.classList.toggle('has-img', hasFace(sess.draws[i]));
   node.innerHTML = '';
   node.appendChild(cardFace(sess.draws[i], i));
+  // 牌下方同步显示牌名 · 正反（参考逐牌释义版式）
+  const cell = node.parentElement;
+  if (cell && cell.classList.contains('dcell')) {
+    const meta = cell.querySelector('.dcell-meta');
+    if (meta) meta.replaceWith(cellMeta(i));
+  }
   if (sess.revealed.every(Boolean)) { render(); toast('牌面已全部翻开'); }
 }
 
@@ -903,17 +909,22 @@ const dots = (s) => String(s || '').replace(/\s*\/\s*/g, ' · ');
 
 function cardReading() {
   const box = el('div', { class: 'card' });
-  sess.draws.forEach((d) => {
-    box.appendChild(el('div', { style: { paddingBottom: '11px', marginBottom: '11px', borderBottom: '1px dashed var(--line-soft)' } }, [
-      el('div', { class: 'row', style: { gap: '7px', justifyContent: 'space-between' } }, [
-        el('div', { style: { fontWeight: '600' }, text: d.pos }),
-        el('div', { class: 'row', style: { gap: '6px' } }, [
-          el('span', { class: 'badge', text: d.name }),
-          d.orient ? el('span', { class: 'badge' + (d.reversed ? ' warn' : ' ok'), text: d.orient }) : null
-        ])
-      ]),
-      el('div', { class: 'kw', text: dots(d.keywords) }),
-      el('div', { class: 'small', text: sess.mode === 'message' ? `TA：${d.text}` : d.text })
+  const last = sess.draws.length - 1;
+  sess.draws.forEach((d, idx) => {
+    const face = faceNode(d, 'rd-img', d.name);
+    // 逐牌释义：左侧小牌图，右侧「01 位置 · 牌名 · 正反」+ 关键词 + 释义
+    box.appendChild(el('div', { class: 'rd-entry' + (idx === last ? ' last' : '') }, [
+      el('div', { class: 'rd-thumb' }, [face || el('div', { class: 'rd-ph', text: d.name.slice(0, 2) })]),
+      el('div', { class: 'rd-main' }, [
+        el('div', { class: 'rd-head' }, [
+          el('span', { class: 'rd-no', text: String(idx + 1).padStart(2, '0') }),
+          el('span', { class: 'rd-pos', text: d.pos }),
+          el('span', { class: 'rd-dot', text: '·' }),
+          el('span', { class: 'rd-name' + (d.reversed ? ' rev' : ''), text: d.name + (d.orient ? ' · ' + d.orient : '') })
+        ]),
+        el('div', { class: 'kw', text: dots(d.keywords) }),
+        el('div', { class: 'small', text: sess.mode === 'message' ? `TA：${d.text}` : d.text })
+      ])
     ]));
   });
   box.appendChild(summaryBlock());
