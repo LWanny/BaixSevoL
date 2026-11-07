@@ -12,14 +12,24 @@ import { all, put, get, kvGet, kvSet } from '../store.js';
 import { sheet, toast } from '../ui.js';
 import { TAROT, LENORMAND } from '../data/tongdeck.js';
 import { TAROT_BACK_SRC } from '../data/tarotfaces.js';
+import { TAROT as D_TAROT, LENORMAND as D_LENO } from '../data/divination.js';
 
 const CFG_KEY = 'tongCfg';
+/* 底部预览四档：前三个点名字随机刷新，「实际发出」固定显示对方最近 3 张 */
+const TABS = [
+  { k: 'want', label: '想收到', hint: '他从你这儿想听到的 · 点一张推过去' },
+  { k: 'expect', label: '以为你会说', hint: '他猜你会这样回他 · 点一张推过去' },
+  { k: 'say', label: '他想说', hint: '他此刻想递给你的 · 点一张推过去' },
+  { k: 'sent', label: '实际发出', hint: '他这一场真的递出来的 · 只能看' }
+];
+let curTab = 'want';
 let view = null;
 let alive = false;
 let taTimer = null;
 let cfg = { mode: 'one', randN: 5, srcLib: true, srcDeck: true };
-let hand = [];          // 抽屉里的 3 张随机牌
+let hand = [];          // 预览里的 3 张随机牌
 let libCards = [];      // 字卡库可用卡
+let groups = [];        // 字卡分组（详情里显示分类）
 
 /* ---------------- 数据 ---------------- */
 async function loadCfg() {
@@ -35,7 +45,7 @@ async function loadLib() {
 }
 
 function libPool() {
-  return libCards.map((c) => ({ src: 'lib', name: c.content, sub: '字卡' }));
+  return libCards.map((c) => ({ src: 'lib', name: c.content, sub: '字卡', groupId: c.groupId }));
 }
 function poolFor(src) {
   const parts = [];
@@ -118,6 +128,7 @@ export default async function pageTong(v) {
 
   await loadCfg();
   await loadLib();
+  groups = (await all('groups')) || [];
 
   view.appendChild(el('div', { class: 'page tong' }, [
     el('div', { class: 'tg-head' }, [
@@ -193,11 +204,11 @@ function faceOf(item) {
   return (t && t.face) || null;
 }
 
-function cardNode(item, faceUp, onClick) {
+function cardNode(item, faceUp, onClick, meta) {
   const back = !faceUp;
   /* 塔罗：正面显示牌面图、背面显示牌背图；字卡 / 雷诺曼没有图，维持文字卡 */
   const face = back ? (item && item.src === 'tarot' ? TAROT_BACK_SRC : null) : faceOf(item);
-  const node = el('div', { class: 'tg-card' + (back ? ' back' : '') + (face ? ' face' : '') + (onClick ? ' tap' : '') }, [
+  const kids = [
     face ? el('img', {
       class: 'tg-card-img', src: face, alt: item && item.name ? item.name : '牌背', loading: 'lazy',
       onerror: (e) => {           /* 图加载失败退回文字卡 */
@@ -207,9 +218,24 @@ function cardNode(item, faceUp, onClick) {
     }) : null,
     el('div', { class: 'tg-card-nm', text: back ? '' : (item.name || '') }),
     el('div', { class: 'tg-card-sub', text: back ? '' : (item.sub || '') })
-  ]);
+  ];
+  if (meta) kids.push(el('div', { class: 'tg-card-meta' }, [
+    el('span', { text: meta.who }),
+    el('span', { text: clockShort(meta.ts) })
+  ]));
+  const node = el('div', { class: 'tg-card' + (back ? ' back' : '') + (face ? ' face' : '') + (onClick ? ' tap' : '') }, kids);
   if (onClick) node.addEventListener('click', onClick);
   return node;
+}
+
+const p2 = (n) => String(n).padStart(2, '0');
+function clockShort(ts) {
+  const d = new Date(ts || Date.now());
+  return `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
+}
+function clockFull(ts) {
+  const d = new Date(ts || Date.now());
+  return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
 }
 
 function roundNode(m) {
@@ -218,17 +244,19 @@ function roundNode(m) {
     el('div', { class: 'tg-round-tag', text: (mine ? '我' : '对方') + ' · 第 ' + m.round + ' 轮' })
   ]);
   const row = el('div', { class: 'tg-row' });
+  const meta = { who: mine ? '我 出' : '他 递', ts: m.ts };
   (m.items || []).forEach((item, i) => {
     const faceUp = mine || ((m.flipped || [])[i] === true);
-    const makeNode = (up) => cardNode(item, up, mine ? null : async () => {
-      const cur = await get('messages', m.id);
+    const makeNode = (up) => cardNode(item, up, async () => {
+      if (mine || up) { openDetail(item, m); return; }   // 我的 / 已翻开的 → 看详情
+      const cur = await get('messages', m.id);           // 对方未翻的 → 点一下翻面
       if (!cur) return;
       const fl = Array.isArray(cur.flipped) ? cur.flipped.slice() : [];
-      fl[i] = !fl[i];
+      fl[i] = true;
       cur.flipped = fl;
       await put('messages', cur);
-      row.replaceChild(makeNode(fl[i] === true), node);
-    });
+      row.replaceChild(makeNode(true), node);
+    }, meta);
     const node = makeNode(faceUp);
     row.appendChild(node);
   });
@@ -242,21 +270,64 @@ function redeal() {
   hand = pickN(pool, Math.min(3, pool.length));
 }
 
+/* ---------------- 底部预览（四档） ---------------- */
+/** 「实际发出」= 对方最近发出的 3 张（跨轮倒序取满 3 张） */
+function sentCards() {
+  const out = [];
+  for (let i = cachedMsgs.length - 1; i >= 0 && out.length < 3; i--) {
+    const m = cachedMsgs[i];
+    if (m.role !== 'ta') continue;
+    const items = (m.items || []).slice().reverse();
+    for (const it of items) {
+      if (out.length >= 3) break;
+      out.push({ item: it, msg: m });
+    }
+  }
+  return out;
+}
+
 function paintDrawer() {
   const drawer = view.querySelector('.tg-drawer');
   if (!drawer) return;
   const wait = waitingTaSync();
+  const isSent = curTab === 'sent';
+  const tab = TABS.find((t) => t.k === curTab) || TABS[0];
   drawer.innerHTML = '';
 
-  const handRow = el('div', { class: 'tg-hand' + (wait ? ' off' : '') });
-  hand.forEach((item) => handRow.appendChild(cardNode(item, true, wait ? null : () => sendRound([item]))));
-  handRow.appendChild(el('button', {
-    class: 'tg-redeal' + (wait ? ' off' : ''),
-    onclick: () => { if (waitingTaSync()) { toast('等对方回牌'); return; } redeal(); paintDrawer(); }
-  }, ['换一批']));
+  /* 四个 tab：点名字即切换并随机刷新（「实际发出」固定不随机） */
+  const tabs = el('div', { class: 'tg-tabs' });
+  TABS.forEach((tb) => {
+    tabs.appendChild(el('button', {
+      class: 'tg-tab' + (curTab === tb.k ? ' on' : ''),
+      onclick: () => {
+        curTab = tb.k;
+        if (tb.k !== 'sent') redeal();
+        paintDrawer();
+      }
+    }, [tb.label]));
+  });
+  drawer.appendChild(tabs);
+  drawer.appendChild(el('div', { class: 'tg-tab-hint', text: tab.hint }));
 
-  drawer.appendChild(el('div', { class: 'tg-drawer-tip', text: wait ? '等对方回牌后再出' : '点牌即出 · 一张或合并发送各算一轮' }));
+  const handRow = el('div', { class: 'tg-hand' + (wait && !isSent ? ' off' : '') + (isSent ? ' only' : '') });
+  if (isSent) {
+    const sent = sentCards();
+    if (!sent.length) {
+      handRow.appendChild(el('div', { class: 'tg-empty' }, [el('div', { class: 'e-p', text: '对方还没有出过牌' })]));
+    }
+    sent.forEach(({ item, msg }) => handRow.appendChild(cardNode(item, true, () => openDetail(item, msg))));
+  } else {
+    hand.forEach((item) => handRow.appendChild(cardNode(item, true, wait ? null : () => sendRound([item]))));
+    handRow.appendChild(el('button', {
+      class: 'tg-redeal' + (wait ? ' off' : ''),
+      onclick: () => { if (waitingTaSync()) { toast('等对方回牌'); return; } redeal(); paintDrawer(); }
+    }, ['换一批']));
+  }
   drawer.appendChild(handRow);
+
+  if (!isSent) {
+    drawer.appendChild(el('div', { class: 'tg-drawer-tip', text: wait ? '等对方回牌后再出' : '点牌即出 · 一张或合并发送各算一轮' }));
+  }
   drawer.appendChild(el('button', {
     class: 'btn block tg-lib-btn',
     onclick: () => { if (waitingTaSync()) { toast('等对方回牌'); return; } openPicker(); }
@@ -267,6 +338,68 @@ let cachedMsgs = [];
 function waitingTaSync() {
   const last = lastRound(cachedMsgs);
   return !!(last && last.role === 'me' && last.tongDueTs);
+}
+
+/* ---------------- 卡片详情（分类 / 时间 / 重复 / 牌面解释） ---------------- */
+/** 这张卡今天被发出几次（含当前这次，按发送顺序数） */
+function todayCount(item, msgs) {
+  const d0 = new Date();
+  d0.setHours(0, 0, 0, 0);
+  let n = 0;
+  for (const m of msgs || cachedMsgs) {
+    if ((m.ts || 0) < d0.getTime()) continue;
+    (m.items || []).forEach((it) => { if (it && it.src === item.src && it.name === item.name) n++; });
+  }
+  return n;
+}
+
+/** 分类：塔罗 / 雷诺曼 / 文字牌+所属分组 */
+function catLabel(item) {
+  if (item.src === 'tarot') return '塔罗牌';
+  if (item.src === 'lenormand') return '雷诺曼牌';
+  const gid = item.groupId || ((libCards.find((x) => x.content === item.name) || {}).groupId);
+  const g = groups.find((x) => x.id === gid);
+  return '文字牌 · ' + (g ? g.name : '我的字卡库');
+}
+
+/** 牌面解释：塔罗 / 雷诺曼都按图鉴位置对齐（两边同一张牌同序，避开命名差异） */
+function meaningOf(item) {
+  if (item.src === 'tarot') {
+    const i = TAROT.findIndex((x) => x.name === item.name);      // 通牌 78 张顺序 = 占卜 78 张顺序
+    const t = (i >= 0 && i < D_TAROT.length) ? D_TAROT[i] : D_TAROT.find((x) => x.name === item.name);
+    return t ? { kw: t.keywords, up: t.upright, rev: t.reversed } : null;
+  }
+  if (item.src === 'lenormand') {
+    const i = LENORMAND.findIndex((x) => x.name === item.name);
+    if (i >= 0 && i < D_LENO.length) return { poker: D_LENO[i].poker, up: D_LENO[i].upright, rev: D_LENO[i].reversed };
+  }
+  return null;
+}
+
+function openDetail(item, m) {
+  const rows = [
+    ['分类', catLabel(item)],
+    ['发送时间', m ? clockFull(m.ts) : '—'],
+    ['重复', `今天第 ${Math.max(1, todayCount(item))} 次发出`]
+  ];
+  const meaning = meaningOf(item);
+  const kids = [
+    el('div', { class: 'tg-dt-prev' }, [cardNode(item, true, null)]),
+    ...rows.map(([k, v]) => el('div', { class: 'tg-dt-row' }, [
+      el('span', { class: 'k', text: k }),
+      el('span', { class: 'v', text: v })
+    ]))
+  ];
+  if (meaning) {
+    kids.push(el('div', { class: 'tg-dt-h', text: '牌面解释' }));
+    if (meaning.kw) kids.push(el('div', { class: 'tg-dt-p' }, [el('b', { text: '关键词：' }), meaning.kw]));
+    if (meaning.poker) kids.push(el('div', { class: 'tg-dt-p' }, [el('b', { text: '对应扑克：' }), meaning.poker]));
+    if (meaning.up) kids.push(el('div', { class: 'tg-dt-p' }, [el('b', { text: '正位：' }), String(meaning.up).replace(/^正位：/, '')]));
+    if (meaning.rev) kids.push(el('div', { class: 'tg-dt-p' }, [el('b', { text: '逆位：' }), String(meaning.rev).replace(/^逆位：/, '')]));
+  } else if (item.src === 'lib') {
+    kids.push(el('div', { class: 'tg-dt-p', text: '一张字卡 · 想说什么就发什么' }));
+  }
+  sheet({ title: '卡片详情', node: el('div', {}, kids) });
 }
 
 /* ---------------- 字卡库全屏选择器 ---------------- */
@@ -281,7 +414,7 @@ function openPicker() {
     onclick: async () => {
       if (!picked.length) { toast('还没有选中任何牌'); return; }
       s.close();
-      await sendRound(picked.map((p) => ({ src: p.src, name: p.name, sub: p.sub })));
+      await sendRound(picked.map((p) => ({ src: p.src, name: p.name, sub: p.sub, groupId: p.groupId })));
     }
   }, ['合并发送']);
   const clearBtn = el('button', {
@@ -353,7 +486,7 @@ function openPicker() {
 /* 选择器要展示所有来源（未开启的标灰），与 poolFor 不同 */
 function poolForAll() {
   return [
-    ...libCards.map((c) => ({ src: 'lib', name: c.content, sub: '字卡' })),
+    ...libCards.map((c) => ({ src: 'lib', name: c.content, sub: '字卡', groupId: c.groupId })),
     ...TAROT,
     ...LENORMAND
   ];

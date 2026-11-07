@@ -2844,7 +2844,8 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .tg-round-tag{font-size:10px;color:var(--txt-dim);margin:0 4px 5px}
 .tg-row{display:flex;flex-wrap:wrap;gap:7px;max-width:82%}
 .tg-round.me .tg-row{justify-content:flex-end}
-.tg-card{min-width:62px;max-width:104px;border-radius:11px;padding:9px 8px;background:var(--bg-elev);border:1px solid var(--line);text-align:center;transition:transform .15s}
+.tg-card{min-width:62px;max-width:160px;border-radius:11px;padding:9px 8px;background:var(--bg-elev);border:1px solid var(--line);text-align:center;transition:transform .15s}
+.tg-stream .tg-card{width:160px;flex:0 0 auto}   /* 聊天流各类卡等宽，高度随内容（字卡矮、牌面长） */
 .tg-card.tap{cursor:pointer}
 .tg-card.tap:active{transform:scale(.94)}
 .tg-card-nm{font-size:12.5px;font-weight:600;line-height:1.25;word-break:break-all}
@@ -2866,11 +2867,30 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .tg-drawer-tip{font-size:10.5px;color:var(--txt-dim);text-align:center;margin-bottom:8px}
 .tg-hand{display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:9px}
 .tg-hand.off{opacity:.45}
-.tg-hand .tg-card{flex:1 1 0;max-width:112px}
+.tg-hand .tg-card{flex:1 1 0;max-width:none;min-height:136px;display:flex;flex-direction:column;justify-content:center;text-align:center}
+.tg-hand .tg-card.face .tg-card-img{width:auto;height:100px;max-width:100%;margin:8px auto 2px;object-fit:contain;background:none}
+.tg-hand .tg-empty{flex:1 1 100%;padding:16px 0}
 .tg-redeal{flex:0 0 auto;border:1px dashed var(--line);background:transparent;border-radius:11px;padding:10px 9px;font-size:11px;color:var(--txt-dim);min-height:52px}
 .tg-redeal.off{opacity:.45}
 .tg-lib-btn{display:flex;align-items:center;justify-content:center;gap:6px;height:40px;border-radius:12px}
 .tg-lib-btn svg{width:17px;height:17px}
+/* 底部四档：想收到 / 以为你会说 / 他想说 / 实际发出 */
+.tg-tabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:7px}
+.tg-tab{border:1px solid var(--line);background:var(--bg-elev2);border-radius:999px;padding:6px 13px;font-size:12.5px;color:var(--txt-dim);cursor:pointer;transition:.15s}
+.tg-tab.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.tg-tab-hint{font-size:11.5px;color:var(--txt-dim);margin-bottom:8px}
+/* 聊天卡底部 meta：谁出的 + 时间 */
+.tg-card-meta{display:flex;justify-content:space-between;gap:6px;padding-top:7px;font-size:10px;color:var(--txt-mute);width:100%}
+.tg-card.face .tg-card-meta{padding:3px 6px 5px}
+.tg-card.back .tg-card-meta{color:rgba(255,255,255,.72)}
+/* 卡片详情：分类 / 发送时间 / 重复 / 牌面解释 */
+.tg-dt-prev{display:flex;justify-content:center;padding:2px 0 10px}
+.tg-dt-row{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line-soft);font-size:13.5px}
+.tg-dt-row .k{color:var(--txt-dim);flex:0 0 auto}
+.tg-dt-row .v{font-weight:600;text-align:right;word-break:break-all}
+.tg-dt-h{font-size:13.5px;font-weight:700;margin:14px 0 2px}
+.tg-dt-p{font-size:13px;color:var(--txt-dim);line-height:1.75;margin-top:6px}
+.tg-dt-p b{color:var(--txt);font-weight:600}
 .tg-pick-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;max-height:52vh;overflow-y:auto;padding:4px 0}
 .tg-pick-grid .tg-card{min-width:0;align-self:start}
 .tg-pick-foot{display:flex;gap:10px;margin-top:10px}
