@@ -8,6 +8,7 @@ import { normalPage } from '../shell.js';
 import { all, put, del, kvGet, kvSet } from '../store.js';
 import { actionSheet, alertBox, confirmBox, toast, sheet } from '../ui.js';
 import { SYSTEMS, TAROT, LENORMAND, PLANETS, SIGNS, HOUSES, SPREADS, SHUFFLES } from '../data/divination.js';
+import { TAROT_FACE, TAROT_BACK_SRC } from '../data/tarotfaces.js';
 import { eligible, drawCards } from '../engine.js';
 import { addMessage } from '../scheduler.js';
 import { state } from '../state.js';
@@ -15,6 +16,22 @@ import { imgEl, saveMedia, delMedia } from '../media.js';
 
 const SYSTEM_ICON = { tarot: 'IC-DIV-002', lenormand: 'IC-DIV-003', astro: 'IC-DIV-004' };
 const SYSTEM_TAG = { tarot: '象征之语', lenormand: '直白之言', astro: '星轨落定' };
+
+/** 这张牌有没有图：自定义 imgId 优先，其次内置默认牌面（韦特图） */
+function hasFace(c) {
+  return !!(c && (c.imgId || (c.id && TAROT_FACE[c.id])));
+}
+/** 默认牌面静态图地址（没有自定义图才有） */
+function defaultFace(c) {
+  if (!c || c.imgId) return null;
+  return (c.id && TAROT_FACE[c.id]) || null;
+}
+/** 牌面节点：自定义库图 > 内置默认牌面 > null（调用方给占位） */
+function faceNode(c, cls, alt) {
+  if (c && c.imgId) return imgEl(c.imgId, cls, alt || '');
+  const src = defaultFace(c);
+  return src ? el('img', { class: cls, src, alt: alt || (c && c.name) || '' }) : null;
+}
 
 /** 体系副标题：牌数 / 骰数 + 一句定位（自定义牌面会一并计入） */
 function systemSub(id) {
@@ -109,12 +126,13 @@ register({
       const hasOverride = customCards.some((o) => o.id === c.id && o.override);
       const isPureCustom = customCards.some((o) => o.id === c.id && !o.override);   // 纯新增 custom（同名不会进 deckFor）
       // 同名 override 会替换进 deckFor，纯新增 custom 如果 system 匹配也会进 deckFor 的 added 部分
+      const face = faceNode(c, 'dk-img');
       const node = el('div', {
         class: 'dk-cell',
         onclick: () => openDeckCard(c)
       }, [
-        c.imgId
-          ? el('div', { class: 'dk-thumb', style: { background: '#fff' } }, [imgEl(c.imgId, 'dk-img')])
+        face
+          ? el('div', { class: 'dk-thumb', style: { background: '#fff' } }, [face])
           : el('div', { class: 'dk-thumb dk-empty' }, [iconImg(tab === 'tarot' ? 'IC-DIV-002' : 'IC-DIV-003')]),
         el('div', { class: 'dk-name', text: c.name }),
         hasOverride ? el('div', { class: 'dk-tag tag-ov', text: '已覆盖' }) : null
@@ -125,9 +143,10 @@ register({
     const pureCustoms = customCards.filter((o) => !o.override && o.system === tab);
     const shownIds = new Set(deck.map((c) => c.id));
     pureCustoms.filter((o) => !shownIds.has(o.id)).forEach((c) => {
+      const face = faceNode(c, 'dk-img');
       const node = el('div', { class: 'dk-cell', onclick: () => openDeckCard(c) }, [
-        c.imgId
-          ? el('div', { class: 'dk-thumb', style: { background: '#fff' } }, [imgEl(c.imgId, 'dk-img')])
+        face
+          ? el('div', { class: 'dk-thumb', style: { background: '#fff' } }, [face])
           : el('div', { class: 'dk-thumb dk-empty' }, [iconImg(tab === 'tarot' ? 'IC-DIV-002' : 'IC-DIV-003')]),
         el('div', { class: 'dk-name', text: c.name }),
         el('div', { class: 'dk-tag tag-add', text: '我加的' })
@@ -213,9 +232,10 @@ register({
     if (!deck.cards.length) { list.appendChild(el('div', { class: 'dk-group', text: '这个牌组还没有牌，去占卜选类页的「我的牌组」里加' })); return; }
     list.appendChild(el('div', { class: 'dk-group', text: `${deck.name} · ${deck.cards.length} 张` }));
     deck.cards.forEach((c) => {
+      const face = faceNode(c, 'dk-img');
       const node = el('div', { class: 'dk-cell', onclick: () => deckCardForm(deck, c) }, [
-        c.imgId
-          ? el('div', { class: 'dk-thumb', style: { background: '#fff' } }, [imgEl(c.imgId, 'dk-img')])
+        face
+          ? el('div', { class: 'dk-thumb', style: { background: '#fff' } }, [face])
           : el('div', { class: 'dk-thumb dk-empty' }, [iconImg('IC-DIV-002')]),
         el('div', { class: 'dk-name', text: c.name }),
         el('div', { class: 'dk-tag tag-add', text: '我的牌组' })
@@ -230,7 +250,13 @@ register({
     const rv = el('input', { class: 'input', value: card.reversed || '', placeholder: '逆位释义' });
     let imgId = card.imgId || '';
     const thumb = el('div', { class: 'cc-thumb' });
-    const drawThumb = () => { thumb.innerHTML = ''; thumb.appendChild(imgId ? imgEl(imgId, 'cc-img') : el('div', { class: 'cc-none', text: '未配图' })); };
+    // 没有自定义图时，内置塔罗显示默认牌面
+    const defFace = (card.id && TAROT_FACE[card.id]) || null;
+    const drawThumb = () => {
+      thumb.innerHTML = '';
+      thumb.appendChild(imgId ? imgEl(imgId, 'cc-img')
+        : (defFace ? el('img', { class: 'cc-img', src: defFace, alt: '默认牌面' }) : el('div', { class: 'cc-none', text: '未配图' })));
+    };
     drawThumb();
     const pickImg = async () => {
       const f = await openFile({ accept: 'image/*' });
@@ -303,7 +329,7 @@ register({
       await kvSet('divineCardBacks', cardBacks);
       toast('牌背已设置 · 此牌组所有牌共用');
     };
-    const st = (sys) => (cardBacks[sys] ? '已设置 · 点击更换' : '未设置 · 点击上传');
+    const st = (sys) => (cardBacks[sys] ? '已设置 · 点击更换' : (sys === 'tarot' ? '默认韦特 · 点击更换' : '未设置 · 点击上传'));
     actionSheet('设置牌背（此牌组所有牌面共用）', [
       { label: `塔罗 · ${st('tarot')}`, icon: 'IC-DIV-002', onSelect: () => pick('tarot') },
       { label: `雷诺曼 · ${st('lenormand')}`, icon: 'IC-DIV-003', onSelect: () => pick('lenormand') }
@@ -326,13 +352,16 @@ register({
       { label: '怎么匹配文件名？', icon: 'IC-DIV-001', onSelect: () => alertBox({
         title: '文件名匹配规则',
         text: '按文件名自动对应牌（图片文件和整个文件夹都支持）：\n\n' +
-              '· 牌名：愚人.png、权杖王牌.jpg（含子串也行，如 塔罗牌-愚人.png）\n' +
-              '· 体系前缀：塔罗-愚人.png、雷诺曼-骑士.jpg、tarot-00-魔术师.png\n' +
-              '· 前缀序号：07-战车.png\n' +
+              '· 牌名含在文件名任意位置即可，前后缀都不用管：\n' +
+              '  愚人.png、塔罗牌-愚人-高清.png、韦特-02女祭祀.jpg、圣杯侍卫.jpg\n' +
+              '  （同义词也认：愚人=愚者、女祭祀=女祭司、王牌=Ace、侍卫=侍从、金币=星币、中文数字=阿拉伯）\n' +
+              '· 牌背：文件名含「背面 / 牌背」的图会自动设为该体系牌背\n' +
+              '· 体系前缀：塔罗-愚人.png、雷诺曼-骑士.jpg、tarot-魔术师.png\n' +
+              '· 前缀序号：07-战车.png（名字优先，名字没中才用序号）\n' +
               '· 纯编号：塔罗 00–77、雷诺曼 1–36（同名跨体系按当前页签；' +
               '塔罗编号从 0 起，如你的素材从 1 开始请打开「编号从 1 起」）\n\n' +
               '文件名可含扩展名（.jpg/.png/.webp）、可含空格和下划线。\n' +
-              '匹配顺序：体系前缀 → 前缀序号（名字优先）→ 牌名 → 纯编号。\n' +
+              '匹配顺序：体系前缀 → 前缀序号（名字优先）→ 牌名 → 尾部编号 → 纯编号。\n' +
               '未识别的文件会列出来，其余照常导入。'
       }) }
     ]);
@@ -347,12 +376,26 @@ register({
     const nonImg = files.length - imgs.length;
     if (!imgs.length) { alertBox({ title: '没有图片', text: '所选内容里没有可用的图片文件。' }); return; }
     const deck = system === 'tarot' ? TAROT : LENORMAND;
-    let ok = 0, skip = 0, dup = 0;
+    let ok = 0, skip = 0, dup = 0, back = 0;
     const skipList = [];
 
     for (const f of imgs) {
       // 只去扩展名，保留 - _ 空格等分隔符（前缀/序号规则靠它们切分，牌名匹配时再清）
       const base = f.name.replace(/\.[^.]+$/, '').trim();
+
+      // 牌背：文件名含 背面 / 牌背 / card back → 设为该体系牌背（不占牌位）
+      if (/(背面|牌背|card\s*back|cardback)/i.test(base)) {
+        const bp = base.match(/^(塔罗|雷诺曼|tarot|lenormand)[-_–—:\s]*/i);
+        const backSys = bp ? (/雷诺曼|lenormand/i.test(bp[1]) ? 'lenormand' : 'tarot') : system;
+        const { blob, w, h } = await compressImage(f, 720, 0.88);
+        const imgId = await saveMedia(blob, { type: 'image', w, h, source: 'library', name: (backSys === 'tarot' ? '塔罗' : '雷诺曼') + '牌背' });
+        if (cardBacks[backSys]) { try { await delMedia(cardBacks[backSys]); } catch (e) { /* 旧背删不掉不影响 */ } }
+        cardBacks = { ...cardBacks, [backSys]: imgId };
+        await kvSet('divineCardBacks', cardBacks);
+        back++;
+        continue;
+      }
+
       const hit = matchBuiltinCard(base, system, deck, numFromOne);
       if (!hit) { skip++; skipList.push(f.name); continue; }
       const matched = hit.card;
@@ -369,7 +412,9 @@ register({
 
     await kvSet('customCards', customCards);
     paint();
-    const msg = `体系：${system === 'tarot' ? '塔罗' : '雷诺曼'}${folder ? ' · 文件夹' : ''}\n✓ 成功覆盖 ${ok} 张\n· 重复跳过 ${dup} 张\n· 没匹配到 ${skip} 张` +
+    const msg = `体系：${system === 'tarot' ? '塔罗' : '雷诺曼'}${folder ? ' · 文件夹' : ''}\n✓ 成功覆盖 ${ok} 张` +
+                (back ? `\n· 牌背 ${back} 张` : '') +
+                `\n· 重复跳过 ${dup} 张\n· 没匹配到 ${skip} 张` +
                 (folder && nonImg ? `\n· 非图片跳过 ${nonImg} 个` : '') +
                 (skipList.length ? `\n\n没匹配的：\n${skipList.join('\n')}` : '');
     alertBox({ title: '批量导入完成', text: msg });
@@ -380,12 +425,31 @@ register({
   }
 });
 
+/** 中文数字 → 阿拉伯（一~十，覆盖塔罗名次与常见素材命名） */
+const CN_NUM = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
+
+/** 文件名/牌名归一：小写 + 同义词归一 + 中文数字转阿拉伯 + 清掉所有分隔装饰符。
+    目的：文件名里牌名前后缀随便加（塔罗牌-愚人-高清.jpg），只要牌名两个字在里面就能认出。 */
+export function normCardKey(s) {
+  return String(s || '')
+    .toLowerCase()
+    .replace(/愚人/g, '愚者')       // 愚人 = 愚者
+    .replace(/祭祀/g, '祭司')       // 素材常见别字：女祭祀 = 女祭司
+    .replace(/王牌/g, 'ace')        // 权杖王牌 = 权杖Ace
+    .replace(/侍卫|侍者/g, '侍从')  // 圣杯侍卫 = 圣杯侍从
+    .replace(/金币/g, '星币')       // 金币 = 星币
+    .replace(/[一二三四五六七八九十]+/g, (m) => String([...m].map((c) => CN_NUM[c]).join('')))
+    .replace(/[·・._\s\-–—:：()（）[\]【】]/g, '');
+}
+
 /** 按文件名匹配内置牌。返回 { card, system }（system 会被体系前缀覆盖），未识别返回 null。
     匹配规则（按优先级）：
       1. 体系前缀：塔罗-/雷诺曼-/tarot-/lenormand-（可覆盖当前页签的体系）
       2. 前缀序号：07-战车.png → 先用名字「战车」匹配，名字没中才用序号 7
-      3. 牌名（含子串双向包含，同义词归一：王牌→Ace）：愚人.png / 塔罗牌-愚人.png / 权杖王牌.jpg
-      4. 纯编号：塔罗 00–77 = 数组索引（numFromOne 开启时 1–78 → 索引-1）；雷诺曼 1–36 → 索引-1
+      3. 牌名：牌名含在文件名任意位置即可，前后缀都不管
+         （愚人-高清.jpg / 塔罗牌愚人.png / 韦特-02女祭祀.jpg 都能认）
+      4. 尾部编号：战车07.png（名字已确认含牌名时不用尾号）
+      5. 纯编号：塔罗 00–77 = 数组索引（numFromOne 开启时 1–78 → 索引-1）；雷诺曼 1–36 → 索引-1
       同名跨体系（塔/星星/月亮/太阳）按无前缀时传入的当前页签体系。 */
 export function matchBuiltinCard(rawBase, system, deck, numFromOne = false) {
   if (!rawBase) return null;
@@ -406,17 +470,19 @@ export function matchBuiltinCard(rawBase, system, deck, numFromOne = false) {
   if (pn) { prefixNum = Number(pn[1]); base = base.slice(pn[0].length).trim(); }
   if (!base) return null;
 
-  // 3. 牌名：先清掉残留分隔符（塔罗牌-愚人 → 牌愚人），同义词归一（愚人→愚者、王牌→Ace）
-  //    后精确 → 双向包含（至少 2 字，避免单字乱配）
-  const norm = (s) => String(s || '').replace(/愚人/g, '愚者').replace(/王牌/g, 'Ace');
-  const nb = base.replace(/[-_–—:\s]+/g, '');
-  const nnb = norm(nb);
-  let m = deck.find((c) => c.name === nb || norm(c.name) === nnb)
-       || (nnb.length >= 2 && deck.find((c) => norm(c.name).includes(nnb) || nnb.includes(norm(c.name))));
-  if (m) return { card: m, system: effSys };
+  // 3. 牌名：归一后（去分隔符、同义词、中文数字）先精确，再双向包含（至少 2 字，避免单字乱配）
+  const fb = normCardKey(base);
+  if (fb.length >= 2) {
+    const m = deck.find((c) => normCardKey(c.name) === fb)
+           || deck.find((c) => normCardKey(c.name).includes(fb) || fb.includes(normCardKey(c.name)));
+    if (m) return { card: m, system: effSys };
+  }
 
-  // 4. 序号：前缀序号，或纯数字文件名
-  const n = prefixNum !== null ? prefixNum : (/^\d+$/.test(nb) ? Number(nb) : null);
+  // 4. 序号：前缀序号，或「战车07」这类尾号（文件名里没认出牌名时才用），或纯数字文件名
+  const tail = base.match(/(\d{1,2})$/);
+  const n = prefixNum !== null ? prefixNum
+    : (/^\d+$/.test(base.trim()) ? Number(base.trim())
+      : (tail && fb.length >= 2 ? null : (tail ? Number(tail[1]) : null)));
   if (n !== null) {
     if (effSys === 'tarot') {
       // 塔罗编号从 0 起（00=愚者 … 77=星币国王），即数组索引；「从 1 起」时 1→0
@@ -691,7 +757,7 @@ function renderBoard(wrap) {
       const i = v - 1;
       const d = sess.draws[i];
       line.appendChild(el('div', {
-        class: 'dcard' + (sess.revealed[i] ? ' flipped' : '') + (d.reversed ? ' rev' : '') + (d.imgId ? ' has-img' : ''),
+        class: 'dcard' + (sess.revealed[i] ? ' flipped' : '') + (d.reversed ? ' rev' : '') + (hasFace(d) ? ' has-img' : ''),
         'data-i': String(i),
         onclick: (e) => flipCard(i, e.currentTarget)
       }, [sess.revealed[i] ? cardFace(d, i) : cardBack()]));
@@ -728,6 +794,13 @@ function cardBack() {
       el('div', { class: 'back-lbl', text: '点击翻牌' })
     ]);
   }
+  // 塔罗内置默认牌背（韦特背面）
+  if (sess?.system === 'tarot') {
+    return el('div', { class: 'dback' }, [
+      el('img', { class: 'dback-img', src: TAROT_BACK_SRC, alt: '牌背' }),
+      el('div', { class: 'back-lbl', text: '点击翻牌' })
+    ]);
+  }
   return el('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' } }, [
     iconImg('IC-DIV-006'),
     el('div', { class: 'back-lbl', text: '点击翻牌' })
@@ -737,9 +810,10 @@ function cardBack() {
 function cardFace(d, i) {
   const root = el('div', { class: 'dface-root' });
   const wrap = el('div', { class: 'dface-body' });
-  if (d.imgId) {
+  const face = faceNode(d, 'dcard-img', d.name);
+  if (face) {
     wrap.appendChild(el('div', { class: 'dface-img' }, [
-      imgEl(d.imgId, 'dcard-img', d.name),
+      face,
       el('div', { class: 'dcard-cap' }, [
         el('span', { text: d.name }),
         d.orient ? el('span', { class: 'cap-ori', text: ' · ' + d.orient }) : null
@@ -765,7 +839,7 @@ function flipCard(i, node) {
   sess.revealed[i] = true;
   node.classList.add('flipped');
   node.classList.toggle('rev', !!sess.draws[i].reversed);
-  node.classList.toggle('has-img', !!sess.draws[i].imgId);
+  node.classList.toggle('has-img', hasFace(sess.draws[i]));
   node.innerHTML = '';
   node.appendChild(cardFace(sess.draws[i], i));
   if (sess.revealed.every(Boolean)) { render(); toast('牌面已全部翻开'); }
@@ -1301,9 +1375,12 @@ function cardForm(existing) {
 
   let imgId = (target || existing)?.imgId || '';
   const thumb = el('div', { class: 'cc-thumb' });
+  // 没有自定义图时，内置塔罗显示默认牌面
+  const defFace = ((target || existing)?.id && TAROT_FACE[(target || existing).id]) || null;
   const drawThumb = () => {
     thumb.innerHTML = '';
-    thumb.appendChild(imgId ? imgEl(imgId, 'cc-img') : el('div', { class: 'cc-none', text: '未配图' }));
+    thumb.appendChild(imgId ? imgEl(imgId, 'cc-img')
+      : (defFace ? el('img', { class: 'cc-img', src: defFace, alt: '默认牌面' }) : el('div', { class: 'cc-none', text: '未配图' })));
   };
   drawThumb();
 
@@ -1329,7 +1406,7 @@ function cardForm(existing) {
           el('div', { class: 'cc-thumb-btn', onclick: pickImg }, [thumb]),
           el('div', { class: 'cc-pick-hint' }, [
             el('div', { class: 'small', text: '点左侧方框选一张图当作牌面' }),
-            el('div', { class: 'small muted', text: '不配图也可以，翻牌时会显示牌名与释义。' }),
+            el('div', { class: 'small muted', text: '不配图也可以：塔罗内置牌翻牌时显示默认牌面，其余显示牌名与释义。' }),
             el('div', { class: 'row', style: { gap: '8px', marginTop: '8px' } }, [
               el('button', { class: 'btn sm', onclick: pickImg }, [iconImg('IC-MIO-020'), '选图']),
               el('button', { class: 'btn sm', onclick: dropImg }, [iconImg('IC-MIO-002'), '去掉'])
@@ -1392,10 +1469,10 @@ function manageCustom() {
 
   customCards.forEach((c) => {
     const row = el('div', { class: 'list-item' }, [
-      el('div', { class: 'cc-mini' }, [c.imgId ? imgEl(c.imgId, 'cc-img') : iconImg('IC-DIV-009')]),
+      el('div', { class: 'cc-mini' }, [faceNode(c, 'cc-img') || iconImg('IC-DIV-009')]),
       el('div', { class: 'li-main' }, [
         el('div', { class: 'li-title ellipsis', text: c.name }),
-        el('div', { class: 'li-sub ellipsis', text: `${c.system === 'tarot' ? '塔罗' : '雷诺曼'} · ${c.keywords || '（无关键词）'}${c.imgId ? ' · 有配图' : ''}` })
+        el('div', { class: 'li-sub ellipsis', text: `${c.system === 'tarot' ? '塔罗' : '雷诺曼'} · ${c.keywords || '（无关键词）'}${hasFace(c) ? ' · 有配图' : ''}` })
       ]),
       el('div', { class: 'row', style: { gap: '6px', flex: 'none' } }, [
         el('button', { class: 'btn sm', onclick: () => { sh.close(); cardForm(c); } }, ['编辑']),
