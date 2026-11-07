@@ -1875,10 +1875,10 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .pm-ring{width:100%;height:100%;transform:rotate(-90deg)}
 .pm-ring circle{fill:none;stroke-width:7}
 .pm-ring .bg{stroke:var(--line)}
-.pm-ring .fg{stroke:var(--accent);stroke-linecap:round;transition:stroke-dashoffset .3s linear}
-.pm-ring-wrap.break .fg{stroke:var(--ok)}
+.pm-ring .fg{stroke:var(--pomo-ring,var(--accent));stroke-linecap:round;transition:stroke-dashoffset .3s linear}
+.pm-ring-wrap.break .fg{stroke:var(--pomo-ring,var(--ok))}
 .pm-time{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.pm-time-v{font-size:44px;font-weight:700;line-height:1.1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.pm-time-v{font-size:44px;font-weight:700;line-height:1.1;letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:var(--pomo-time,var(--txt))}
 .pm-time-s{font-size:12px;color:var(--txt-mute);margin-top:4px}
 .pm-label{
   display:flex;align-items:center;gap:8px;max-width:300px;margin:10px auto 0;
@@ -1890,6 +1890,18 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .pm-label .chev{width:13px;height:13px;opacity:.45}
 .pm-btns{display:flex;align-items:center;justify-content:center;gap:9px;margin-top:18px}
 .pm-start{min-width:112px;padding:11px 24px;border-radius:999px;font-size:15px}
+/* 设置面板 · 背景音乐与颜色 */
+.pm-sec-h{font-size:12px;font-weight:700;color:var(--txt-mute);margin:16px 0 8px}
+.pm-tracks{display:flex;flex-direction:column;gap:6px;max-height:170px;overflow-y:auto;margin-bottom:10px}
+.pm-trk{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg-elev);font-size:12.5px;cursor:pointer}
+.pm-trk.on{border-color:var(--accent)}
+.pm-trk-dot{width:8px;flex:none;font-size:9px;color:var(--accent);line-height:1}
+.pm-trk .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pm-trk-act{border:none;background:var(--line-soft);border-radius:8px;padding:4px 9px;font-size:11px;color:var(--txt-mute);cursor:pointer;flex:none}
+.pm-trk-act:hover{color:var(--txt)}
+.pm-vol{flex:1;min-width:0}
+.pm-vol-v{font-size:12px;color:var(--txt-mute);min-width:36px;text-align:right;font-variant-numeric:tabular-nums}
+.pm-color{width:46px;height:30px;padding:0;border:1px solid var(--line);border-radius:8px;background:none;cursor:pointer}
 .pm-ghost{border-radius:999px;padding:11px 16px}
 .pm-durs{display:flex;justify-content:center;flex-wrap:wrap;gap:7px;margin-top:14px}
 .pm-stat{display:grid;grid-template-columns:repeat(3,1fr);margin-top:20px;text-align:center;padding:14px 8px}

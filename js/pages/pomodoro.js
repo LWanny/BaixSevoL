@@ -2,12 +2,13 @@
    完成一次专注会记到 pomodoros 表：{ id, ts, minutes, label, mode }
    计时状态放在模块级，离开页面后仍然继续走。 */
 
-import { el, uid, fmtDay } from '../util.js';
+import { el, uid, fmtDay, openFile, rndInt } from '../util.js';
 import { iconImg } from '../icons.js';
 import { fullPage } from '../shell.js';
 import { all, put, kvGet, kvSet } from '../store.js';
 import { beep } from '../notify.js';
 import { sheet, toast, confirmBox } from '../ui.js';
+import { saveMedia, delMedia, mediaURL } from '../media.js';
 
 const CIRC = 2 * Math.PI * 54;
 
@@ -15,6 +16,13 @@ let view = null;
 let root = null;
 let refs = {};
 let sessions = [];
+
+/* 背景音乐（kv: pomoTracks / pomoMusic）与自定义颜色（kv: pomoColor） */
+let tracks = [];                                  // [{ id, name, mediaId }]
+let music = { mode: 'loop', volume: 70, trackId: null };   // mode: loop 单曲循环 | seq 顺序 | shuffle 随机
+let colors = { ring: '', time: '' };              // '' = 跟随主题默认
+let audio = null;                                 // 懒建的 Audio 实例
+let playingId = null;                             // 当前装进 audio 的 mediaId
 
 let focusMin = 25;
 let breakMin = 5;
@@ -41,6 +49,9 @@ export default async function pagePomodoro(v) {
   focusMin = clampNum(await kvGet('pomoFocus', 25), 1, 120, 25);
   breakMin = clampNum(await kvGet('pomoBreak', 5), 1, 60, 5);
   sessions = (await all('pomodoros')).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  tracks = (await kvGet('pomoTracks', [])) || [];
+  music = Object.assign({ mode: 'loop', volume: 70, trackId: null }, await kvGet('pomoMusic', {}) || {});
+  colors = Object.assign({ ring: '', time: '' }, await kvGet('pomoColor', {}) || {});
 
   if (!inited) {
     mode = 'focus';
@@ -150,6 +161,7 @@ function paint() {
 
   root.appendChild(el('div', { class: 'hint', style: { textAlign: 'center', marginTop: '4px' }, text: '计时在离开页面后仍会继续' }));
   view.appendChild(root);
+  applyColors();
 
   refs = { time: timeV, status: timeS, ring: ringWrap.querySelector('.fg'), start: startBtn };
   paintTime();
@@ -194,6 +206,7 @@ function toggleTimer() {
   if (running) {
     remainSec = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
     running = false;
+    pauseMusic();
     paintTime();
     return;
   }
@@ -201,6 +214,7 @@ function toggleTimer() {
   endAt = Date.now() + remainSec * 1000;
   running = true;
   ensureTicker();
+  startMusic();
   paintTime();
 }
 
@@ -210,6 +224,7 @@ async function resetTimer() {
     if (!yes) return;
   }
   running = false;
+  stopMusic();
   totalSec = (mode === 'focus' ? focusMin : breakMin) * 60;
   remainSec = totalSec;
   paint();
@@ -218,6 +233,7 @@ async function resetTimer() {
 async function finish() {
   if (!running) return;
   running = false;
+  pauseMusic();
   remainSec = 0;
   const finishedMode = mode;
   const onPage = !!(root && root.isConnected);
@@ -277,14 +293,205 @@ function editLabel() {
   setTimeout(() => input.focus(), 260);
 }
 
+/* ---------------- 背景音乐：上传 / 播放模式 / 音量 ---------------- */
+function ensureAudio() {
+  if (audio) return audio;
+  audio = new Audio();
+  audio.preload = 'auto';
+  audio.addEventListener('ended', () => { nextTrack().catch(() => {}); });
+  return audio;
+}
+
+function applyVolume() {
+  if (audio) audio.volume = Math.min(1, Math.max(0, (Number(music.volume) || 0) / 100));
+}
+
+async function loadTrack(mediaId) {
+  const u = await mediaURL(mediaId);
+  if (!u) return false;
+  const a = ensureAudio();
+  a.src = u;
+  playingId = mediaId;
+  applyVolume();
+  return true;
+}
+
+/** 计时开始：有曲目且音量 > 0 就播（选中曲目优先，接上次位置） */
+async function startMusic() {
+  if (!tracks.length || (Number(music.volume) || 0) <= 0) return;
+  const a = ensureAudio();
+  applyVolume();
+  const sel = tracks.find((t) => t.id === music.trackId) || tracks[0];
+  if (playingId !== sel.mediaId) { if (!(await loadTrack(sel.mediaId))) return; }
+  try { await a.play(); } catch (e) { /* 个别浏览器首次仍会拦自动播放，再点一次开始即可 */ }
+}
+
+function pauseMusic() { if (audio) audio.pause(); }
+
+function stopMusic() { if (audio) { audio.pause(); audio.currentTime = 0; } }
+
+/** 一曲结束：loop 单曲循环 / seq 按列表顺序循环 / shuffle 随机下一首 */
+async function nextTrack() {
+  if (!tracks.length) return;
+  if (tracks.length === 1 || music.mode === 'loop') {
+    if (audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
+    return;
+  }
+  let idx = tracks.findIndex((t) => t.mediaId === playingId);
+  if (idx < 0) idx = 0;
+  if (music.mode === 'shuffle') {
+    let n = idx;
+    while (n === idx) n = rndInt(0, tracks.length - 1);
+    idx = n;
+  } else {
+    idx = (idx + 1) % tracks.length;
+  }
+  if (await loadTrack(tracks[idx].mediaId)) audio.play().catch(() => {});
+}
+
+/** 上传音频 → 存进媒体库并登记到曲目列表（超 80MB / 非音频跳过） */
+async function uploadMusic() {
+  const files = await openFile({ accept: 'audio/*', multiple: true });
+  if (!files || !files.length) return 0;
+  let n = 0;
+  for (const f of files) {
+    const isAudio = (f.type || '').startsWith('audio') || /\.(mp3|m4a|aac|wav|ogg|flac|opus|webm)$/i.test(f.name);
+    if (!isAudio) { toast(`「${f.name}」不是音频，已跳过`); continue; }
+    if (f.size > 80 * 1024 * 1024) { toast(`「${f.name}」超过 80MB，已跳过`); continue; }
+    const name = f.name.replace(/\.[^.]+$/, '');
+    const mediaId = await saveMedia(f, { type: 'audio', source: 'me', name });
+    tracks.push({ id: uid(), name, mediaId });
+    n++;
+  }
+  if (!n) return 0;
+  if (!music.trackId) music.trackId = tracks[0].id;
+  await kvSet('pomoTracks', tracks);
+  await kvSet('pomoMusic', music);
+  toast(`已添加 ${n} 首背景音乐`);
+  return n;
+}
+
+/** 选中曲目：只切换/加载；正在播就无缝切过去，没播则等下次开始 */
+async function selectTrack(t) {
+  const wasPlaying = audio && !audio.paused;
+  music.trackId = t.id;
+  await kvSet('pomoMusic', music);
+  await loadTrack(t.mediaId);
+  if (wasPlaying) audio.play().catch(() => {});
+}
+
+/** 试听 / 暂停（与计时无关的即时试听） */
+async function previewTrack(t) {
+  const a = ensureAudio();
+  if (playingId === t.mediaId && !a.paused) { a.pause(); return; }
+  if (playingId !== t.mediaId) await loadTrack(t.mediaId);
+  applyVolume();
+  a.play().catch(() => toast('播放失败，试试 mp3 / m4a 格式'));
+}
+
+async function removeTrack(t) {
+  const yes = await confirmBox({ title: '删除音乐', text: `删除「${t.name}」？`, okText: '删除', danger: true });
+  if (!yes) return false;
+  if (audio && playingId === t.mediaId) { audio.pause(); audio.removeAttribute('src'); audio.load(); playingId = null; }
+  tracks = tracks.filter((x) => x.id !== t.id);
+  if (music.trackId === t.id) music.trackId = tracks.length ? tracks[0].id : null;
+  await kvSet('pomoTracks', tracks);
+  await kvSet('pomoMusic', music);
+  await delMedia(t.mediaId);
+  return true;
+}
+
+/* ---------------- 自定义颜色：圈圈 / 时间（'' = 跟随主题） ---------------- */
+const DFT_RING = '#1a1c20';
+const DFT_TIME = '#111214';
+
+function applyColors() {
+  const rw = root && root.isConnected ? root.querySelector('.pm-ring-wrap') : null;
+  if (!rw) return;
+  if (colors.ring) rw.style.setProperty('--pomo-ring', colors.ring); else rw.style.removeProperty('--pomo-ring');
+  if (colors.time) rw.style.setProperty('--pomo-time', colors.time); else rw.style.removeProperty('--pomo-time');
+}
+
 function openConfig() {
   const f = el('input', { class: 'input', type: 'number', min: '1', max: '120', value: String(focusMin) });
   const b = el('input', { class: 'input', type: 'number', min: '1', max: '60', value: String(breakMin) });
+
+  /* --- 曲目列表：点行选中，可试听 / 删除 --- */
+  const trackList = el('div', { class: 'pm-tracks' });
+  const modeRow = el('div', { class: 'row wrap', style: { gap: '6px' } });
+  const refresh = () => { refreshTracks(); refreshModes(); };
+  function refreshTracks() {
+    trackList.innerHTML = '';
+    if (!tracks.length) {
+      trackList.appendChild(el('div', { class: 'small muted', text: '还没有音乐 · 上传后计时开始会自动播放' }));
+      return;
+    }
+    tracks.forEach((t) => {
+      const on = music.trackId === t.id;
+      const playing = audio && playingId === t.mediaId && !audio.paused;
+      trackList.appendChild(el('div', { class: 'pm-trk' + (on ? ' on' : ''), onclick: () => selectTrack(t).then(refresh) }, [
+        el('span', { class: 'pm-trk-dot', text: on ? '●' : '' }),
+        el('span', { class: 't', text: t.name }),
+        el('button', { class: 'pm-trk-act', title: '试听 / 暂停', onclick: (e) => { e.stopPropagation(); previewTrack(t).then(refresh).catch(() => {}); } }, [playing ? '暂停' : '试听']),
+        el('button', { class: 'pm-trk-act', title: '删除', onclick: async (e) => { e.stopPropagation(); if (await removeTrack(t)) refresh(); } }, ['删除'])
+      ]));
+    });
+  }
+
+  /* --- 播放模式 --- */
+  const MODES = [['loop', '单曲循环'], ['seq', '顺序播放'], ['shuffle', '随机播放']];
+  function refreshModes() {
+    modeRow.innerHTML = '';
+    MODES.forEach(([k, t]) => modeRow.appendChild(el('button', {
+      class: 'chip' + (music.mode === k ? ' on' : ''), type: 'button',
+      onclick: async () => { music.mode = k; await kvSet('pomoMusic', music); refreshModes(); }
+    }, [t])));
+  }
+
+  /* --- 音量 --- */
+  const volV = el('span', { class: 'pm-vol-v', text: String(music.volume) + '%' });
+  const vol = el('input', {
+    type: 'range', min: '0', max: '100', step: '5', value: String(music.volume), class: 'pm-vol',
+    oninput: () => { music.volume = Number(vol.value); volV.textContent = music.volume + '%'; applyVolume(); kvSet('pomoMusic', music); }
+  });
+
+  /* --- 颜色：改动即生效并保存 --- */
+  const ringIn = el('input', { type: 'color', class: 'pm-color', value: colors.ring || DFT_RING });
+  ringIn.oninput = () => { colors.ring = ringIn.value; applyColors(); kvSet('pomoColor', colors); };
+  const timeIn = el('input', { type: 'color', class: 'pm-color', value: colors.time || DFT_TIME });
+  timeIn.oninput = () => { colors.time = timeIn.value; applyColors(); kvSet('pomoColor', colors); };
+  const resetColor = (key, input, dft) => async () => {
+    colors[key] = '';
+    applyColors();
+    await kvSet('pomoColor', colors);
+    input.value = dft;
+  };
+
   sheet({
     title: '计时设置',
     node: el('div', {}, [
       el('div', { class: 'field' }, [el('label', { text: '专注时长（分钟）' }), f]),
-      el('div', { class: 'field' }, [el('label', { text: '休息时长（分钟）' }), b])
+      el('div', { class: 'field' }, [el('label', { text: '休息时长（分钟）' }), b]),
+
+      el('div', { class: 'pm-sec-h', text: '背景音乐' }),
+      el('div', { class: 'row', style: { gap: '8px', alignItems: 'center', marginBottom: '8px' } }, [
+        el('button', { class: 'btn sm', onclick: async () => { if (await uploadMusic()) refresh(); } }, [iconImg('IC-CRD-003'), '上传音乐']),
+        el('div', { class: 'small muted', style: { flex: '1', lineHeight: 1.5 }, text: '计时开始自动播放，暂停即停' })
+      ]),
+      trackList,
+      el('div', { class: 'field' }, [el('label', { text: '播放模式' }), modeRow]),
+      el('div', { class: 'field' }, [el('label', { text: '音量' }), el('div', { class: 'row', style: { gap: '8px', alignItems: 'center' } }, [vol, volV])]),
+
+      el('div', { class: 'pm-sec-h', text: '颜色' }),
+      el('div', { class: 'row between', style: { padding: '3px 0' } }, [
+        el('span', { class: 'small', text: '圈圈颜色' }),
+        el('div', { class: 'row', style: { gap: '8px' } }, [ringIn, el('button', { class: 'chip', type: 'button', onclick: resetColor('ring', ringIn, DFT_RING) }, ['默认'])])
+      ]),
+      el('div', { class: 'row between', style: { padding: '3px 0' } }, [
+        el('span', { class: 'small', text: '时间颜色' }),
+        el('div', { class: 'row', style: { gap: '8px' } }, [timeIn, el('button', { class: 'chip', type: 'button', onclick: resetColor('time', timeIn, DFT_TIME) }, ['默认'])])
+      ]),
+      el('div', { class: 'small muted', style: { marginTop: '6px' }, text: '颜色一改就生效；点「默认」恢复主题色。' })
     ]),
     actions: [{ label: '保存', icon: 'IC-MIO-021', onSelect: async () => {
       focusMin = clampNum(f.value, 1, 120, 25);
@@ -299,4 +506,5 @@ function openConfig() {
       toast('已保存');
     } }]
   });
+  refresh();
 }
