@@ -21,10 +21,14 @@ export function el(tag, attrs = {}, children = []) {
     else node.setAttribute(k, v === true ? '' : v);
   }
   const list = Array.isArray(children) ? children : [children];
-  for (const c of list) {
-    if (c === null || c === undefined || c === false) continue;
-    node.append(c instanceof Node ? c : document.createTextNode(String(c)));
-  }
+  const append = (arr) => {                       // 递归展平：允许 children 里嵌套数组
+    for (const c of arr) {
+      if (c === null || c === undefined || c === false) continue;
+      if (Array.isArray(c)) { append(c); continue; }
+      node.append(c instanceof Node ? c : document.createTextNode(String(c)));
+    }
+  };
+  append(list);
   return node;
 }
 
