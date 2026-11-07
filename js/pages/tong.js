@@ -11,6 +11,7 @@ import { fullPage } from '../shell.js';
 import { all, put, get, kvGet, kvSet } from '../store.js';
 import { sheet, toast } from '../ui.js';
 import { TAROT, LENORMAND } from '../data/tongdeck.js';
+import { TAROT_BACK_SRC } from '../data/tarotfaces.js';
 
 const CFG_KEY = 'tongCfg';
 let view = null;
@@ -184,9 +185,26 @@ async function paintStream() {
   stream.scrollTop = stream.scrollHeight;
 }
 
+/** 塔罗牌面图：item 自带 face（新数据），老消息按牌名从图鉴反查 */
+function faceOf(item) {
+  if (!item || item.src !== 'tarot') return null;
+  if (item.face) return item.face;
+  const t = TAROT.find((x) => x.name === item.name);
+  return (t && t.face) || null;
+}
+
 function cardNode(item, faceUp, onClick) {
   const back = !faceUp;
-  const node = el('div', { class: 'tg-card' + (back ? ' back' : '') + (onClick ? ' tap' : '') }, [
+  /* 塔罗：正面显示牌面图、背面显示牌背图；字卡 / 雷诺曼没有图，维持文字卡 */
+  const face = back ? (item && item.src === 'tarot' ? TAROT_BACK_SRC : null) : faceOf(item);
+  const node = el('div', { class: 'tg-card' + (back ? ' back' : '') + (face ? ' face' : '') + (onClick ? ' tap' : '') }, [
+    face ? el('img', {
+      class: 'tg-card-img', src: face, alt: item && item.name ? item.name : '牌背', loading: 'lazy',
+      onerror: (e) => {           /* 图加载失败退回文字卡 */
+        const img = e.target;
+        if (img && img.parentNode) { img.parentNode.classList.remove('face'); img.remove(); }
+      }
+    }) : null,
     el('div', { class: 'tg-card-nm', text: back ? '' : (item.name || '') }),
     el('div', { class: 'tg-card-sub', text: back ? '' : (item.sub || '') })
   ]);
@@ -311,8 +329,9 @@ function openPicker() {
       const open = srcOpen(p.src);
       const isPicked = picked.some((x) => x.src === p.src && x.name === p.name);
       const node = el('div', {
-        class: 'tg-card tap' + (isPicked ? ' picked' : '') + (open ? '' : ' disabled')
+        class: 'tg-card tap' + (p.face ? ' face' : '') + (isPicked ? ' picked' : '') + (open ? '' : ' disabled')
       }, [
+        p.face ? el('img', { class: 'tg-card-img', src: p.face, alt: p.name, loading: 'lazy' }) : null,
         el('div', { class: 'tg-card-nm', text: p.name }),
         el('div', { class: 'tg-card-sub', text: open ? (p.sub || srcName(p.src)) : '未开启' })
       ]);

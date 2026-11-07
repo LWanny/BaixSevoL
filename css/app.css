@@ -2854,17 +2854,25 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .tg-card.picked{border-color:var(--accent);box-shadow:0 0 0 1.5px var(--accent)}
 .tg-card.disabled{opacity:.38}
 .tg-card.disabled .tg-card-sub{color:var(--danger)}
+/* 塔罗牌面：图上零遮挡、牌名放图下；对方未翻时显示牌背图 */
+.tg-card.face{padding:0;overflow:hidden}
+.tg-card.face .tg-card-img{width:100%;display:block;aspect-ratio:296/500;object-fit:cover;background:var(--bg-elev2)}
+.tg-card.face .tg-card-nm{padding:5px 6px 0;font-size:11.5px}
+.tg-card.face .tg-card-sub{padding:0 6px 6px;margin-top:1px}
+.tg-card.back.face{background:none;border-color:transparent;min-height:0}
+.tg-card.back.face::after{display:none}
+.tg-card.back .tg-card-nm,.tg-card.back .tg-card-sub{display:none}
 .tg-drawer{border-top:1px solid var(--line);background:var(--bg-elev2);margin:0 -16px;padding:10px 16px calc(12px + env(safe-area-inset-bottom))}
 .tg-drawer-tip{font-size:10.5px;color:var(--txt-dim);text-align:center;margin-bottom:8px}
 .tg-hand{display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:9px}
 .tg-hand.off{opacity:.45}
-.tg-hand .tg-card{flex:1 1 0;max-width:none}
+.tg-hand .tg-card{flex:1 1 0;max-width:112px}
 .tg-redeal{flex:0 0 auto;border:1px dashed var(--line);background:transparent;border-radius:11px;padding:10px 9px;font-size:11px;color:var(--txt-dim);min-height:52px}
 .tg-redeal.off{opacity:.45}
 .tg-lib-btn{display:flex;align-items:center;justify-content:center;gap:6px;height:40px;border-radius:12px}
 .tg-lib-btn svg{width:17px;height:17px}
 .tg-pick-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;max-height:52vh;overflow-y:auto;padding:4px 0}
-.tg-pick-grid .tg-card{min-width:0}
+.tg-pick-grid .tg-card{min-width:0;align-self:start}
 .tg-pick-foot{display:flex;gap:10px;margin-top:10px}
 .tg-pick-foot .btn{flex:1}
 .tg-set-h{font-size:12px;color:var(--txt-dim);margin:14px 0 8px}
