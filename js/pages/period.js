@@ -32,7 +32,7 @@ export default async function pagePeriod(v) {
   view = v;
   fullPage({
     back: true, title: '经期记录', sub: '纯本地计算 · 只存在这台设备',
-    actions: [{ label: '记录', onclick: quickMenu }]
+    actions: [{ label: '记录', onclick: quickMenu }, { label: '设置', onclick: openConfig }]
   });
   cycleLen = Number(await kvGet('periodCycle', 28)) || 28;
   periodLen = Number(await kvGet('periodDays', 5)) || 5;
@@ -61,6 +61,7 @@ function markSets() {
   const real = new Set();
   const predicted = new Set();
   const fertile = new Set();
+  const ovu = new Set();
 
   items.forEach((rec) => eachDay(rec.start, ymd(recordEnd(rec)), (k) => real.add(k)));
 
@@ -72,10 +73,11 @@ function markSets() {
     while (next.getTime() + (periodLen - 1) * DAY < t.getTime()) next = new Date(next.getTime() + cycleLen * DAY);
     eachDay(ymd(next), ymd(new Date(next.getTime() + (periodLen - 1) * DAY)), (k) => predicted.add(k));
 
-    const ovu = new Date(next.getTime() - 14 * DAY);
-    eachDay(ymd(new Date(ovu.getTime() - 4 * DAY)), ymd(new Date(ovu.getTime() + 3 * DAY)), (k) => fertile.add(k));
+    const day = new Date(next.getTime() - 14 * DAY);
+    ovu.add(ymd(day));
+    eachDay(ymd(new Date(day.getTime() - 4 * DAY)), ymd(new Date(day.getTime() + 3 * DAY)), (k) => fertile.add(k));
   }
-  return { real, predicted, fertile };
+  return { real, predicted, fertile, ovu };
 }
 
 function nextStartDate() {
@@ -203,6 +205,41 @@ function openDayForm(date) {
   });
 }
 
+/** 周期阶段提示卡（按当前所处阶段给一句身体提示，每天稳定一条） */
+function phaseTip(sets) {
+  if (!items.length) return null;
+  const t = today();
+  const next = nextStartDate();
+  if (!next) return null;
+  let phase;
+  if (sets.real.has(ymd(t))) phase = 'during';
+  else phase = diffDays(t, next) >= 7 ? 'late' : 'before';
+  const TIPS = {
+    before: [
+      '可能出现乳房胀痛、食欲增加，都是激素的正常反应。',
+      '经前容易疲倦和情绪波动，今天对自己温柔一点。',
+      '留意小腹坠胀与水肿，少喝冰的、早点睡。'
+    ],
+    during: [
+      '注意保暖与休息，量多时记得及时更换，别做剧烈运动。',
+      '肚子不舒服可以用热敷，喝点温水会好受一些。',
+      '经期犯困是正常的，把要紧的事排开，允许自己慢一点。'
+    ],
+    late: [
+      '状态通常不错的一周，适合安排重要的事。',
+      '黄体期代谢稍快，容易饿是正常的，正常吃就好。',
+      '皮肤可能出油变多，清洁到位就行，不必焦虑。'
+    ]
+  };
+  const arr = TIPS[phase];
+  const emo = { before: '🌕', during: '🌙', late: '🌤️' };
+  const idx = (t.getMonth() * 31 + t.getDate()) % arr.length;
+  return el('div', { class: 'card pd-tip' }, [
+    el('span', { class: 'pd-tip-emo', text: emo[phase] }),
+    el('div', { class: 'pd-tip-t', text: arr[idx] })
+  ]);
+}
+
 /** 近半年经期趋势：每月一行轨道，实心段=已记录经期，浅色段=预测 */
 function trendCard(sets) {
   const t = today();
@@ -233,7 +270,7 @@ function trendCard(sets) {
   return el('div', { class: 'sec' }, [
     el('div', { class: 'sec-h' }, [el('div', { class: 'h', text: '近半年经期趋势' })]),
     el('div', { class: 'card pd-trend' }, [
-      has ? rows : el('div', { class: 'hint', style: { textAlign: 'center', padding: '8px 0', margin: 0 }, text: '还没有记录，点上面「今天来了」开始第一次记录' }),
+      has ? rows : el('div', { class: 'hint', style: { textAlign: 'center', padding: '8px 0', margin: 0 }, text: '还没有记录，点上面「记录经期开始」开始第一次记录' }),
       has ? el('div', { class: 'pd-legend' }, [
         el('span', {}, [el('i', { class: 'lg on' }), '经期']),
         el('span', {}, [el('i', { class: 'lg soft' }), '预计'])
@@ -249,38 +286,46 @@ function paint() {
   const sets = markSets();
   const next = nextStartDate();
 
-  /* 概览 */
+  /* 概览（参考图样式：粉渐变大卡，大字距下次 + 副行预计日期 + 三项横排统计） */
   const dd = next ? diffDays(today(), next) : null;
-  page.appendChild(el('div', { class: 'card pd-hero' }, [
-    el('div', { class: 'pd-hero-ic' }, [iconImg('IC-MIO-033')]),
-    el('div', { class: 'pd-hero-main' }, [
-      el('div', { class: 'pd-hero-t', text: next ? (dd === 0 ? '距下次经期就是今天' : `距下次经期还有 ${dd} 天`) : '还没有记录' }),
-      el('div', { class: 'pd-hero-s', text: next ? `预计 ${next.getMonth() + 1} 月 ${next.getDate()} 日 开始` : '点下面「今天来了」开始第一次记录' })
-    ]),
-    el('button', { class: 'btn sm', onclick: openConfig }, ['设置'])
-  ]));
-
-  /* 四项统计：预计开始 / 平均周期 / 经期天数 / 距下次 */
-  const stat = (k, v) => el('div', { class: 'pd-stat' }, [
+  const heroTitle = next
+    ? (dd === 0
+      ? el('div', { class: 'pd-hero-t', text: '经期就是今天' })
+      : el('div', { class: 'pd-hero-t' }, [
+          el('span', { text: '距下次经期还有 ' }),
+          el('b', { text: String(dd) }),
+          el('span', { text: ' 天' })
+        ]))
+    : el('div', { class: 'pd-hero-t', text: '还没有记录' });
+  const hstat = (k, v) => el('div', {}, [
     el('div', { class: 'k', text: k }),
     el('div', { class: 'v', text: v })
   ]);
-  page.appendChild(el('div', { class: 'pd-stats' }, [
-    stat('预计什么时候开始', next ? `${next.getMonth() + 1} 月 ${next.getDate()} 日` : '—'),
-    stat('平均周期', `${avgCycle()} 天`),
-    stat('经期天数', `${avgPeriodLen()} 天`),
-    stat('距下次', dd === null ? '—' : (dd === 0 ? '就是今天' : `${dd} 天`))
+  page.appendChild(el('div', { class: 'card pd-hero' }, [
+    el('div', { class: 'pd-hero-deco' }),
+    el('div', { class: 'pd-hero-main' }, [
+      heroTitle,
+      el('div', { class: 'pd-hero-s', text: next ? `预计 ${next.getMonth() + 1} 月 ${next.getDate()} 日 开始` : '点下面「记录经期开始」开始第一次记录' }),
+      el('div', { class: 'pd-hero-stats' }, [
+        hstat('平均周期', `${avgCycle()}天`),
+        hstat('经期天数', `${avgPeriodLen()}天`),
+        hstat('距下次', dd === null ? '—' : (dd === 0 ? '今天' : `${dd}天`))
+      ])
+    ])
   ]));
 
-  /* 两个快捷按钮 */
-  const open = items.find((r) => !r.end);
-  page.appendChild(el('div', { class: 'row pd-quick' }, [
-    el('button', { class: 'btn primary', onclick: () => startToday() }, ['今天来了']),
-    el('button', { class: 'btn', onclick: () => endToday() }, [open ? '今天结束了' : '结束经期'])
-  ]));
+  /* 阶段提示卡（参考图：月亮 + 一句身体提示） */
+  const tip = phaseTip(sets);
+  if (tip) page.appendChild(tip);
 
   /* 日历 */
   page.appendChild(calendar(sets));
+
+  /* 主按钮（参考图：日历下方全宽「记录经期开始」） */
+  const open = items.find((r) => !r.end);
+  page.appendChild(open
+    ? el('button', { class: 'pd-main-btn', onclick: endToday }, ['✓ 今天结束了'])
+    : el('button', { class: 'pd-main-btn', onclick: startToday }, ['＋ 记录经期开始']));
 
   /* 近半年趋势 */
   page.appendChild(trendCard(sets));
@@ -290,7 +335,7 @@ function paint() {
   if (!items.length) {
     listCard.appendChild(el('div', { class: 'empty', style: { padding: '30px 18px' } }, [
       el('div', { class: 'e-h', text: '还没有记录' }),
-      el('div', { class: 'e-p', text: '每次进来点一下「今天来了」，周期会越算越准' })
+      el('div', { class: 'e-p', text: '每次进来点一下「记录经期开始」，周期会越算越准' })
     ]));
   } else {
     items.slice(0, 24).forEach((rec) => {
@@ -345,7 +390,9 @@ function calendar(sets) {
     const cls = ['pd-day'];
     if (sets.real.has(key)) cls.push('on');
     else if (sets.predicted.has(key)) cls.push('pre');
-    if (sets.fertile.has(key) && !sets.real.has(key)) cls.push('fertile');
+    else if (sets.fertile.has(key)) cls.push('fertile');
+    if (sets.ovu.has(key) && !sets.real.has(key)) cls.push('ovu');
+    if (logOf(key)?.ovu && !sets.real.has(key)) cls.push('confirmed');
     if (key === ymd(t)) cls.push('today');
     grid.appendChild(el('div', { class: cls.join(' ') }, [el('span', { text: String(d) })]));
     grid.lastChild.onclick = () => dayMenu(key);
@@ -356,8 +403,10 @@ function calendar(sets) {
     grid,
     el('div', { class: 'pd-legend' }, [
       el('span', {}, [el('i', { class: 'lg on' }), '经期']),
-      el('span', {}, [el('i', { class: 'lg pre' }), '预计']),
-      el('span', {}, [el('i', { class: 'lg fertile' }), '易孕期'])
+      el('span', {}, [el('i', { class: 'lg pre' }), '预测']),
+      el('span', {}, [el('i', { class: 'lg ovu' }), '排卵日']),
+      el('span', {}, [el('i', { class: 'lg fertile' }), '易孕期']),
+      el('span', {}, [el('i', { class: 'lg conf' }), '已确认'])
     ])
   ]);
 }
