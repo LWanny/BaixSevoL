@@ -8,6 +8,7 @@ import { state, saveRole, DEFAULT_PARAMS, roleStatusMeta } from '../state.js';
 import { saveMedia, mediaURL } from '../media.js';
 import { toast, confirmBox } from '../ui.js';
 import { go } from '../router.js';
+import { cfg, saveCfg, MOOD_KEYS } from '../pinyinConfig.js';
 
 export default async function pageRole(view) {
   fullPage({ back: true, title: '角色', actions: [
@@ -63,6 +64,12 @@ export default async function pageRole(view) {
     ])
   ]));
 
+  /* ---- 拼音打字（pinyinConfig.js → localStorage，改完立即生效） ---- */
+  wrap.appendChild(el('div', { class: 'sec' }, [
+    el('div', { class: 'sec-h' }, [el('div', { class: 'h', text: '拼音打字' })]),
+    buildPinyinCfg()
+  ]));
+
   /* ---- 分类卡片网格 ---- */
   const catGrid = el('div', { class: 'role-grid' }, [
     catCard('回话', '聊天回复 / 拼接 / 主动发送', 'IC-CHT-012', () => go('/role/reply')),
@@ -89,6 +96,148 @@ export default async function pageRole(view) {
   ]));
 
   view.appendChild(wrap);
+}
+
+/* ================= 拼音打字 · 全局配置面板 =================
+   数据在 pinyinConfig.js（localStorage），每次改动 saveCfg() 即刻落盘；
+   pinyin.js / engine.js / scheduler.js 每次生成/打字都会重新 cfg() 读取 → 改完立即生效。
+   优先级：全部随机(forceRandom) > 心情(Mood) > 用户各项概率与区间 */
+const MOOD_NAMES = { lazy: '敷衍', normal: '平常', chatty: '话唠', warm: '热情', sad: '伤心' };
+
+function cfgRow(name, desc, ctl) {
+  return el('div', { class: 'set-row' }, [
+    el('div', { class: 'set-main' }, [
+      el('div', { class: 'set-t', text: name }),
+      desc ? el('div', { class: 'set-s', text: desc }) : null
+    ]),
+    (ctl && ctl.length) ? el('div', { class: 'set-ctl' }, ctl) : null
+  ]);
+}
+
+function cfgToggle(name, desc, get, set) {
+  const sw = el('button', { class: 'sw', type: 'button' });
+  const paint = () => sw.classList.toggle('on', !!get());
+  paint();
+  sw.addEventListener('click', () => { set(!get()); paint(); });
+  return cfgRow(name, desc, [sw]);
+}
+
+/** 单条滑块（range + 数字输入，双改双同步） */
+function cfgSlider(label, get, set, min, max) {
+  const range = el('input', { class: 'set-range', type: 'range', min: String(min), max: String(max), step: '1' });
+  const num = el('input', { class: 'set-num', type: 'number', inputmode: 'numeric', min: String(min), max: String(max), step: '1' });
+  const clamp = (v) => Math.min(max, Math.max(min, Math.round(Number(v) || 0)));
+  const paint = () => { const v = clamp(get()); range.value = String(v); num.value = String(v); };
+  const apply = (raw) => { set(clamp(raw)); paint(); };
+  range.addEventListener('input', () => apply(range.value));
+  num.addEventListener('change', () => apply(num.value));
+  paint();
+  return el('div', { class: 'cfg-slider' }, [el('span', { class: 'cfg-sl', text: label }), range, num]);
+}
+
+/** 上下限成对滑块：下限永远 ≤ 上限；get→[lo,hi]，set(arr) 负责落盘 */
+function cfgPair(name, desc, get, set, min, max) {
+  const clamp = (v) => Math.min(max, Math.max(min, Math.round(Number(v) || 0)));
+  const mk = (idx, lb) => {
+    const range = el('input', { class: 'set-range', type: 'range', min: String(min), max: String(max), step: '1' });
+    const num = el('input', { class: 'set-num', type: 'number', inputmode: 'numeric', min: String(min), max: String(max), step: '1' });
+    const paint = () => { const a = get(); const v = clamp(a[idx]); range.value = String(v); num.value = String(v); };
+    const apply = (raw) => {
+      const a = [clamp(get()[0]), clamp(get()[1])];
+      a[idx] = idx === 0 ? Math.min(clamp(raw), a[1]) : Math.max(clamp(raw), a[0]);
+      set(a);
+      paint();
+    };
+    range.addEventListener('input', () => apply(range.value));
+    num.addEventListener('change', () => apply(num.value));
+    paint();
+    return el('div', { class: 'cfg-slider' }, [el('span', { class: 'cfg-sl', text: lb }), range, num]);
+  };
+  return el('div', { class: 'cfg-pair' }, [cfgRow(name, desc, []), mk(0, '下限'), mk(1, '上限')]);
+}
+
+/** 折叠面板 */
+function fold(title, desc, body, open = false) {
+  const head = el('div', { class: 'set-row fold-head' }, [
+    el('div', { class: 'set-main' }, [
+      el('div', { class: 'set-t', text: title }),
+      desc ? el('div', { class: 'set-s', text: desc }) : null
+    ]),
+    el('div', { class: 'set-ctl' }, [el('span', { class: 'fold-arr', text: '›' })])
+  ]);
+  const wrap = el('div', { class: 'cfg-fold' + (open ? ' open' : '') }, [
+    head,
+    el('div', { class: 'cfg-fold-body' }, [el('div', { class: 'cfg-fold-in' }, [body])])
+  ]);
+  head.addEventListener('click', () => wrap.classList.toggle('open'));
+  return wrap;
+}
+
+function buildPinyinCfg() {
+  const C = () => cfg();
+  const root = el('div', { class: 'set-card cfg-root' });
+
+  /* ---- 最高优先级：全部随机 ---- */
+  const forceHost = el('div', { class: 'cfg-force' }, [
+    cfgToggle('全部随机', '最高优先级：忽略下面所有概率/区间 —— 字数极端、频繁打错字、秒回或几十分钟不回',
+      () => C().forceRandom, (v) => { saveCfg({ forceRandom: !!v }); paintOff(); })
+  ]);
+
+  /* ---- 面板 1 · 输入习惯 ---- */
+  const p1 = el('div');
+  p1.appendChild(cfgPair('抽词库概率', '句子里抽完整词库的概率区间，剩下的抽单字',
+    () => C().wordRatio, (v) => saveCfg({ wordRatio: v }), 0, 100));
+  p1.appendChild(cfgPair('打错字 + 退格', '每个字母打错并按退格删除的概率区间',
+    () => C().typoRate, (v) => saveCfg({ typoRate: v }), 0, 100));
+
+  /* ---- 面板 2 · 句式与接话 ---- */
+  const p2 = el('div');
+  p2.appendChild(cfgToggle('句式模板', '按「代词 + 动词 + 名词 + 语气」的预设句型填槽',
+    () => C().useTemplate, (v) => saveCfg({ useTemplate: !!v })));
+  p2.appendChild(cfgSlider('模板使用概率 %', () => C().templateRate, (v) => saveCfg({ templateRate: v }), 0, 100));
+  p2.appendChild(cfgToggle('上下文锚点', '把对方话里的实词插进回复接话',
+    () => C().useAnchor, (v) => saveCfg({ useAnchor: !!v })));
+  p2.appendChild(cfgSlider('锚点 · 尾词命中 %', () => C().anchorTailRate, (v) => saveCfg({ anchorTailRate: v }), 0, 100));
+  p2.appendChild(cfgSlider('锚点 · 随机命中 %', () => C().anchorRandomRate, (v) => saveCfg({ anchorRandomRate: v }), 0, 100));
+  p2.appendChild(cfgToggle('句尾语气词', '句尾追加语气词，拼音 UI 会连它的拼音一起显示（如 吧·ba）',
+    () => C().useTailWord, (v) => saveCfg({ useTailWord: !!v })));
+  p2.appendChild(cfgSlider('语气词概率 %', () => C().tailRate, (v) => saveCfg({ tailRate: v }), 0, 100));
+  p2.appendChild(cfgPair('句首连接词', '句首加「那个 / 然后 / 不过」的概率区间',
+    () => C().headRate, (v) => saveCfg({ headRate: v }), 0, 100));
+
+  /* ---- 面板 3 · 心情设定（权重 + 音节限制，心情优先于底层概率） ---- */
+  const p3 = el('div');
+  MOOD_KEYS.forEach((k) => {
+    p3.appendChild(el('div', { class: 'cfg-mood-h', text: MOOD_NAMES[k] }));
+    p3.appendChild(cfgSlider('抽中权重 %', () => C().moodWeights[k],
+      (v) => saveCfg({ moodWeights: { ...C().moodWeights, [k]: v } }), 0, 100));
+    p3.appendChild(cfgPair('音节数（最短 ~ 最长）', null,
+      () => C().moodSyll[k], (v) => saveCfg({ moodSyll: { ...C().moodSyll, [k]: v } }), 1, 16));
+  });
+
+  /* ---- 面板 4 · 主动联系（独立于普通回复的配置） ---- */
+  const p4 = el('div');
+  p4.appendChild(cfgToggle('主动打字', '关闭后 TA 主动联系时不再敲拼音（仍会发普通字卡消息）',
+    () => C().enableProactive, (v) => saveCfg({ enableProactive: !!v })));
+  p4.appendChild(cfgPair('主动发送间隔', '两次主动联系之间的间隔（分钟）',
+    () => C().proactiveInterval, (v) => saveCfg({ proactiveInterval: v }), 1, 120));
+  MOOD_KEYS.forEach((k) => {
+    p4.appendChild(cfgPair(`${MOOD_NAMES[k]} · 主动一句话字数`, null,
+      () => C().proactiveLen[k], (v) => saveCfg({ proactiveLen: { ...C().proactiveLen, [k]: v } }), 1, 40));
+  });
+
+  const panels = el('div', { class: 'cfg-panels' }, [
+    fold('输入习惯', '抽词库概率 · 打错字与退格', p1, true),
+    fold('句式与接话', '模板 · 锚点 · 句首句尾修饰', p2),
+    fold('心情设定', '五种心情的权重与音节数限制', p3),
+    fold('主动联系', '主动打字开关 · 发送间隔 · 心情字数', p4)
+  ]);
+  function paintOff() { panels.classList.toggle('cfg-off', !!C().forceRandom); }
+  paintOff();
+
+  root.appendChild(forceHost);
+  root.appendChild(panels);
+  return root;
 }
 
 function catCard(title, desc, icon, onclick) {

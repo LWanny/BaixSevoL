@@ -8,6 +8,7 @@
 
 import { chance, rndInt, pick } from './util.js';
 import { WORD_POOL } from './data/pinyinwords.js';
+import { cfg, pickMood, moodSyllRange, randRange } from './pinyinConfig.js';
 
 /* 常用字 + 带声调拼音（多音字只保留最常见读音） */
 const RAW = `我 wǒ
@@ -440,23 +441,14 @@ const CONNECTORS = [
   { py: 'suo yi', text: '所以' }, { py: 'bu guo', text: '不过' }
 ];
 
-/* ---------- 需求3 · 心情状态：每次生成先抽一个状态，决定长度/语气/断句节奏 ---------- */
-const STATES = [
-  { key: 'normal', label: '平常', w: 30 },
-  { key: 'lazy', label: '敷衍', w: 18 },   // 拼音最多 3 个音节
-  { key: 'chatty', label: '话唠', w: 18 }, // 强制随机长句 + 更密的断句
-  { key: 'warm', label: '热情', w: 18 },   // 语气词/连接词几乎必出、句子偏长
-  { key: 'sad', label: '伤心', w: 16 }     // 短句、少连接词、多叹气语气
-];
-function drawState() {
-  const total = STATES.reduce((s, x) => s + x.w, 0);
-  let r = Math.random() * total;
-  for (const x of STATES) { r -= x.w; if (r <= 0) return x; }
-  return STATES[0];
-}
+/* ---------- 心情标签（权重与音节上限都在 pinyinConfig.js 里配置） ---------- */
+const MOOD_LABEL = { lazy: '敷衍', normal: '平常', chatty: '话唠', warm: '热情', sad: '伤心' };
 
-/* ---------- 上下文锚点：从对方的话里抽「最后一个实词」（70% 尾词 / 30% 随机命中） ---------- */
-export function anchorFrom(text) {
+/* ---------- 上下文锚点 ----------
+   mode：'tail'   → 取最后一个实词（配置 anchorTailRate 命中）
+         'random' → 取随机一个实词（配置 anchorRandomRate 命中）
+         省略     → 老逻辑 70% 尾词 / 30% 随机兜底 */
+export function anchorFrom(text, mode) {
   if (!text) return null;
   const s = String(text);
   const hits = [];
@@ -468,7 +460,11 @@ export function anchorFrom(text) {
     }
     if (found) { hits.push(found); i += found.text.length; } else i++;
   }
-  if (hits.length) return chance(70) ? hits[hits.length - 1] : pick(hits);
+  if (hits.length) {
+    if (mode === 'tail') return hits[hits.length - 1];
+    if (mode === 'random') return pick(hits);
+    return chance(70) ? hits[hits.length - 1] : pick(hits);
+  }
   /* 兜底：最后一个汉字的拼音（单字表里有才收） */
   const m = s.match(/[\u4e00-\u9fa5]/g);
   if (m) {
@@ -479,17 +475,83 @@ export function anchorFrom(text) {
   return null;
 }
 
+/** 按配置决定这句话接不接锚点、用哪种锚点：
+    useAnchor 开关 → 尾词命中率 anchorTailRate → 随机命中率 anchorRandomRate → 都不中则不接 */
+export function pickAnchor(text) {
+  const C = cfg();
+  if (!C.useAnchor || !text) return null;
+  if (C.forceRandom && chance(35)) return null;      // forceRandom：锚点时有时无
+  const tail = Math.max(0, Number(C.anchorTailRate) || 0);
+  const rand = Math.max(0, Number(C.anchorRandomRate) || 0);
+  const r = Math.random() * 100;
+  if (r < tail) return anchorFrom(text, 'tail');
+  if (r < tail + rand) return anchorFrom(text, 'random');
+  return null;
+}
+
+/* ---------- 断句：按标点把 segs 切成小句（engine 裁剪后重建 parts 也用它） ---------- */
+const SPLIT_PUNCT = /[，。！？…~～、；;!?]$/;
+export function partsOf(segs) {
+  const parts = [];
+  let cur = [];
+  for (const sg of segs) {
+    cur.push(sg);
+    if (SPLIT_PUNCT.test(sg.t)) { parts.push(cur); cur = []; }
+  }
+  if (cur.length) parts.push(cur);
+  return parts.map((g) => ({
+    text: g.map((x) => x.t).join(''),
+    pinyin: g.map((x) => x.p).join(' '),
+    pinyinTone: g.map((x) => x.pt).join(' '),
+    segs: g
+  }));
+}
+
+/** 按字数把一句话硬裁到 ≤ maxChars（主动拼音的心情字数限制兜底），并重建 parts */
+export function cutPhrase(py, maxChars) {
+  const cap = Math.max(1, Math.round(maxChars) || 1);
+  const kept = [];
+  let len = 0;
+  let changed = false;
+  for (const sg of py.segs) {
+    if (len >= cap) { changed = true; break; }
+    if (len + sg.t.length > cap) {
+      if (!kept.length) kept.push({ ...sg, t: sg.t.slice(0, cap) });   // 首段就超：截字
+      changed = true;
+      break;
+    }
+    kept.push(sg);
+    len += sg.t.length;
+  }
+  if (!changed) return py;
+  return {
+    ...py,
+    text: kept.map((s) => s.t).join(''),
+    pinyin: kept.map((s) => s.p).join(' '),
+    pinyinTone: kept.map((s) => s.pt).join(' '),
+    segs: kept,
+    parts: partsOf(kept),
+    madeUp: kept.some((s) => !s.m)
+  };
+}
+
 /** 随机拼一句（anchor 可选：对方上一句话里的实词拼音，会被强制插进句中）
-    需求3：先抽心情状态（敷衍/平常/话唠/热情/伤心），状态决定长度、语气与断句密度。
-    返回 { text, pinyin, pinyinTone, segs, parts, state, stateLabel, madeUp }
-    - segs：分段 [{p, t, pt, m}]，p=无声调（打字过程显示）、pt=带声调（落卡显示）、m=词库命中
-    - parts：按标点切成的小句（分阶段逐句发送用），每段自带 text/pinyin/pinyinTone/segs
-    - madeUp：存在词库接不上的「生造词」段 → engine 会补一句 [dǎ cuò le] */
-export function randomPhrase(anchor) {
-  const st = drawState();          // 需求3 · 心情状态
+    优先级：forceRandom（极端随机）> 心情状态（音节区间）> 用户配置的各项概率与区间。
+    opt.mood / opt.syllRange 供主动发送指定心情与字数区间（重生成时用）。
+    返回 { text, pinyin, pinyinTone, segs, parts, state, stateLabel, madeUp } */
+export function randomPhrase(anchor, opt = {}) {
+  const C = cfg();
+  const extreme = !!C.forceRandom;                     // 1 级优先 · 全局全部随机
+  const stKey = opt.mood || pickMood();                // 2 级优先 · 心情状态
+  const st = { key: stKey, label: MOOD_LABEL[stKey] || stKey };
+  let [sylMin, sylMax] = opt.syllRange || moodSyllRange(stKey);   // 3 级 · 心情音节区间
+  if (extreme && !opt.syllRange) [sylMin, sylMax] = [1, 16];      // forceRandom 忽略心情限制 → 极端字数
+
   const pieces = [];
   let tpl = null;
-  if (st.key !== 'chatty' && chance(55)) {
+  const useTpl = extreme ? chance(50)
+    : (st.key !== 'chatty' && C.useTemplate && chance(Number(C.templateRate) || 0));
+  if (useTpl) {
     /* 句式模板：按 [代词]+[动词]+[名词]+[语气] 之类预设句型填槽 */
     tpl = pick(TEMPLATES);
     for (const slot of tpl) {
@@ -497,14 +559,11 @@ export function randomPhrase(anchor) {
       pieces.push({ py: w.py, text: w.text });
     }
   } else {
-    /* 自由拼：70% 抽完整词拼音、30% 抽单字（允许重复，取消同句不重复限制） */
-    let n;
-    if (st.key === 'chatty') n = rndInt(8, 13);            // 话唠：强制随机长句
-    else if (st.key === 'lazy') n = rndInt(1, 2);           // 敷衍：能少打就少打
-    else if (st.key === 'warm') n = chance(45) ? rndInt(2, 3) : rndInt(4, 6);
-    else if (st.key === 'sad') n = chance(60) ? rndInt(2, 3) : rndInt(4, 5);
-    else n = chance(58) ? rndInt(2, 3) : rndInt(4, 6);
-    const wordPct = st.key === 'chatty' ? 75 : 70;
+    /* 词 / 单字比例：wordRatio 区间先随机取点再判定；forceRandom 每句 0-100 均匀掷 */
+    const wordPct = extreme ? rndInt(0, 100) : randRange(C.wordRatio, 70);
+    const n = extreme
+      ? (chance(30) ? rndInt(1, 2) : rndInt(10, 16))     // 极端字数：极短或极长
+      : rndInt(sylMin, sylMax);                          // 心情音节区间（心情覆盖底层）
     for (let k = 0; k < n; k++) {
       if (chance(wordPct)) {
         const w = pick(WORD_POOL);
@@ -515,9 +574,9 @@ export function randomPhrase(anchor) {
       }
     }
   }
-  /* 开头高概率加连接词（模板本身以连接词开头则不重复加） */
-  const connPct = st.key === 'warm' ? 78 : st.key === 'sad' ? 45 : st.key === 'lazy' ? 0 : 65;
-  if (!(tpl && tpl[0] === 'cj') && chance(connPct)) {
+  /* 句首连接词：headRate 区间先取点再掷（forceRandom 忽略区间，0-100 均匀） */
+  const headPct = extreme ? rndInt(0, 100) : randRange(C.headRate, 60);
+  if (!(tpl && tpl[0] === 'cj') && chance(headPct)) {
     const c = pick(CONNECTORS);
     pieces.unshift({ py: c.py, text: c.text });
   }
@@ -527,11 +586,13 @@ export function randomPhrase(anchor) {
     anchorIdx = rndInt(0, pieces.length);
     pieces.splice(anchorIdx, 0, { py: anchor.py, text: anchor.text });
   }
-  /* 结尾高概率加语气词（模板本身以语气词收尾则不重复加） */
-  const moodPct = st.key === 'warm' ? 95 : st.key === 'sad' ? 90 : st.key === 'lazy' ? 40 : 80;
-  if (!(tpl && tpl[tpl.length - 1] === 'pt') && chance(moodPct)) {
+  /* 句尾语气词：useTailWord 开关 + tailRate 概率（拼音 UI 会连同 ba 这类拼音一起显示） */
+  const tailOn = extreme ? chance(50) : (C.useTailWord && chance(Number(C.tailRate) || 0));
+  let tailLen = 0;                                    // 句尾语气词音节数（裁剪时永远保留）
+  if (tailOn && !(tpl && tpl[tpl.length - 1] === 'pt')) {
     const m = pick(MOODS);
     pieces.push({ py: m.py, text: m.text });
+    tailLen = m.py.split(' ').length;
   }
   if (!pieces.length) {
     const w = pick(WORD_POOL);
@@ -549,27 +610,41 @@ export function randomPhrase(anchor) {
     }
   }
 
-  /* 需求3 · 敷衍状态：拼音最多 3 个音节——以锚点为窗口裁剪，锚点音节永远保留 */
-  if (st.key === 'lazy' && sylls.length > 3) {
+  /* 心情 / 区间 · 音节上限裁剪：句尾语气词与锚点永远保留，并尽量凑到下限
+     （forceRandom 无 opt 区间时不裁 —— 极端字数优先级最高） */
+  if (sylls.length > sylMax && (!extreme || opt.syllRange)) {
+    /* 1) 句尾语气词先摘出来：主体裁完再拼回去，保证 ba/ma 这类拼音一定显示出来 */
+    let tS = null;
+    let tK = null;
+    if (tailLen > 0 && sylls.length > tailLen) {
+      tS = sylls.splice(sylls.length - tailLen);
+      tK = known.splice(known.length - tailLen);
+    }
+    /* 2) 主体可用名额 = 上限 − 语气词占位（至少留 1 个音节，不出现光剩语气词的句子） */
+    const cap = Math.max(1, sylMax - (tS ? tS.length : 0));
     let s = 0;
-    let e = 3;
+    let e = cap;
     if (anchorIdx >= 0) {
       let a0 = 0;
       for (let k = 0; k < anchorIdx; k++) a0 += pieces[k].py.split(' ').length;
       const aLen = pieces[anchorIdx].py.split(' ').length;
       s = a0;
-      e = a0 + Math.min(aLen, 3);
-      let room = 3 - (e - s);
+      e = a0 + Math.min(aLen, cap);
+      let room = cap - (e - s);
       const pre = Math.min(room, s);
       s -= pre;
       room -= pre;
       e = Math.min(sylls.length, e + room);
-      if (e - s < 3 && e < sylls.length) e = Math.min(sylls.length, s + 3);
+      if (e - s < cap && e < sylls.length) e = Math.min(sylls.length, s + cap);
+      /* 下限兜底：窗口还不够 [min] 就前后再扩 */
+      let need = sylMin - (e - s);
+      if (need > 0) { e = Math.min(sylls.length, e + need); need = sylMin - (e - s); if (need > 0) s = Math.max(0, s - need); }
     }
     const keptS = sylls.slice(s, e);
     const keptK = known.slice(s, e);
     sylls.length = 0; sylls.push(...keptS);
     known.length = 0; known.push(...keptK);
+    if (tS) { sylls.push(...tS); known.push(...tK); }     // 3) 语气词拼回句尾
   }
 
   /* 音节级最长匹配重组：词库优先组词，匹配不到才退回单字（保证可解析、无死循环） */
@@ -587,10 +662,9 @@ export function randomPhrase(anchor) {
     else { segs.push({ p: sylls[i], t: known[i], pt: toTone(sylls[i]), m: false }); i++; }
   }
 
-  /* 需求5 · 断句与节奏：长句按小句补标点（逗号为主、偶尔句号），供 engine 分阶段逐句发送 */
-  const SPLIT_PUNCT = /[，。！？…~～、；;!?]$/;
+  /* 断句与节奏：长句按小句补标点（逗号为主、偶尔句号），供 engine 分阶段逐句发送 */
   if (sylls.length >= 6 && segs.length >= 3) {
-    const clauseProb = st.key === 'chatty' ? 70 : st.key === 'sad' ? 40 : 48;
+    const clauseProb = extreme ? 60 : st.key === 'chatty' ? 70 : st.key === 'sad' ? 40 : 48;
     let acc = 0;
     let sylSeen = 0;
     const totalSyl = sylls.length;
@@ -606,30 +680,15 @@ export function randomPhrase(anchor) {
     }
   }
 
-  /* 按标点切成小句（需求5 · 分阶段发送的最小单位） */
-  const parts = [];
-  let cur = [];
-  for (const sg of segs) {
-    cur.push(sg);
-    if (SPLIT_PUNCT.test(sg.t)) { parts.push(cur); cur = []; }
-  }
-  if (cur.length) parts.push(cur);
-  const toPart = (g) => ({
-    text: g.map((x) => x.t).join(''),
-    pinyin: g.map((x) => x.p).join(' '),
-    pinyinTone: g.map((x) => x.pt).join(' '),
-    segs: g
-  });
-
   return {
     text: segs.map((s) => s.t).join(''),
     pinyin: segs.map((s) => s.p).join(' '),
     pinyinTone: segs.map((s) => s.pt).join(' '),
     segs,
-    parts: parts.map(toPart),
+    parts: partsOf(segs),
     state: st.key,
     stateLabel: st.label,
-    madeUp: segs.some((s) => !s.m)   // 需求4：词库接不上的「生造词」
+    madeUp: segs.some((s) => !s.m)   // 词库接不上的「生造词」→ engine 补一句 [dǎ cuò le]
   };
 }
 

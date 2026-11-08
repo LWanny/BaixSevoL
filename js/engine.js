@@ -4,7 +4,8 @@
 
 import { chance, rndInt, pick, uid } from './util.js';
 import { drawInspiration } from './inspiration.js';
-import { randomPhrase, anchorFrom } from './pinyin.js';
+import { randomPhrase, pickAnchor, cutPhrase } from './pinyin.js';
+import { cfg, moodLenRange } from './pinyinConfig.js';
 
 /* ---------- 表情池 ---------- */
 export const EMOJI = ['😢', '🥺', '😆', '😘', '💕', '😌', '😻', '😴', '😤', '🤣', '😅', '😊', '💪', '✨', '🍀', '🌙', '☀️', '🐱', '🐶'];
@@ -127,6 +128,11 @@ async function buildOne(pool, params) {
 
 /** 单条消息的回复延迟（毫秒）：最短按秒、最长按分钟存储 */
 export function delayFor(params) {
+  const C = cfg();
+  if (C.forceRandom) {
+    // forceRandom（最高优先级）：要么秒回、要么几十分钟不回
+    return chance(30) ? rndInt(0, 3) * 1000 : rndInt(45, 2400) * 1000;
+  }
   const lo = Math.max(0, Number(params.delayMin) || 0);
   const hi = Math.max(lo, (Number(params.delayMax) || 0) * 60);
   return rndInt(lo, hi) * 1000;
@@ -156,6 +162,34 @@ function pushPinyinSteps(steps, py, firstDelay, extra = {}) {
   }
 }
 
+/** 主动发送的拼音受「主动联系」配置约束：
+    按当前心情的 proactiveLen 字数区间重生成（≈字数），最多重试 4 次取最接近的一版，超上限硬裁；
+    forceRandom 时走极端字数（极短或极长），忽略用户区间 */
+function fitProactive(anchor) {
+  const C = cfg();
+  let py = randomPhrase(anchor);
+  if (C.forceRandom) {
+    const range = chance(30) ? [1, 3] : [15, 28];
+    py = randomPhrase(anchor, { mood: py.state, syllRange: range });
+    if (py.text.length > range[1]) py = cutPhrase(py, range[1]);
+    return py;
+  }
+  const range = moodLenRange(py.state);
+  const dist = (x) => (x.text.length < range[0] ? range[0] - x.text.length : 0)
+    + (x.text.length > range[1] ? x.text.length - range[1] : 0);
+  let best = py;
+  let bestD = dist(py);
+  const mood = py.state;
+  for (let i = 0; i < 4 && bestD > 0; i++) {
+    const again = randomPhrase(anchor, { mood, syllRange: range });
+    const d = dist(again);
+    if (d === 0) return again;
+    if (d < bestD) { best = again; bestD = d; }
+  }
+  if (bestD > 0 && best.text.length > range[1]) best = cutPhrase(best, range[1]);
+  return best;
+}
+
 /**
  * 生成 TA 对我某条消息的回复计划。
  * 返回 { ignored:boolean, steps:[{kind,delayMs,...}] }
@@ -180,7 +214,7 @@ export async function buildReply({ cards, params, history = [], incomingText = '
       pinyinUsed = true;
       // 上下文锚点：优先取对方刚说的这句的实词，兜底取我方上一条，保证能接上话
       const lastMe = [...history].reverse().find((m) => m.role === 'me' && m.text);
-      const anchor = anchorFrom(incomingText) || (lastMe ? anchorFrom(lastMe.text) : null);
+      const anchor = pickAnchor(incomingText) || (lastMe ? pickAnchor(lastMe.text) : null);
       const py = randomPhrase(anchor);
       pushPinyinSteps(steps, py, delayFor(params));
       continue;
@@ -293,12 +327,16 @@ export async function buildProactive({ cards, params, history = [], medias = [] 
   const count = rndInt(lo, hi);
   let pinyinUsed = false;
   for (let i = 0; i < count; i++) {
-    if (!pinyinUsed && params.pinyinEnabled && chance(Number(params.pinyinPct) || 0)) {
+    // 主动拼音打字：受「主动联系」配置约束 —— enableProactive 开关（forceRandom 无视开关）
+    const C = cfg();
+    const pyOn = params.pinyinEnabled && chance(Number(params.pinyinPct) || 0)
+      && (C.enableProactive || C.forceRandom);
+    if (!pinyinUsed && pyOn) {
       pinyinUsed = true;
       // 主动消息没有 incomingText，锚点取我方上一条
       const lastMe = [...history].reverse().find((m) => m.role === 'me' && m.text);
-      const anchor = lastMe ? anchorFrom(lastMe.text) : null;
-      const py = randomPhrase(anchor);
+      const anchor = lastMe ? pickAnchor(lastMe.text) : null;
+      const py = fitProactive(anchor);
       pushPinyinSteps(steps, py, i === 0 ? 0 : delayFor(params), { proactive: true });
       continue;
     }

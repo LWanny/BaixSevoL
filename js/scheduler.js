@@ -4,6 +4,7 @@
 
 import { put, all, bulkPut, kvGet, kvSet } from './store.js';
 import { buildReply, buildProactive, eligible, drawCards, delayFor } from './engine.js';
+import { cfg } from './pinyinConfig.js';
 import { state } from './state.js';
 import { uid, chance, rndInt, pick } from './util.js';
 import { notify } from './notify.js';
@@ -84,6 +85,7 @@ async function runSteps(steps) {
      - 敲完停顿后落卡，卡片上显示的是带声调拼音 */
   const KEY_LETTERS = 'abcdefghijklmnopqrstuvwxyz';
   async function typePinyin(s) {
+    const C = cfg();   // 拼音配置实时读取：设置页改完，下一句打字就生效
     const segs = (s.pysegs && s.pysegs.length) ? s.pysegs : [{ p: s.pinyin || '', t: s.text || '', m: false }];
     const sylls = [];
     for (const seg of segs) for (const syl of String(seg.p || '').split(' ')) if (syl) sylls.push(syl);
@@ -98,8 +100,12 @@ async function runSteps(steps) {
         emit('typing', { on: true, label: '拼音组词中', py: typed });
         await wait(rndInt(35, 130));
 
-        /* 需求2：随机 0–10% 手滑多敲一个错字母 → 短暂停 → 退格删掉 */
-        if (chance(rndInt(0, 10))) {
+        /* 打错字 + 退格：typoRate 区间先随机取点再判定（forceRandom 时极其频繁 25-60%） */
+        const typoPct = C.forceRandom
+          ? rndInt(25, 60)
+          : rndInt(Math.max(0, Number(C.typoRate && C.typoRate[0]) || 0),
+                   Math.max(0, Number(C.typoRate && C.typoRate[1]) || 0));
+        if (chance(typoPct)) {
           let bad = KEY_LETTERS[rndInt(0, 25)];
           const next = syl[j];
           if (next && bad === next) bad = KEY_LETTERS[(KEY_LETTERS.indexOf(bad) + 7) % 26];
@@ -262,10 +268,24 @@ export function stopProactive() {
 
 function tickAll() { tickProactive(); tickTaAsk(); tickMemoDue(); tickShop().catch(() => {}); }
 
-/** 随机一个主动发送间隔（毫秒），由最短 / 最长间隔决定 */
-function proactiveGap(p) {
+/** 主动发送间隔区间 [分钟]：「主动联系」配置 enableProactive 时优先，否则用回复参数里的老设置 */
+function proactiveIntervalMin(p) {
+  const C = cfg();
+  if (C.enableProactive) {
+    const lo = Math.max(1, Math.round(Number(C.proactiveInterval && C.proactiveInterval[0]) || 5));
+    const hi = Math.max(lo, Math.round(Number(C.proactiveInterval && C.proactiveInterval[1]) || 30));
+    return [lo, hi];
+  }
   const lo = Math.max(1, Number(p.proactiveIntervalMin) || 1);
   const hi = Math.max(lo, Number(p.proactiveIntervalMax) || lo);
+  return [lo, hi];
+}
+
+/** 随机一个主动发送间隔（毫秒）：forceRandom 极端（12-60 秒 或 20-40 分钟）最高优先 */
+function proactiveGap(p) {
+  const C = cfg();
+  if (C.forceRandom) return (chance(25) ? rndInt(15, 60) : rndInt(1200, 2400)) * 1000;
+  const [lo, hi] = proactiveIntervalMin(p);
   return rndInt(lo, hi) * 60000;
 }
 
@@ -321,9 +341,8 @@ export async function catchUpProactive() {
   }
   if (now < due) return;
   const last = Number(await kvGet('lastProactive', due)) || due;
-  const lo = Math.max(1, Number(p.proactiveIntervalMin) || 1);
-  const hi = Math.max(lo, Number(p.proactiveIntervalMax) || lo);
-  const avg = ((lo + hi) / 2) * 60000;
+  const [lo, hi] = proactiveIntervalMin(p);
+  const avg = (cfg().forceRandom ? 20 : (lo + hi) / 2) * 60000;   // forceRandom 平均间隔 ≈ 20 分钟
   const missed = Math.max(1, Math.min(3, Math.floor((now - last) / Math.max(1, avg)) || 1));
   await kvSet('lastProactive', now);
   await kvSet('nextProactiveAt', now + proactiveGap(p));
