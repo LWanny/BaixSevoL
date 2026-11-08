@@ -91,7 +91,7 @@ export default async function pagePinyinLib(view) {
   function render() {
     const st = WORD_STATS;
     stats.textContent = `共 ${PINYIN_WORD_SIZE} 条 · 内置 ${PINYIN_WORD_SIZE - st.user} · 自定义 ${st.user}`
-      + `　|　单字库 ${PINYIN_POOL_SIZE} 个 · 双字 ${st.two} · 三字 ${st.three} · 四字+ ${st.four} · 半截话 ${st.frag}`;
+      + `　|　单字库 ${PINYIN_POOL_SIZE} 个 · 单字词 ${st.one} · 双字 ${st.two} · 三字 ${st.three} · 四字+ ${st.four} · 半截话 ${st.frag}`;
 
     chips.innerHTML = '';
     for (const [k, t] of CATS) {

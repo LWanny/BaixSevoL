@@ -193,7 +193,7 @@ function buildPinyinCfg() {
   const st = WORD_STATS;
   const posN = Object.keys(st.pos).filter((k) => k !== 'other').length;
   p1.appendChild(el('div', { class: 'cfg-stats', text:
-    `专属字库 · 单字 ${PINYIN_POOL_SIZE} 个 · 词 ${PINYIN_WORD_SIZE} 条（双字 ${st.two} / 三字 ${st.three} / 四字 ${st.four} / 半截话 ${st.frag}）· 词性 ${posN} 类` }));
+    `专属字库 · 单字库 ${PINYIN_POOL_SIZE} 个 · 词 ${PINYIN_WORD_SIZE} 条（单字词 ${st.one} / 双字 ${st.two} / 三字 ${st.three} / 四字+ ${st.four} / 半截话 ${st.frag}）· 词性 ${posN} 类` }));
   p1.appendChild(cfgPair('抽完整词拼音', '每次生成在区间里取点，按与「抽单字」的比例决定抽词还是抽单字',
     () => C().wordRatio, (v) => saveCfg({ wordRatio: v }), 0, 100));
   p1.appendChild(cfgPair('抽单字拼音', '与上面的比例决定混合（词 : 单字 ≈ 抽词概率 : 抽单字概率）',

@@ -732,15 +732,16 @@ export function randomPhrase(anchor, opt = {}) {
 export const PINYIN_POOL_SIZE = POOL.length;
 /** 词库大小（用户在「拼音字卡库」增删后自动更新，import 端读到的是实时值） */
 export let PINYIN_WORD_SIZE = WORD_POOL.length;
-/** 词库分类统计：双字 / 三字 / 四字（含更长）/ 半截话 / 自定义 + 词性分布 */
-export const WORD_STATS = { two: 0, three: 0, four: 0, frag: 0, user: 0, pos: {} };
+/** 词库分类统计：单字词 / 双字 / 三字 / 四字（含更长）/ 半截话 / 自定义 + 词性分布 */
+export const WORD_STATS = { one: 0, two: 0, three: 0, four: 0, frag: 0, user: 0, pos: {} };
 function refreshStats() {
   const st = WORD_STATS;
-  st.two = st.three = st.four = st.frag = st.user = 0;
+  st.one = st.two = st.three = st.four = st.frag = st.user = 0;
   st.pos = {};
   for (const w of WORD_POOL) {
     if (w.frag) st.frag++;
-    else if (w.text.length <= 2) st.two++;
+    else if (w.text.length <= 1) st.one++;
+    else if (w.text.length === 2) st.two++;
     else if (w.text.length === 3) st.three++;
     else st.four++;
     if (w.u) st.user++;
