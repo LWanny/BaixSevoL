@@ -1400,5 +1400,43 @@ const E = [
   { py: 'dui bu dui', text: '对不对', pos: 'nn' }
 ];
 
-/* 汇总导出：词库优先用于组词；pos 供句式模板选槽 */
-export const WORD_POOL = [...A, ...B, ...C, ...D, ...E];
+
+/* ---- 批 F：半截话（口语半句碎片，frag 标记 · 分类展示与抽取） ---- */
+const F = [
+  { py: 'de hua', text: '的话', pos: 'cj', frag: 1 }, { py: 'jiu xing', text: '就行', pos: 'pt', frag: 1 },
+  { py: 'jiu hao', text: '就好', pos: 'pt', frag: 1 }, { py: 'jiu hao le', text: '就好了', pos: 'pt', frag: 1 },
+  { py: 'jiu zhe yang', text: '就这样', pos: 'pt', frag: 1 }, { py: 'jiu shi le', text: '就是了', pos: 'pt', frag: 1 },
+  { py: 'ni dong ma', text: '你懂吗', pos: 'pt', frag: 1 }, { py: 'wo gen ni shuo', text: '我跟你说', pos: 'vb', frag: 1 },
+  { py: 'shuo shi hua', text: '说实话', pos: 'cj', frag: 1 }, { py: 'shuo zhen de', text: '说真的', pos: 'dv', frag: 1 },
+  { py: 'jiang zhen', text: '讲真', pos: 'dv', frag: 1 }, { py: 'jiang dao li', text: '讲道理', pos: 'vb', frag: 1 },
+  { py: 'dao shi hou', text: '到时候', pos: 'tm', frag: 1 }, { py: 'zen me shuo ne', text: '怎么说呢', pos: 'pt', frag: 1 },
+  { py: 'bu shi wo shuo', text: '不是我说', pos: 'cj', frag: 1 }, { py: 'wen ti shi', text: '问题是', pos: 'cj', frag: 1 },
+  { py: 'guan jian shi', text: '关键是', pos: 'cj', frag: 1 }, { py: 'ye jiu shi shuo', text: '也就是说', pos: 'cj', frag: 1 },
+  { py: 'dong ba', text: '懂吧', pos: 'pt', frag: 1 }, { py: 'wo tai nan le', text: '我太难了', pos: 'aj', frag: 1 },
+  { py: 'xiao si', text: '笑死', pos: 'vb', frag: 1 }, { py: 'xiao bu huo le', text: '笑不活了', pos: 'vb', frag: 1 },
+  { py: 'mei ban fa', text: '没办法', pos: 'nn', frag: 1 }, { py: 'ke neng ba', text: '可能吧', pos: 'pt', frag: 1 },
+  { py: 'ying gai ba', text: '应该吧', pos: 'pt', frag: 1 }, { py: 'zai kan kan', text: '再看看', pos: 'vb', frag: 1 },
+  { py: 'you ji hui', text: '有机会', pos: 'vb', frag: 1 }, { py: 'hao hao hao', text: '好好好', pos: 'pt', frag: 1 },
+  { py: 'ming bai le', text: '明白了', pos: 'vb', frag: 1 }, { py: 'you yi si', text: '有意思', pos: 'aj', frag: 1 },
+  { py: 'mei yi si', text: '没意思', pos: 'aj', frag: 1 }, { py: 'tai qiang le', text: '太强了', pos: 'aj', frag: 1 },
+  { py: 'ting hao', text: '挺好', pos: 'aj', frag: 1 }, { py: 'hai xing', text: '还行', pos: 'aj', frag: 1 },
+  { py: 'yi ban ban', text: '一般般', pos: 'aj', frag: 1 }, { py: 'jiu na yang', text: '就那样', pos: 'pt', frag: 1 },
+  { py: 'dou xing', text: '都行', pos: 'aj', frag: 1 }, { py: 'ye xu ba', text: '也许吧', pos: 'pt', frag: 1 },
+  { py: 'na jiu hao', text: '那就好', pos: 'pt', frag: 1 }, { py: 'zhe yang a', text: '这样啊', pos: 'pt', frag: 1 },
+  { py: 'shui ba', text: '睡吧', pos: 'vb', frag: 1 }, { py: 'chi ba', text: '吃吧', pos: 'vb', frag: 1 },
+  { py: 'he ba', text: '喝吧', pos: 'vb', frag: 1 }, { py: 'wan ba', text: '玩吧', pos: 'vb', frag: 1 },
+  { py: 'bu zhao ji', text: '不着急', pos: 'aj', frag: 1 }, { py: 'shuo qi lai', text: '说起来', pos: 'vb', frag: 1 },
+  { py: 'xiang qi lai', text: '想起来', pos: 'vb', frag: 1 }, { py: 'tu ran jian', text: '突然间', pos: 'tm', frag: 1 },
+  { py: 'yi shun jian', text: '一瞬间', pos: 'tm', frag: 1 }, { py: 'yi zhuan yan', text: '一转眼', pos: 'tm', frag: 1 },
+  { py: 'zhen de shi', text: '真的是', pos: 'dv', frag: 1 }, { py: 'wo ye shi', text: '我也是', pos: 'pn', frag: 1 },
+  { py: 'shui zhi dao ne', text: '谁知道呢', pos: 'pt', frag: 1 }, { py: 'sui ni', text: '随你', pos: 'pn', frag: 1 },
+  { py: 'ni jue ding', text: '你决定', pos: 'vb', frag: 1 }, { py: 'kan ni', text: '看你', pos: 'vb', frag: 1 },
+  { py: 'kan kan ba', text: '看看吧', pos: 'pt', frag: 1 }, { py: 'zai shuo ba', text: '再说吧', pos: 'pt', frag: 1 },
+  { py: 'hui tou shuo', text: '回头说', pos: 'vb', frag: 1 }, { py: 'mang wan le', text: '忙完了', pos: 'vb', frag: 1 },
+  { py: 'wo gen ni jiang', text: '我跟你讲', pos: 'vb', frag: 1 }, { py: 'ni bie zhao ji', text: '你别着急', pos: 'vb', frag: 1 },
+  { py: 'dao ci wei zhi', text: '到此为止', pos: 'vb', frag: 1 }, { py: 'gai tian jian', text: '改天见', pos: 'vb', frag: 1 },
+  { py: 'you dian er', text: '有点儿', pos: 'dv', frag: 1 }, { py: 'yi zheng zi', text: '一阵子', pos: 'tm', frag: 1 },
+  { py: 'dao zhe li', text: '到这里', pos: 'tm', frag: 1 }, { py: 'ni xian mang', text: '你先忙', pos: 'vb', frag: 1 }
+];
+
+export const WORD_POOL = [...A, ...B, ...C, ...D, ...E, ...F];

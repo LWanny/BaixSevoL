@@ -431,6 +431,30 @@ const TEMPLATES = [
   ['tm', 'cj', 'pn', 'vb']
 ];
 
+/* 槽位词性 → 中文（设置页展示句型、解析用户自定义句型都用它） */
+export const SLOT_NAMES = {
+  pn: '代词', tm: '时间', cj: '连接', dv: '程度', pt: '语气',
+  vb: '动词', nn: '名词', aj: '形容词'
+};
+
+/** 全部可用句型 = 内置 10 个 + 用户在设置页添加的自定义句型（非法槽位丢弃） */
+export function allTemplates() {
+  const out = TEMPLATES.slice();
+  const custom = cfg().customTemplates || [];
+  for (const t of custom) {
+    if (Array.isArray(t) && t.length >= 2 && t.length <= 8 && t.every((s) => POOLS[s])) out.push(t);
+  }
+  return out;
+}
+
+/** 句型 → 展示文本（代词 + 动词 + 名词 + 语气） */
+export function templateText(tpl) {
+  return tpl.map((s) => SLOT_NAMES[s] || s).join(' + ');
+}
+
+/** 内置句型展示列表（设置页只读展示用） */
+export function builtinTemplates() { return TEMPLATES.map(templateText); }
+
 /* 高频语气词（句尾 80% 追加）与高频连接词（句首 65% 追加） */
 const MOODS = [
   { py: 'ba', text: '吧' }, { py: 'ma', text: '吗' }, { py: 'a', text: '啊' },
@@ -481,8 +505,9 @@ export function pickAnchor(text) {
   const C = cfg();
   if (!C.useAnchor || !text) return null;
   if (C.forceRandom && chance(35)) return null;      // forceRandom：锚点时有时无
-  const tail = Math.max(0, Number(C.anchorTailRate) || 0);
-  const rand = Math.max(0, Number(C.anchorRandomRate) || 0);
+  // 命中率是区间：每次生成先取点再判定；forceRandom 时忽略用户区间、内置极端命中率
+  const tail = C.forceRandom ? rndInt(50, 90) : randRange(C.anchorTailRate, 70);
+  const rand = C.forceRandom ? rndInt(10, 40) : randRange(C.anchorRandomRate, 30);
   const r = Math.random() * 100;
   if (r < tail) return anchorFrom(text, 'tail');
   if (r < tail + rand) return anchorFrom(text, 'random');
@@ -549,23 +574,27 @@ export function randomPhrase(anchor, opt = {}) {
 
   const pieces = [];
   let tpl = null;
+  // 模板使用概率是区间：每次生成取点再掷；forceRandom 忽略开关与用户区间
   const useTpl = extreme ? chance(50)
-    : (st.key !== 'chatty' && C.useTemplate && chance(Number(C.templateRate) || 0));
+    : (st.key !== 'chatty' && C.useTemplate && chance(randRange(C.templateRate, 60)));
   if (useTpl) {
-    /* 句式模板：按 [代词]+[动词]+[名词]+[语气] 之类预设句型填槽 */
-    tpl = pick(TEMPLATES);
+    /* 句式模板：按 [代词]+[动词]+[名词]+[语气] 之类预设句型填槽（内置 + 用户自定义） */
+    tpl = pick(allTemplates());
     for (const slot of tpl) {
       const w = pick(POOLS[slot]);
       pieces.push({ py: w.py, text: w.text });
     }
   } else {
-    /* 词 / 单字比例：wordRatio 区间先随机取点再判定；forceRandom 每句 0-100 均匀掷 */
-    const wordPct = extreme ? rndInt(0, 100) : randRange(C.wordRatio, 70);
+    /* 词 / 单字比例：词概率区间与单字概率区间各取一点，按两者比例决定每次抽词还是抽单字；
+       forceRandom 时词概率 0-100 均匀、单字 = 100 − 词 */
+    const wPct = extreme ? rndInt(0, 100) : randRange(C.wordRatio, 70);
+    const sPct = extreme ? 100 - wPct : randRange(C.singleRatio, 30);
+    const pWordPct = (wPct + sPct) > 0 ? (wPct / (wPct + sPct)) * 100 : 50;
     const n = extreme
       ? (chance(30) ? rndInt(1, 2) : rndInt(10, 16))     // 极端字数：极短或极长
       : rndInt(sylMin, sylMax);                          // 心情音节区间（心情覆盖底层）
     for (let k = 0; k < n; k++) {
-      if (chance(wordPct)) {
+      if (chance(pWordPct)) {
         const w = pick(WORD_POOL);
         pieces.push({ py: w.py, text: w.text });
       } else {
@@ -586,8 +615,9 @@ export function randomPhrase(anchor, opt = {}) {
     anchorIdx = rndInt(0, pieces.length);
     pieces.splice(anchorIdx, 0, { py: anchor.py, text: anchor.text });
   }
-  /* 句尾语气词：useTailWord 开关 + tailRate 概率（拼音 UI 会连同 ba 这类拼音一起显示） */
-  const tailOn = extreme ? chance(50) : (C.useTailWord && chance(Number(C.tailRate) || 0));
+  /* 句尾语气词：useTailWord 开关 + tailRate 概率区间（拼音 UI 会连同 ba 这类拼音一起显示） */
+  const tailOn = extreme ? chance(50)
+    : (C.useTailWord && chance(randRange(C.tailRate, 80)));
   let tailLen = 0;                                    // 句尾语气词音节数（裁剪时永远保留）
   if (tailOn && !(tpl && tpl[tpl.length - 1] === 'pt')) {
     const m = pick(MOODS);
@@ -696,3 +726,16 @@ export function randomPhrase(anchor, opt = {}) {
 export const PINYIN_POOL_SIZE = POOL.length;
 /** 词库大小 */
 export const PINYIN_WORD_SIZE = WORD_POOL.length;
+/** 词库分类统计：双字 / 三字 / 四字（含更长）/ 半截话 + 词性分布（设置页展示用） */
+export const WORD_STATS = (() => {
+  const st = { two: 0, three: 0, four: 0, frag: 0, pos: {} };
+  for (const w of WORD_POOL) {
+    if (w.frag) st.frag++;
+    else if (w.text.length <= 2) st.two++;
+    else if (w.text.length === 3) st.three++;
+    else st.four++;
+    const p = SLOT_NAMES[w.pos] ? w.pos : 'other';
+    st.pos[p] = (st.pos[p] || 0) + 1;
+  }
+  return st;
+})();

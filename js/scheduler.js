@@ -268,25 +268,26 @@ export function stopProactive() {
 
 function tickAll() { tickProactive(); tickTaAsk(); tickMemoDue(); tickShop().catch(() => {}); }
 
-/** 主动发送间隔区间 [分钟]：「主动联系」配置 enableProactive 时优先，否则用回复参数里的老设置 */
-function proactiveIntervalMin(p) {
+/** 主动发送间隔的毫秒范围 [最短, 最长]：
+    配置区间 = [最短秒, 最长分钟]；老参数（分钟对）保持分钟语义 */
+function proactiveGapRange(p) {
   const C = cfg();
   if (C.enableProactive) {
-    const lo = Math.max(1, Math.round(Number(C.proactiveInterval && C.proactiveInterval[0]) || 5));
-    const hi = Math.max(lo, Math.round(Number(C.proactiveInterval && C.proactiveInterval[1]) || 30));
-    return [lo, hi];
+    const sec = Math.max(1, Math.round(Number(C.proactiveInterval && C.proactiveInterval[0]) || 5));
+    const maxMin = Math.max(1, Math.round(Number(C.proactiveInterval && C.proactiveInterval[1]) || 30));
+    return [sec * 1000, Math.max(sec, maxMin * 60) * 1000];
   }
   const lo = Math.max(1, Number(p.proactiveIntervalMin) || 1);
   const hi = Math.max(lo, Number(p.proactiveIntervalMax) || lo);
-  return [lo, hi];
+  return [lo * 60000, hi * 60000];
 }
 
 /** 随机一个主动发送间隔（毫秒）：forceRandom 极端（12-60 秒 或 20-40 分钟）最高优先 */
 function proactiveGap(p) {
   const C = cfg();
   if (C.forceRandom) return (chance(25) ? rndInt(15, 60) : rndInt(1200, 2400)) * 1000;
-  const [lo, hi] = proactiveIntervalMin(p);
-  return rndInt(lo, hi) * 60000;
+  const [loMs, hiMs] = proactiveGapRange(p);
+  return rndInt(Math.round(loMs / 1000), Math.round(hiMs / 1000)) * 1000;
 }
 
 /** 到点后按「主动发送概率」决定是否真的发 */
@@ -341,8 +342,8 @@ export async function catchUpProactive() {
   }
   if (now < due) return;
   const last = Number(await kvGet('lastProactive', due)) || due;
-  const [lo, hi] = proactiveIntervalMin(p);
-  const avg = (cfg().forceRandom ? 20 : (lo + hi) / 2) * 60000;   // forceRandom 平均间隔 ≈ 20 分钟
+  const [loMs, hiMs] = proactiveGapRange(p);
+  const avg = cfg().forceRandom ? 20 * 60000 : (loMs + hiMs) / 2;   // forceRandom 平均间隔 ≈ 20 分钟
   const missed = Math.max(1, Math.min(3, Math.floor((now - last) / Math.max(1, avg)) || 1));
   await kvSet('lastProactive', now);
   await kvSet('nextProactiveAt', now + proactiveGap(p));

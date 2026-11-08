@@ -9,6 +9,8 @@ import { saveMedia, mediaURL } from '../media.js';
 import { toast, confirmBox } from '../ui.js';
 import { go } from '../router.js';
 import { cfg, saveCfg, MOOD_KEYS } from '../pinyinConfig.js';
+import { PINYIN_POOL_SIZE, PINYIN_WORD_SIZE, WORD_STATS, SLOT_NAMES,
+  builtinTemplates, templateText } from '../pinyin.js';
 
 export default async function pageRole(view) {
   fullPage({ back: true, title: '角色', actions: [
@@ -183,10 +185,16 @@ function buildPinyinCfg() {
       () => C().forceRandom, (v) => { saveCfg({ forceRandom: !!v }); paintOff(); })
   ]);
 
-  /* ---- 面板 1 · 输入习惯 ---- */
+  /* ---- 面板 1 · 输入习惯（词库/单字/打错字 三个概率区间） ---- */
   const p1 = el('div');
-  p1.appendChild(cfgPair('抽词库概率', '句子里抽完整词库的概率区间，剩下的抽单字',
+  const st = WORD_STATS;
+  const posN = Object.keys(st.pos).filter((k) => k !== 'other').length;
+  p1.appendChild(el('div', { class: 'cfg-stats', text:
+    `专属字库 · 单字 ${PINYIN_POOL_SIZE} 个 · 词 ${PINYIN_WORD_SIZE} 条（双字 ${st.two} / 三字 ${st.three} / 四字 ${st.four} / 半截话 ${st.frag}）· 词性 ${posN} 类` }));
+  p1.appendChild(cfgPair('抽完整词拼音', '每次生成在区间里取点，按与「抽单字」的比例决定抽词还是抽单字',
     () => C().wordRatio, (v) => saveCfg({ wordRatio: v }), 0, 100));
+  p1.appendChild(cfgPair('抽单字拼音', '与上面的比例决定混合（词 : 单字 ≈ 抽词概率 : 抽单字概率）',
+    () => C().singleRatio, (v) => saveCfg({ singleRatio: v }), 0, 100));
   p1.appendChild(cfgPair('打错字 + 退格', '每个字母打错并按退格删除的概率区间',
     () => C().typoRate, (v) => saveCfg({ typoRate: v }), 0, 100));
 
@@ -194,23 +202,28 @@ function buildPinyinCfg() {
   const p2 = el('div');
   p2.appendChild(cfgToggle('句式模板', '按「代词 + 动词 + 名词 + 语气」的预设句型填槽',
     () => C().useTemplate, (v) => saveCfg({ useTemplate: !!v })));
-  p2.appendChild(cfgSlider('模板使用概率 %', () => C().templateRate, (v) => saveCfg({ templateRate: v }), 0, 100));
+  p2.appendChild(cfgPair('模板使用概率 %', '开启后每次生成先取点再掷，命中才用句型',
+    () => C().templateRate, (v) => saveCfg({ templateRate: v }), 0, 100));
+  p2.appendChild(buildTemplateBox());
   p2.appendChild(cfgToggle('上下文锚点', '把对方话里的实词插进回复接话',
     () => C().useAnchor, (v) => saveCfg({ useAnchor: !!v })));
-  p2.appendChild(cfgSlider('锚点 · 尾词命中 %', () => C().anchorTailRate, (v) => saveCfg({ anchorTailRate: v }), 0, 100));
-  p2.appendChild(cfgSlider('锚点 · 随机命中 %', () => C().anchorRandomRate, (v) => saveCfg({ anchorRandomRate: v }), 0, 100));
+  p2.appendChild(cfgPair('锚点 · 尾词命中 %', '取对方话里最后一个实词的概率区间',
+    () => C().anchorTailRate, (v) => saveCfg({ anchorTailRate: v }), 0, 100));
+  p2.appendChild(cfgPair('锚点 · 随机命中 %', '取对方话里随机实词的概率区间',
+    () => C().anchorRandomRate, (v) => saveCfg({ anchorRandomRate: v }), 0, 100));
   p2.appendChild(cfgToggle('句尾语气词', '句尾追加语气词，拼音 UI 会连它的拼音一起显示（如 吧·ba）',
     () => C().useTailWord, (v) => saveCfg({ useTailWord: !!v })));
-  p2.appendChild(cfgSlider('语气词概率 %', () => C().tailRate, (v) => saveCfg({ tailRate: v }), 0, 100));
+  p2.appendChild(cfgPair('句尾追加概率 %', '每次生成取点后掷，命中就在句尾追加 ba/ma/呢…',
+    () => C().tailRate, (v) => saveCfg({ tailRate: v }), 0, 100));
   p2.appendChild(cfgPair('句首连接词', '句首加「那个 / 然后 / 不过」的概率区间',
     () => C().headRate, (v) => saveCfg({ headRate: v }), 0, 100));
 
-  /* ---- 面板 3 · 心情设定（权重 + 音节限制，心情优先于底层概率） ---- */
+  /* ---- 面板 3 · 心情设定（权重区间 + 音节限制，心情优先于底层概率） ---- */
   const p3 = el('div');
   MOOD_KEYS.forEach((k) => {
     p3.appendChild(el('div', { class: 'cfg-mood-h', text: MOOD_NAMES[k] }));
-    p3.appendChild(cfgSlider('抽中权重 %', () => C().moodWeights[k],
-      (v) => saveCfg({ moodWeights: { ...C().moodWeights, [k]: v } }), 0, 100));
+    p3.appendChild(cfgPair('抽中权重概率区间 %', '每次抽心情时在区间里取点再加权',
+      () => C().moodWeights[k], (v) => saveCfg({ moodWeights: { ...C().moodWeights, [k]: v } }), 0, 100));
     p3.appendChild(cfgPair('音节数（最短 ~ 最长）', null,
       () => C().moodSyll[k], (v) => saveCfg({ moodSyll: { ...C().moodSyll, [k]: v } }), 1, 16));
   });
@@ -219,18 +232,21 @@ function buildPinyinCfg() {
   const p4 = el('div');
   p4.appendChild(cfgToggle('主动打字', '关闭后 TA 主动联系时不再敲拼音（仍会发普通字卡消息）',
     () => C().enableProactive, (v) => saveCfg({ enableProactive: !!v })));
-  p4.appendChild(cfgPair('主动发送间隔', '两次主动联系之间的间隔（分钟）',
-    () => C().proactiveInterval, (v) => saveCfg({ proactiveInterval: v }), 1, 120));
+  p4.appendChild(cfgRow('主动发送间隔', '最短按秒、最长按分钟 —— 如 5 秒 ~ 30 分钟之间随机', []));
+  p4.appendChild(cfgSlider('最短（秒）', () => C().proactiveInterval[0],
+    (v) => saveCfg({ proactiveInterval: [v, C().proactiveInterval[1]] }), 1, 120));
+  p4.appendChild(cfgSlider('最长（分钟）', () => C().proactiveInterval[1],
+    (v) => saveCfg({ proactiveInterval: [C().proactiveInterval[0], v] }), 1, 180));
   MOOD_KEYS.forEach((k) => {
     p4.appendChild(cfgPair(`${MOOD_NAMES[k]} · 主动一句话字数`, null,
       () => C().proactiveLen[k], (v) => saveCfg({ proactiveLen: { ...C().proactiveLen, [k]: v } }), 1, 40));
   });
 
   const panels = el('div', { class: 'cfg-panels' }, [
-    fold('输入习惯', '抽词库概率 · 打错字与退格', p1, true),
-    fold('句式与接话', '模板 · 锚点 · 句首句尾修饰', p2),
-    fold('心情设定', '五种心情的权重与音节数限制', p3),
-    fold('主动联系', '主动打字开关 · 发送间隔 · 心情字数', p4)
+    fold('输入习惯', '专属字库 · 抽词/抽单字概率 · 打错字与退格', p1, true),
+    fold('句式与接话', '模板与预设句型 · 锚点命中 · 句首句尾修饰', p2),
+    fold('心情设定', '五种心情的权重概率区间与音节数限制', p3),
+    fold('主动联系', '主动打字开关 · 秒~分钟发送间隔 · 心情字数', p4)
   ]);
   function paintOff() { panels.classList.toggle('cfg-off', !!C().forceRandom); }
   paintOff();
@@ -238,6 +254,58 @@ function buildPinyinCfg() {
   root.appendChild(forceHost);
   root.appendChild(panels);
   return root;
+}
+
+/* ---- 预设句型管理：内置句型只读展示 + 自定义句型添加/删除 ---- */
+function buildTemplateBox() {
+  const CODE_BY_CN = Object.fromEntries(Object.entries(SLOT_NAMES).map(([c, n]) => [n, c]));
+  const parse = (str) => {
+    const tokens = String(str || '').split(/[\s,，、+＋·\-—>›>]+/).filter(Boolean);
+    const codes = [];
+    for (let t of tokens) {
+      if (SLOT_NAMES[t]) codes.push(t);
+      else if (CODE_BY_CN[t]) codes.push(CODE_BY_CN[t]);
+      else return null;
+    }
+    return (codes.length >= 2 && codes.length <= 8) ? codes : null;
+  };
+  const list = el('div', { class: 'cfg-tpl-list' });
+  const render = () => {
+    list.innerHTML = '';
+    for (const t of builtinTemplates()) {
+      list.appendChild(el('div', { class: 'cfg-tpl' }, [
+        el('span', { class: 'cfg-tpl-x', text: '内置' }),
+        el('span', { class: 'cfg-tpl-t', text: t })
+      ]));
+    }
+    (cfg().customTemplates || []).forEach((t, i) => {
+      list.appendChild(el('div', { class: 'cfg-tpl' }, [
+        el('span', { class: 'cfg-tpl-x own', text: '自定义' }),
+        el('span', { class: 'cfg-tpl-t', text: templateText(t) }),
+        el('button', { class: 'cfg-tpl-del', text: '✕', onclick: () => {
+          saveCfg({ customTemplates: cfg().customTemplates.filter((_, j) => j !== i) });
+          render();
+        } })
+      ]));
+    });
+  };
+  render();
+
+  const inp = el('input', { class: 'cfg-add-in', type: 'text', placeholder: '代词 动词 名词 语气 或 pn vb nn pt' });
+  const add = () => {
+    const codes = parse(inp.value);
+    if (!codes) { toast('句型写法：槽位用空格隔开，如「代词 动词 名词 语气」（2~8 个槽）'); return; }
+    saveCfg({ customTemplates: [...(cfg().customTemplates || []), codes] });
+    inp.value = '';
+    render();
+  };
+  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') add(); });
+
+  return el('div', { class: 'cfg-tpl-box' }, [
+    el('div', { class: 'cfg-tpl-h', text: '预设句型（内置 + 自定义，抽中模板时从中随机取一条）' }),
+    list,
+    el('div', { class: 'cfg-add' }, [inp, el('button', { class: 'btn sm', text: '添加', onclick: add })])
+  ]);
 }
 
 function catCard(title, desc, icon, onclick) {

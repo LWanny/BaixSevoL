@@ -2985,5 +2985,24 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .cfg-pair{border-top:1px dashed var(--line-soft);margin-top:4px;padding-top:2px}
 .cfg-pair>.set-row{border-bottom:0}
 .cfg-mood-h{margin:14px 2px 0;font-size:13px;font-weight:700;color:var(--txt-mute);letter-spacing:2px}
+/* 字库统计条 */
+.cfg-stats{margin:2px 2px 10px;font-size:11.5px;line-height:1.7;color:var(--txt-mute);
+  background:var(--bg-elev2);border:1px dashed var(--line);border-radius:10px;padding:7px 10px}
+/* 预设句型管理 */
+.cfg-tpl-box{margin:8px 0 4px;border:1px solid var(--line-soft);border-radius:12px;background:var(--bg-elev2);padding:9px 11px 11px}
+.cfg-tpl-h{font-size:12px;color:var(--txt-dim);font-weight:600;margin-bottom:4px}
+.cfg-tpl-list{max-height:172px;overflow-y:auto}
+.cfg-tpl{display:flex;align-items:center;gap:8px;padding:5px 2px;border-bottom:1px dashed var(--line-soft)}
+.cfg-tpl:last-child{border-bottom:0}
+.cfg-tpl-x{flex:0 0 auto;font-size:10px;color:var(--txt-mute);border:1px solid var(--line);border-radius:6px;padding:1px 5px;background:var(--bg-elev)}
+.cfg-tpl-x.own{color:var(--accent-2);border-color:var(--accent-2);font-weight:600}
+.cfg-tpl-t{flex:1 1 auto;min-width:0;font-size:13px;color:var(--txt-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cfg-tpl-del{flex:0 0 auto;width:26px;height:26px;border:none;background:none;color:var(--txt-mute);font-size:14px;cursor:pointer;border-radius:7px}
+.cfg-tpl-del:active{background:var(--danger);color:#fff}
+.cfg-add{display:flex;gap:8px;margin-top:9px}
+.cfg-add-in{flex:1 1 auto;min-width:0;height:36px;padding:0 10px;font-size:13px;
+  border:1px solid var(--line);border-radius:9px;background:var(--bg-elev);outline:none}
+.cfg-add-in:focus{border-color:var(--accent-2)}
+.cfg-add .btn{flex:0 0 auto}
 .cfg-mood-h:first-child{margin-top:4px}
 .cfg-mood-h+.cfg-slider{padding-top:4px}
