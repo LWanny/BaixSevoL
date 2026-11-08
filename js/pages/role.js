@@ -1,16 +1,16 @@
 /* 角色档案 · 首页（分类入口）
    详细参数拆到子页面：/role/reply /role/moments /role/mailbox /role/call /role/traits */
 
-import { el, compressImage, openFile } from '../util.js';
+import { el, compressImage, openFile, rndInt, chance } from '../util.js';
 import { iconImg } from '../icons.js';
 import { fullPage } from '../shell.js';
 import { state, saveRole, DEFAULT_PARAMS, roleStatusMeta } from '../state.js';
 import { saveMedia, mediaURL } from '../media.js';
 import { toast, confirmBox } from '../ui.js';
 import { go } from '../router.js';
-import { cfg, saveCfg, MOOD_KEYS } from '../pinyinConfig.js';
+import { cfg, saveCfg, MOOD_KEYS, randRange } from '../pinyinConfig.js';
 import { PINYIN_POOL_SIZE, PINYIN_WORD_SIZE, WORD_STATS, SLOT_NAMES,
-  builtinTemplates, templateText } from '../pinyin.js';
+  builtinTemplates, templateText, randomPhrase, pickAnchor } from '../pinyin.js';
 
 export default async function pageRole(view) {
   fullPage({ back: true, title: '角色', actions: [
@@ -255,8 +255,85 @@ function buildPinyinCfg() {
   paintOff();
 
   root.appendChild(forceHost);
+  root.appendChild(buildPreview());
   root.appendChild(panels);
   return root;
+}
+
+/* ---- 预览：模拟 TA 的拼音打字（逐字母 + 按当前 typoRate 敲错退格）→ 落卡 ----
+   全部读取当前配置（心情/区间/forceRandom），改完设置点一下即可看效果；
+   打字气泡与落卡样式直接复用聊天页的 typing.hypy / py-card，所见即所得。 */
+function buildPreview() {
+  const input = el('input', { class: 'cfg-add-in', type: 'text',
+    placeholder: '对方说的话（试接话锚点，留空随机）' });
+  const btn = el('button', { class: 'btn sm', type: 'button', text: '预览效果' });
+  const stage = el('div', { class: 'cv-stage' });
+
+  let timers = [];
+  const stop = () => { timers.forEach(clearTimeout); timers = []; };
+  const later = (fn, ms) => { timers.push(setTimeout(fn, ms)); };
+
+  const play = () => {
+    stop();
+    const incoming = input.value.trim();
+    const anchor = incoming ? pickAnchor(incoming) : null;
+    const py = randomPhrase(anchor);
+
+    stage.innerHTML = '';
+    stage.classList.add('on');
+    stage.appendChild(el('div', { class: 'cv-meta' }, [
+      el('span', { class: 'pw-tag pos', text: '心情 · ' + (py.stateLabel || '平常') }),
+      anchor ? el('span', { class: 'pw-tag', text: '锚点 · ' + anchor.text }) : null,
+      py.madeUp ? el('span', { class: 'pw-tag frag', text: '含生造词 · 发送后补 [dǎ cuò le]' }) : null
+    ]));
+
+    const typing = el('div', { class: 'typing hypy' }, [
+      el('span', { class: 'typing-l', text: '正在输入' }),
+      el('span', { class: 'typing-py' }),
+      el('i'), el('i'), el('i')
+    ]);
+    const typed = typing.querySelector('.typing-py');
+    const typingBub = el('div', { class: 'bub ta' }, [typing]);
+
+    const card = el('div', { class: 'bub ta cv-bub' }, [
+      el('div', { class: 'content py-card' }, [
+        el('div', { class: 'py-line' }, (py.segs || []).flatMap((sg, i) => [
+          i ? document.createTextNode(' ') : null,
+          el('span', { class: sg.m ? 'py-w' : 'py-r', text: sg.pt || sg.p || '' })
+        ])),
+        el('div', { class: 'py-text', text: py.text })
+      ])
+    ]);
+    card.style.display = 'none';
+    stage.appendChild(typingBub);
+    stage.appendChild(card);
+
+    /* 逐字符打字：无声调拼音，按当前 typoRate（forceRandom 走极端 25-60%）敲错+退格 */
+    const txt = py.pinyin || '';
+    const C = cfg();
+    const typoPct = C.forceRandom ? rndInt(25, 60) : randRange(C.typoRate, 5);
+    const step = Math.max(40, Math.min(160, Math.round(2400 / Math.max(1, txt.length))));
+    let t = 420;
+    for (let i = 0; i < txt.length; i++) {
+      if (chance(typoPct)) {
+        const wrong = 'abcdefghijklmnopqrstuvwxyz'[rndInt(0, 25)];
+        later(() => { typed.textContent += wrong; }, t); t += step;
+        later(() => { typed.textContent = typed.textContent.slice(0, -1); }, t); t += Math.round(step * 1.4);
+      }
+      const ch = txt[i];
+      later(() => { typed.textContent += ch; }, t); t += step;
+    }
+    later(() => { typingBub.style.display = 'none'; card.style.display = ''; }, t + 340);
+  };
+
+  btn.addEventListener('click', play);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') play(); });
+  return el('div', { class: 'cfg-prev' }, [
+    el('div', { class: 'cfg-prev-bar' }, [
+      el('span', { class: 'cfg-prev-l', text: '预览' }), input, btn
+    ]),
+    stage
+  ]);
 }
 
 /* ---- 预设句型管理：内置句型只读展示 + 自定义句型添加/删除 ---- */
