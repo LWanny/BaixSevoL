@@ -561,8 +561,8 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .send-pill[disabled]{opacity:.32;pointer-events:none}
 .typing{align-self:flex-start;background:var(--bubble-ta);border:1px solid var(--line);padding:10px 14px;border-radius:var(--bubble-radius);border-top-left-radius:5px;display:flex;gap:4px}
 .typing i{width:6px;height:6px;border-radius:50%;background:var(--txt-dim);animation:bl 1.2s infinite}
-.typing i:nth-child(2){animation-delay:.2s}
-.typing i:nth-child(3){animation-delay:.4s}
+.typing i:nth-of-type(2){animation-delay:.2s}
+.typing i:nth-of-type(3){animation-delay:.4s}
 @keyframes bl{0%,60%,100%{opacity:.3}30%{opacity:1}}
 .picker{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;max-height:190px;overflow-y:auto}
 .picker img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;cursor:pointer;background:#f0f0ee}
@@ -2483,6 +2483,14 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .typing .typing-l{display:none;font-size:12.5px;line-height:1;color:var(--bubble-ta-txt);opacity:.62;letter-spacing:.5px}
 .typing.labeled .typing-l{display:inline}
 .typing.labeled i{display:none}
+/* 拟真打字机：拼音逐音节弹出时，气泡里显示正在敲的拼音（覆盖 labeled 的文字标签与三个点） */
+.typing .typing-py{display:none}
+.typing.hypy .typing-py{
+  display:inline;font-size:12.5px;line-height:1.35;letter-spacing:1px;
+  color:var(--bubble-ta-txt);opacity:.72;word-break:break-all;
+}
+.typing.hypy .typing-l{display:none}
+.typing.hypy i{display:none}
 
 .bub .content.py-card,
 .bub.ta .content.py-card,
@@ -2500,6 +2508,9 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
   font-size:11px;line-height:1.55;letter-spacing:.5px;
   color:rgba(43,47,56,.5);word-break:break-word;
 }
+/* 词库命中的词写实一点；生造的单字更淡更细（随机敲击的笨拙感） */
+.content.py-card .py-line .py-w{font-weight:500;color:rgba(43,47,56,.62)}
+.content.py-card .py-line .py-r{font-weight:400;font-style:italic;color:rgba(43,47,56,.34)}
 .content.py-card .py-text{
   font-size:19px;line-height:1.45;letter-spacing:4px;
   font-weight:500;color:#23262c;word-break:break-word;

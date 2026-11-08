@@ -4,7 +4,7 @@
 
 import { chance, rndInt, pick, uid } from './util.js';
 import { drawInspiration } from './inspiration.js';
-import { randomPhrase } from './pinyin.js';
+import { randomPhrase, anchorFrom } from './pinyin.js';
 
 /* ---------- 表情池 ---------- */
 export const EMOJI = ['😢', '🥺', '😆', '😘', '💕', '😌', '😻', '😴', '😤', '🤣', '😅', '😊', '💪', '✨', '🍀', '🌙', '☀️', '🐱', '🐶'];
@@ -154,8 +154,11 @@ export async function buildReply({ cards, params, history = [], incomingText = '
     // 拼音打字：不翻字卡库，随机敲拼音组一句话（每批最多一条）
     if (!pinyinUsed && params.pinyinEnabled && chance(Number(params.pinyinPct) || 0)) {
       pinyinUsed = true;
-      const py = randomPhrase();
-      steps.push({ kind: 'pinyin', delayMs: delayFor(params), text: py.text, pinyin: py.pinyin });
+      // 上下文锚点：优先取对方刚说的这句的实词，兜底取我方上一条，保证能接上话
+      const lastMe = [...history].reverse().find((m) => m.role === 'me' && m.text);
+      const anchor = anchorFrom(incomingText) || (lastMe ? anchorFrom(lastMe.text) : null);
+      const py = randomPhrase(anchor);
+      steps.push({ kind: 'pinyin', delayMs: delayFor(params), text: py.text, pinyin: py.pinyin, pysegs: py.segs });
       continue;
     }
     const one = await buildOne(textPool, params);
@@ -268,8 +271,11 @@ export async function buildProactive({ cards, params, history = [], medias = [] 
   for (let i = 0; i < count; i++) {
     if (!pinyinUsed && params.pinyinEnabled && chance(Number(params.pinyinPct) || 0)) {
       pinyinUsed = true;
-      const py = randomPhrase();
-      steps.push({ kind: 'pinyin', delayMs: i === 0 ? 0 : delayFor(params), text: py.text, pinyin: py.pinyin, proactive: true });
+      // 主动消息没有 incomingText，锚点取我方上一条
+      const lastMe = [...history].reverse().find((m) => m.role === 'me' && m.text);
+      const anchor = lastMe ? anchorFrom(lastMe.text) : null;
+      const py = randomPhrase(anchor);
+      steps.push({ kind: 'pinyin', delayMs: i === 0 ? 0 : delayFor(params), text: py.text, pinyin: py.pinyin, pysegs: py.segs, proactive: true });
       continue;
     }
     const one = await buildOne(textPool, params);

@@ -78,6 +78,19 @@ async function runSteps(steps) {
   const created = new Map();  // stepIndex -> messageId
   emit('typing', { on: true, label: '' });
 
+  /* 拟真打字机：拼音逐音节弹出（每 100–200ms 一个），敲完停顿 300ms 再落成汉字卡片 */
+  async function typePinyin(s) {
+    const segs = (s.pysegs && s.pysegs.length) ? s.pysegs : [{ p: s.pinyin || '', t: s.text || '', m: false }];
+    const sylls = [];
+    for (const seg of segs) for (const syl of String(seg.p || '').split(' ')) if (syl) sylls.push(syl);
+    if (!sylls.length) { await wait(300); return; }
+    for (let k = 0; k < sylls.length; k++) {
+      emit('typing', { on: true, label: '拼音组词中', py: sylls.slice(0, k + 1).join(' ') });
+      await wait(rndInt(100, 200));
+    }
+    await wait(300);
+  }
+
   for (let i = 0; i < steps.length; i++) {
     const s = steps[i];
     const delay = s.kind === 'recall' ? s.delayMs : s.delayMs;
@@ -109,7 +122,8 @@ async function runSteps(steps) {
     } else if (s.kind === 'image') {
       m = await addMessage({ role: 'ta', type: 'image', mediaId: s.mediaId });
     } else if (s.kind === 'pinyin') {
-      m = await addMessage({ role: 'ta', type: 'pinyin', text: s.text, pinyin: s.pinyin });
+      await typePinyin(s);      // 逐音节敲出拼音 → 停顿 → 落卡
+      m = await addMessage({ role: 'ta', type: 'pinyin', text: s.text, pinyin: s.pinyin, pysegs: s.pysegs || null });
     } else if (s.kind === 'repost') {
       m = await addMessage({ role: 'ta', type: 'text', text: s.text, quoteId: null, repost: true });
     } else if (s.text) {

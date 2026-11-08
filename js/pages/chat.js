@@ -173,7 +173,8 @@ export default async function pageChat(view) {
   view.appendChild(inputBar.bar);
 
   const typingLabel = el('span', { class: 'typing-l' });
-  const typing = el('div', { class: 'typing hidden' }, [typingLabel, el('i'), el('i'), el('i')]);
+  const typingPy = el('span', { class: 'typing-py' });   // 拟真打字机：逐音节弹出的拼音
+  const typing = el('div', { class: 'typing hidden' }, [typingLabel, typingPy, el('i'), el('i'), el('i')]);
 
   let messages = (await all('messages')).sort((a, b) => a.ts - b.ts);
   const byId = new Map(messages.map((m) => [m.id, m]));
@@ -336,9 +337,19 @@ export default async function pageChat(view) {
       ]));
       if (m.text) content.appendChild(el('div', { class: 'xhs-msg-text', text: m.text }));
     } else if (m.type === 'pinyin') {
-      /* 拼音打字：像一张小字卡，上面一行是 TA 敲出来的拼音，下面是对应的字 */
+      /* 拼音打字：像一张小字卡，上面一行是 TA 敲出来的拼音，下面对应的字。
+         词库命中的词写实一点，生造的单字更淡更细（随机敲击的笨拙感） */
       content.classList.add('py-card');
-      content.appendChild(el('div', { class: 'py-line', text: m.pinyin || '' }));
+      const line = el('div', { class: 'py-line' });
+      if (m.pysegs && m.pysegs.length) {
+        m.pysegs.forEach((sg, idx) => {
+          if (idx) line.appendChild(document.createTextNode(' '));
+          line.appendChild(el('span', { class: sg.m ? 'py-w' : 'py-r', text: sg.p || '' }));
+        });
+      } else {
+        line.textContent = m.pinyin || '';
+      }
+      content.appendChild(line);
       content.appendChild(el('div', { class: 'py-text', text: m.text || '' }));
     } else if (m.type === 'graffiti') {
       content.classList.add('chat-graffiti');
@@ -582,9 +593,12 @@ export default async function pageChat(view) {
     const d = e.detail;
     const on = typeof d === 'object' && d !== null ? !!d.on : !!d;
     const label = typeof d === 'object' && d !== null ? (d.label || '') : '';
+    const py = typeof d === 'object' && d !== null ? (d.py || '') : '';
     typing.classList.toggle('hidden', !on);
     typing.classList.toggle('labeled', !!label);
+    typing.classList.toggle('hypy', !!py);        // 拼音逐音节打字中：显示拼音而非三个点
     typingLabel.textContent = label;
+    typingPy.textContent = py;
   };
   sched.on('message', onMsg);
   sched.on('message-updated', onUpd);
