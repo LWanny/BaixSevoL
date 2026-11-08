@@ -68,7 +68,10 @@ export default async function pageRole(view) {
 
   /* ---- 拼音打字（pinyinConfig.js → localStorage，改完立即生效） ---- */
   wrap.appendChild(el('div', { class: 'sec' }, [
-    el('div', { class: 'sec-h' }, [el('div', { class: 'h', text: '拼音打字' })]),
+    el('div', { class: 'sec-h' }, [
+      el('div', { class: 'h', text: '拼音打字' }),
+      el('div', { class: 'a', text: '字卡库 ›', onclick: () => go('/pinyin-lib') })
+    ]),
     buildPinyinCfg()
   ]));
 

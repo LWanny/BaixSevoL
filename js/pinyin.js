@@ -400,22 +400,28 @@ for (const x of CHARS) {
   if (!CHAR_BY_TEXT.has(x.c)) CHAR_BY_TEXT.set(x.c, x.p);
 }
 
-/* ---------- 词库索引：拼音串 → 词（音节级最长匹配用）、汉字 → 词（锚点提取用） ---------- */
+/* ---------- 词库索引：拼音串 → 词（音节级最长匹配用）、汉字 → 词（锚点提取用） ----------
+   抽成 rebuildWordIndex()：用户在「拼音字卡库」页面增删词条后重新构建，实时生效 */
 const WORD_MAP = new Map();
 const TEXT_MAP = new Map();
 let MAX_SYL = 1;      // 词库最长音节数
 let MAX_TXT = 1;      // 词库最长汉字数
-for (const w of WORD_POOL) {
-  if (!WORD_MAP.has(w.py)) WORD_MAP.set(w.py, w);
-  if (!TEXT_MAP.has(w.text)) TEXT_MAP.set(w.text, w);
-  const n = w.py.split(' ').length;
-  if (n > MAX_SYL) MAX_SYL = n;
-  if (w.text.length > MAX_TXT) MAX_TXT = w.text.length;
-}
-
 /* 按词性分池（句式模板选槽用） */
 const POOLS = { pn: [], tm: [], cj: [], dv: [], pt: [], vb: [], nn: [], aj: [] };
-for (const w of WORD_POOL) if (POOLS[w.pos]) POOLS[w.pos].push(w);
+function rebuildWordIndex() {
+  WORD_MAP.clear(); TEXT_MAP.clear();
+  MAX_SYL = 1; MAX_TXT = 1;
+  for (const k of Object.keys(POOLS)) POOLS[k].length = 0;
+  for (const w of WORD_POOL) {
+    if (!WORD_MAP.has(w.py)) WORD_MAP.set(w.py, w);
+    if (!TEXT_MAP.has(w.text)) TEXT_MAP.set(w.text, w);
+    const n = w.py.split(' ').length;
+    if (n > MAX_SYL) MAX_SYL = n;
+    if (w.text.length > MAX_TXT) MAX_TXT = w.text.length;
+    if (POOLS[w.pos]) POOLS[w.pos].push(w);
+  }
+}
+rebuildWordIndex();
 
 /* ---------- 拼音句式模板（槽位 = 词性，随机抽一个后逐槽填词） ---------- */
 const TEMPLATES = [
@@ -724,18 +730,70 @@ export function randomPhrase(anchor, opt = {}) {
 
 /** 单字池大小，设置页用来提示「能打出多少字」 */
 export const PINYIN_POOL_SIZE = POOL.length;
-/** 词库大小 */
-export const PINYIN_WORD_SIZE = WORD_POOL.length;
-/** 词库分类统计：双字 / 三字 / 四字（含更长）/ 半截话 + 词性分布（设置页展示用） */
-export const WORD_STATS = (() => {
-  const st = { two: 0, three: 0, four: 0, frag: 0, pos: {} };
+/** 词库大小（用户在「拼音字卡库」增删后自动更新，import 端读到的是实时值） */
+export let PINYIN_WORD_SIZE = WORD_POOL.length;
+/** 词库分类统计：双字 / 三字 / 四字（含更长）/ 半截话 / 自定义 + 词性分布 */
+export const WORD_STATS = { two: 0, three: 0, four: 0, frag: 0, user: 0, pos: {} };
+function refreshStats() {
+  const st = WORD_STATS;
+  st.two = st.three = st.four = st.frag = st.user = 0;
+  st.pos = {};
   for (const w of WORD_POOL) {
     if (w.frag) st.frag++;
     else if (w.text.length <= 2) st.two++;
     else if (w.text.length === 3) st.three++;
     else st.four++;
+    if (w.u) st.user++;
     const p = SLOT_NAMES[w.pos] ? w.pos : 'other';
     st.pos[p] = (st.pos[p] || 0) + 1;
   }
-  return st;
-})();
+  PINYIN_WORD_SIZE = WORD_POOL.length;
+}
+refreshStats();
+
+/* ============ 拼音字卡库 · 用户自定义词条（localStorage，实时并入引擎） ============ */
+const USER_WORDS_KEY = 'zkcx.pinyin.userwords.v1';
+
+export function loadUserWords() {
+  try {
+    const a = JSON.parse(localStorage.getItem(USER_WORDS_KEY) || '[]');
+    return Array.isArray(a) ? a : [];
+  } catch { return []; }
+}
+
+/** 校验并归一一条词：无声调小写、音节数必须等于汉字数（引擎按 1 字 1 音节拼装），非法返回 null */
+export function normalizeWord(raw) {
+  const text = String((raw && raw.text) || '').trim();
+  let py = String((raw && raw.py) || '').toLowerCase();
+  py = stripTones(py).replace(/ü/g, 'v').replace(/[1-5]/g, '').replace(/\s+/g, ' ').trim();
+  const want = String((raw && raw.pos) || 'nn');
+  const pos = POOLS[want] ? want : 'nn';
+  const frag = raw && raw.frag ? 1 : 0;
+  if (!text || !py) return null;
+  if (!/^[a-z ]+$/.test(py)) return null;
+  if (py.split(' ').length !== [...text].length) return null;
+  if (text.length > 12 || py.length > 48) return null;
+  return { py, text, pos, frag };
+}
+
+function applyUserWords(clean) {
+  for (let i = WORD_POOL.length - 1; i >= 0; i--) if (WORD_POOL[i].u) WORD_POOL.splice(i, 1);
+  rebuildWordIndex();                                  // 先回到纯内置状态
+  for (const w of clean) {
+    if (TEXT_MAP.has(w.text) || WORD_MAP.has(w.py)) continue;   // 与内置重复 → 丢弃
+    WORD_POOL.push({ ...w, u: 1 });
+  }
+  rebuildWordIndex();
+  refreshStats();
+}
+
+/** 保存整份自定义词列表（字库页每次增删后调用，立即生效） */
+export function setUserWords(list) {
+  const clean = (Array.isArray(list) ? list : []).map(normalizeWord).filter(Boolean);
+  try { localStorage.setItem(USER_WORDS_KEY, JSON.stringify(clean)); } catch {}
+  applyUserWords(clean);
+  return clean;
+}
+
+/* 启动时把本地存的自定义词并入库（node/无 localStorage 环境自动跳过） */
+applyUserWords(loadUserWords());

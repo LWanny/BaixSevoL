@@ -39,7 +39,14 @@ export default async function pageRoleTraits(view) {
 
   wrap.appendChild(section('拼音打字', el('div', { class: 'set-card' }, [
     rowToggle('允许 TA 用拼音组词', '不翻字卡库，随机敲拼音拼出一句话再发送', 'pinyinEnabled', p.pinyinEnabled),
-    rowPct('每次回复用拼音的概率', '每条回复里最多出现一条拼音消息', 'pinyinPct', p.pinyinPct)
+    rowPct('每次回复用拼音的概率', '每条回复里最多出现一条拼音消息', 'pinyinPct', p.pinyinPct),
+    el('div', { class: 'set-row' }, [
+      el('div', { class: 'set-main' }, [
+        el('div', { class: 'set-t', text: '拼音字卡库' }),
+        el('div', { class: 'set-s', text: '浏览内置单字/词库 · 分类筛选 · 增删自定义词条' })
+      ]),
+      el('div', { class: 'set-ctl' }, [el('button', { class: 'btn sm', onclick: () => go('/pinyin-lib') }, ['去管理'])])
+    ])
   ])));
 
   view.appendChild(wrap);

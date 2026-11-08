@@ -55,6 +55,7 @@ import pageGames from './pages/games.js';
 import pageAnniversary from './pages/anniversary.js';
 import pageInspiration from './pages/inspiration.js';
 import pageAvatarLib from './pages/avatarLib.js';
+import pagePinyinLib from './pages/pinyinLib.js';
 import { startNicknameAI } from './nicknameAI.js';
 import { startGraffitiAI } from './graffiti.js';
 
@@ -111,6 +112,7 @@ async function boot() {
     '/anniversary': pageAnniversary,
     '/inspiration': pageInspiration,
     '/avatarLib': pageAvatarLib,
+    '/pinyin-lib': pagePinyinLib,
     '/role/basic': pageRoleBasic,
     '/role/reply': pageRoleReply,
     '/role/moments': pageRoleMoments,
