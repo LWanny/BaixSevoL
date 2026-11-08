@@ -357,6 +357,39 @@ const TONE_MAP = {
 };
 const stripTones = (s) => s.replace(/[āáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜňńǹḿ]/g, (ch) => TONE_MAP[ch] || ch);
 
+/* 需求1 · 无声调音节 → 带调音节：打字过程显示无声调（贴近真实敲键），
+   打完落卡时用它把拼音还原成带声调的一行 */
+const TONE_OF = new Map();
+for (const x of POOL) {
+  const k = stripTones(x.p);
+  if (!TONE_OF.has(k)) TONE_OF.set(k, x.p);
+}
+/* 补充声调表：332 单字表没收录、但词库会用到的音节（取最常见读音；
+   a/o/me/ne 等本来就是轻声，保持无调） */
+const TONE_EXTRA = {
+  ao: 'ào', ben: 'běn', beng: 'bèng', bo: 'bō', ca: 'cā', can: 'cán', cang: 'cáng',
+  ce: 'cè', chai: 'chái', chao: 'chāo', chen: 'chén', chong: 'chóng', chu: 'chū',
+  cong: 'cóng', dai: 'dài', dang: 'dāng', diao: 'diào', ding: 'dìng', en: 'ēn',
+  fa: 'fā', fu: 'fù', gong: 'gōng', gua: 'guā', guai: 'guǎi', guang: 'guǎng',
+  gui: 'guī', ha: 'hā', han: 'hán', hang: 'háng', heng: 'hēng', jian: 'jiàn',
+  ju: 'jù', juan: 'juān', jue: 'jué', jun: 'jūn', ka: 'kǎ', kang: 'kāng', kao: 'kǎo',
+  ken: 'kěn', kong: 'kōng', kua: 'kuā', kuang: 'kuàng', lia: 'liǎ', lun: 'lùn',
+  luo: 'luò', meng: 'méng', miao: 'miào', nai: 'nǎi', nang: 'náng', nao: 'nǎo',
+  nar: 'nǎr', nei: 'nèi', niang: 'niáng', nong: 'nóng', nuo: 'nuò', nv: 'nǚ',
+  ou: 'ǒu', pang: 'páng', pi: 'pí', piao: 'piào', pin: 'pǐn', ping: 'píng',
+  po: 'pō', pu: 'pǔ', qiang: 'qiáng', qie: 'qiě', qin: 'qīn', quan: 'quán',
+  que: 'què', ran: 'rán', rang: 'rǎng', rong: 'róng', ru: 'rù', ruan: 'ruǎn',
+  sai: 'sài', sao: 'sǎo', se: 'sè', sha: 'shā', shai: 'shǎi', she: 'shè',
+  shua: 'shuā', shuai: 'shuài', shun: 'shùn', song: 'sòng', sou: 'sōu', su: 'sù',
+  sui: 'suì', tan: 'tán', tao: 'táo', te: 'tè', tie: 'tiē', tuo: 'tuō',
+  wa: 'wā', wai: 'wài', wawa: 'wá wa', xiu: 'xiū', xu: 'xǔ', xuan: 'xuǎn',
+  ya: 'yá', yo: 'yō', za: 'zá', zan: 'zán', ze: 'zé', zeng: 'zēng', zhou: 'zhōu',
+  zhu: 'zhū', zhuan: 'zhuān', zhuang: 'zhuāng', zhui: 'zhuī', zhun: 'zhǔn', zu: 'zǔ'
+};
+for (const [k, v] of Object.entries(TONE_EXTRA)) if (!TONE_OF.has(k)) TONE_OF.set(k, v);
+const toTone = (syl) => TONE_OF.get(syl) || syl;
+const withTone = (pyStr) => String(pyStr || '').split(' ').filter(Boolean).map(toTone).join(' ');
+
 /* 单字池（无声调）＋ 音节/汉字索引 */
 const CHARS = POOL.map((x) => ({ c: x.c, p: stripTones(x.p) }));
 const CHAR_BY_PY = new Map();
@@ -407,6 +440,21 @@ const CONNECTORS = [
   { py: 'suo yi', text: '所以' }, { py: 'bu guo', text: '不过' }
 ];
 
+/* ---------- 需求3 · 心情状态：每次生成先抽一个状态，决定长度/语气/断句节奏 ---------- */
+const STATES = [
+  { key: 'normal', label: '平常', w: 30 },
+  { key: 'lazy', label: '敷衍', w: 18 },   // 拼音最多 3 个音节
+  { key: 'chatty', label: '话唠', w: 18 }, // 强制随机长句 + 更密的断句
+  { key: 'warm', label: '热情', w: 18 },   // 语气词/连接词几乎必出、句子偏长
+  { key: 'sad', label: '伤心', w: 16 }     // 短句、少连接词、多叹气语气
+];
+function drawState() {
+  const total = STATES.reduce((s, x) => s + x.w, 0);
+  let r = Math.random() * total;
+  for (const x of STATES) { r -= x.w; if (r <= 0) return x; }
+  return STATES[0];
+}
+
 /* ---------- 上下文锚点：从对方的话里抽「最后一个实词」（70% 尾词 / 30% 随机命中） ---------- */
 export function anchorFrom(text) {
   if (!text) return null;
@@ -432,11 +480,16 @@ export function anchorFrom(text) {
 }
 
 /** 随机拼一句（anchor 可选：对方上一句话里的实词拼音，会被强制插进句中）
-    返回 { text, pinyin, segs } —— segs 为分段 [{p, t, m}]，m=true 表示词库命中（视觉上更实） */
+    需求3：先抽心情状态（敷衍/平常/话唠/热情/伤心），状态决定长度、语气与断句密度。
+    返回 { text, pinyin, pinyinTone, segs, parts, state, stateLabel, madeUp }
+    - segs：分段 [{p, t, pt, m}]，p=无声调（打字过程显示）、pt=带声调（落卡显示）、m=词库命中
+    - parts：按标点切成的小句（分阶段逐句发送用），每段自带 text/pinyin/pinyinTone/segs
+    - madeUp：存在词库接不上的「生造词」段 → engine 会补一句 [dǎ cuò le] */
 export function randomPhrase(anchor) {
+  const st = drawState();          // 需求3 · 心情状态
   const pieces = [];
   let tpl = null;
-  if (chance(55)) {
+  if (st.key !== 'chatty' && chance(55)) {
     /* 句式模板：按 [代词]+[动词]+[名词]+[语气] 之类预设句型填槽 */
     tpl = pick(TEMPLATES);
     for (const slot of tpl) {
@@ -445,9 +498,15 @@ export function randomPhrase(anchor) {
     }
   } else {
     /* 自由拼：70% 抽完整词拼音、30% 抽单字（允许重复，取消同句不重复限制） */
-    const n = chance(58) ? rndInt(2, 3) : rndInt(4, 6);
+    let n;
+    if (st.key === 'chatty') n = rndInt(8, 13);            // 话唠：强制随机长句
+    else if (st.key === 'lazy') n = rndInt(1, 2);           // 敷衍：能少打就少打
+    else if (st.key === 'warm') n = chance(45) ? rndInt(2, 3) : rndInt(4, 6);
+    else if (st.key === 'sad') n = chance(60) ? rndInt(2, 3) : rndInt(4, 5);
+    else n = chance(58) ? rndInt(2, 3) : rndInt(4, 6);
+    const wordPct = st.key === 'chatty' ? 75 : 70;
     for (let k = 0; k < n; k++) {
-      if (chance(70)) {
+      if (chance(wordPct)) {
         const w = pick(WORD_POOL);
         pieces.push({ py: w.py, text: w.text });
       } else {
@@ -457,16 +516,20 @@ export function randomPhrase(anchor) {
     }
   }
   /* 开头高概率加连接词（模板本身以连接词开头则不重复加） */
-  if (!(tpl && tpl[0] === 'cj') && chance(65)) {
+  const connPct = st.key === 'warm' ? 78 : st.key === 'sad' ? 45 : st.key === 'lazy' ? 0 : 65;
+  if (!(tpl && tpl[0] === 'cj') && chance(connPct)) {
     const c = pick(CONNECTORS);
     pieces.unshift({ py: c.py, text: c.text });
   }
   /* 锚点：把对方话里的实词强制插进随机位置，保证能接上话 */
+  let anchorIdx = -1;
   if (anchor && anchor.py) {
-    pieces.splice(rndInt(0, pieces.length), 0, { py: anchor.py, text: anchor.text });
+    anchorIdx = rndInt(0, pieces.length);
+    pieces.splice(anchorIdx, 0, { py: anchor.py, text: anchor.text });
   }
   /* 结尾高概率加语气词（模板本身以语气词收尾则不重复加） */
-  if (!(tpl && tpl[tpl.length - 1] === 'pt') && chance(80)) {
+  const moodPct = st.key === 'warm' ? 95 : st.key === 'sad' ? 90 : st.key === 'lazy' ? 40 : 80;
+  if (!(tpl && tpl[tpl.length - 1] === 'pt') && chance(moodPct)) {
     const m = pick(MOODS);
     pieces.push({ py: m.py, text: m.text });
   }
@@ -486,6 +549,29 @@ export function randomPhrase(anchor) {
     }
   }
 
+  /* 需求3 · 敷衍状态：拼音最多 3 个音节——以锚点为窗口裁剪，锚点音节永远保留 */
+  if (st.key === 'lazy' && sylls.length > 3) {
+    let s = 0;
+    let e = 3;
+    if (anchorIdx >= 0) {
+      let a0 = 0;
+      for (let k = 0; k < anchorIdx; k++) a0 += pieces[k].py.split(' ').length;
+      const aLen = pieces[anchorIdx].py.split(' ').length;
+      s = a0;
+      e = a0 + Math.min(aLen, 3);
+      let room = 3 - (e - s);
+      const pre = Math.min(room, s);
+      s -= pre;
+      room -= pre;
+      e = Math.min(sylls.length, e + room);
+      if (e - s < 3 && e < sylls.length) e = Math.min(sylls.length, s + 3);
+    }
+    const keptS = sylls.slice(s, e);
+    const keptK = known.slice(s, e);
+    sylls.length = 0; sylls.push(...keptS);
+    known.length = 0; known.push(...keptK);
+  }
+
   /* 音节级最长匹配重组：词库优先组词，匹配不到才退回单字（保证可解析、无死循环） */
   const segs = [];
   let i = 0;
@@ -495,16 +581,55 @@ export function randomPhrase(anchor) {
     for (let len = Math.min(MAX_SYL, sylls.length - i); len >= 1; len--) {
       const key = sylls.slice(i, i + len).join(' ');
       const w = WORD_MAP.get(key);
-      if (w) { hit = { p: key, t: w.text, m: true }; hitLen = len; break; }
+      if (w) { hit = { p: key, t: w.text, pt: withTone(key), m: true }; hitLen = len; break; }
     }
     if (hit) { segs.push(hit); i += hitLen; }
-    else { segs.push({ p: sylls[i], t: known[i], m: false }); i++; }
+    else { segs.push({ p: sylls[i], t: known[i], pt: toTone(sylls[i]), m: false }); i++; }
   }
+
+  /* 需求5 · 断句与节奏：长句按小句补标点（逗号为主、偶尔句号），供 engine 分阶段逐句发送 */
+  const SPLIT_PUNCT = /[，。！？…~～、；;!?]$/;
+  if (sylls.length >= 6 && segs.length >= 3) {
+    const clauseProb = st.key === 'chatty' ? 70 : st.key === 'sad' ? 40 : 48;
+    let acc = 0;
+    let sylSeen = 0;
+    const totalSyl = sylls.length;
+    for (let k = 0; k < segs.length; k++) {
+      const n = segs[k].p ? segs[k].p.split(' ').filter(Boolean).length : 0;
+      acc += n;
+      sylSeen += n;
+      const remain = totalSyl - sylSeen;
+      if (k < segs.length - 1 && remain >= 2 && acc >= 3 && chance(clauseProb)) {
+        segs[k].t += chance(30) ? pick(['。', '！', '？']) : '，';
+        acc = 0;
+      }
+    }
+  }
+
+  /* 按标点切成小句（需求5 · 分阶段发送的最小单位） */
+  const parts = [];
+  let cur = [];
+  for (const sg of segs) {
+    cur.push(sg);
+    if (SPLIT_PUNCT.test(sg.t)) { parts.push(cur); cur = []; }
+  }
+  if (cur.length) parts.push(cur);
+  const toPart = (g) => ({
+    text: g.map((x) => x.t).join(''),
+    pinyin: g.map((x) => x.p).join(' '),
+    pinyinTone: g.map((x) => x.pt).join(' '),
+    segs: g
+  });
 
   return {
     text: segs.map((s) => s.t).join(''),
     pinyin: segs.map((s) => s.p).join(' '),
-    segs
+    pinyinTone: segs.map((s) => s.pt).join(' '),
+    segs,
+    parts: parts.map(toPart),
+    state: st.key,
+    stateLabel: st.label,
+    madeUp: segs.some((s) => !s.m)   // 需求4：词库接不上的「生造词」
   };
 }
 

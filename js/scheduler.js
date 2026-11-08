@@ -78,17 +78,42 @@ async function runSteps(steps) {
   const created = new Map();  // stepIndex -> messageId
   emit('typing', { on: true, label: '' });
 
-  /* 拟真打字机：拼音逐音节弹出（每 100–200ms 一个），敲完停顿 300ms 再落成汉字卡片 */
+  /* 拟真打字机（需求1+2）：
+     - 打字过程逐字母弹出「无声调」拼音，每个字母随机延迟，音节间偶尔想一下
+     - 0–10% 概率手滑多敲一个字母 → 停一下 → 按退格删掉再继续
+     - 敲完停顿后落卡，卡片上显示的是带声调拼音 */
+  const KEY_LETTERS = 'abcdefghijklmnopqrstuvwxyz';
   async function typePinyin(s) {
     const segs = (s.pysegs && s.pysegs.length) ? s.pysegs : [{ p: s.pinyin || '', t: s.text || '', m: false }];
     const sylls = [];
     for (const seg of segs) for (const syl of String(seg.p || '').split(' ')) if (syl) sylls.push(syl);
     if (!sylls.length) { await wait(300); return; }
+
+    let typed = '';
     for (let k = 0; k < sylls.length; k++) {
-      emit('typing', { on: true, label: '拼音组词中', py: sylls.slice(0, k + 1).join(' ') });
-      await wait(rndInt(100, 200));
+      const base = typed ? typed + ' ' : '';
+      const syl = sylls[k];
+      for (let j = 1; j <= syl.length; j++) {
+        typed = base + syl.slice(0, j);
+        emit('typing', { on: true, label: '拼音组词中', py: typed });
+        await wait(rndInt(35, 130));
+
+        /* 需求2：随机 0–10% 手滑多敲一个错字母 → 短暂停 → 退格删掉 */
+        if (chance(rndInt(0, 10))) {
+          let bad = KEY_LETTERS[rndInt(0, 25)];
+          const next = syl[j];
+          if (next && bad === next) bad = KEY_LETTERS[(KEY_LETTERS.indexOf(bad) + 7) % 26];
+          emit('typing', { on: true, label: '拼音组词中', py: typed + bad });
+          await wait(rndInt(150, 480));
+          emit('typing', { on: true, label: '拼音组词中', py: typed });   // 退格
+          await wait(rndInt(120, 320));
+        }
+
+        /* 音节之间偶尔停顿，像边想边打 */
+        if (j === syl.length && k < sylls.length - 1 && chance(35)) await wait(rndInt(120, 450));
+      }
     }
-    await wait(300);
+    await wait(rndInt(350, 850));   // 打完了，最后停一下再落成带声调的卡片
   }
 
   for (let i = 0; i < steps.length; i++) {
@@ -122,8 +147,8 @@ async function runSteps(steps) {
     } else if (s.kind === 'image') {
       m = await addMessage({ role: 'ta', type: 'image', mediaId: s.mediaId });
     } else if (s.kind === 'pinyin') {
-      await typePinyin(s);      // 逐音节敲出拼音 → 停顿 → 落卡
-      m = await addMessage({ role: 'ta', type: 'pinyin', text: s.text, pinyin: s.pinyin, pysegs: s.pysegs || null });
+      await typePinyin(s);      // 逐字母敲出无声调拼音 → 打错/退格 → 停顿 → 落卡显示带声调
+      m = await addMessage({ role: 'ta', type: 'pinyin', text: s.text, pinyin: s.pinyinTone || s.pinyin, pysegs: s.pysegs || null });
     } else if (s.kind === 'repost') {
       m = await addMessage({ role: 'ta', type: 'text', text: s.text, quoteId: null, repost: true });
     } else if (s.text) {

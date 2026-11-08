@@ -344,7 +344,7 @@ export default async function pageChat(view) {
       if (m.pysegs && m.pysegs.length) {
         m.pysegs.forEach((sg, idx) => {
           if (idx) line.appendChild(document.createTextNode(' '));
-          line.appendChild(el('span', { class: sg.m ? 'py-w' : 'py-r', text: sg.p || '' }));
+          line.appendChild(el('span', { class: sg.m ? 'py-w' : 'py-r', text: sg.pt || sg.p || '' }));   // 落卡显示带声调拼音
         });
       } else {
         line.textContent = m.pinyin || '';

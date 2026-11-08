@@ -132,6 +132,30 @@ export function delayFor(params) {
   return rndInt(lo, hi) * 1000;
 }
 
+/** 需求4+5 · 把一次拼音生成摊成若干 step：
+    - 长文按 parts（标点小句）分阶段逐句打出发送，第 2 句起用短间隔，节奏像真人连续敲
+    - 生造词（词库接不上的段）紧跟着补发一句 [dǎ cuò le]
+    extra 用于附带 proactive 等标记 */
+function pushPinyinSteps(steps, py, firstDelay, extra = {}) {
+  const parts = (Array.isArray(py.parts) && py.parts.length)
+    ? py.parts
+    : [{ text: py.text, pinyin: py.pinyin, pinyinTone: py.pinyinTone, segs: py.segs }];
+  parts.forEach((pt, i) => {
+    steps.push({
+      kind: 'pinyin',
+      delayMs: i === 0 ? firstDelay : rndInt(1500, 5200),
+      text: pt.text,
+      pinyin: pt.pinyin,
+      pinyinTone: pt.pinyinTone,
+      pysegs: pt.segs,
+      ...extra
+    });
+  });
+  if (py.madeUp) {
+    steps.push({ kind: 'message', delayMs: rndInt(600, 2400), text: '[dǎ cuò le]', cardIds: [], ...extra });
+  }
+}
+
 /**
  * 生成 TA 对我某条消息的回复计划。
  * 返回 { ignored:boolean, steps:[{kind,delayMs,...}] }
@@ -158,7 +182,7 @@ export async function buildReply({ cards, params, history = [], incomingText = '
       const lastMe = [...history].reverse().find((m) => m.role === 'me' && m.text);
       const anchor = anchorFrom(incomingText) || (lastMe ? anchorFrom(lastMe.text) : null);
       const py = randomPhrase(anchor);
-      steps.push({ kind: 'pinyin', delayMs: delayFor(params), text: py.text, pinyin: py.pinyin, pysegs: py.segs });
+      pushPinyinSteps(steps, py, delayFor(params));
       continue;
     }
     const one = await buildOne(textPool, params);
@@ -275,7 +299,7 @@ export async function buildProactive({ cards, params, history = [], medias = [] 
       const lastMe = [...history].reverse().find((m) => m.role === 'me' && m.text);
       const anchor = lastMe ? anchorFrom(lastMe.text) : null;
       const py = randomPhrase(anchor);
-      steps.push({ kind: 'pinyin', delayMs: i === 0 ? 0 : delayFor(params), text: py.text, pinyin: py.pinyin, pysegs: py.segs, proactive: true });
+      pushPinyinSteps(steps, py, i === 0 ? 0 : delayFor(params), { proactive: true });
       continue;
     }
     const one = await buildOne(textPool, params);
