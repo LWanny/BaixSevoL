@@ -381,13 +381,17 @@ function buildPreview() {
       .map((x) => {
         const kids = [
           el('span', { class: 'cv-seg-t', text: x.text }),
-          el('span', { class: 'cv-seg-p', text: x.kind === 'miss' ? '打不出 · 点此补词' : x.tone })
+          el('span', { class: 'cv-seg-p', text: x.kind === 'miss'
+            ? (x.infer ? `${x.tone} · 单字未入库 · 点此补词` : '打不出 · 点此补词')
+            : x.tone })
         ];
         if (x.kind === 'word' && x.pos) kids.push(el('span', { class: 'cv-seg-pos', text: SLOT_NAMES[x.pos] || '其他' }));
         return el('span', {
           class: 'cv-seg ' + (x.kind === 'word' ? 'w' : x.kind === 'miss' ? 'miss' : 'c'),
           title: x.kind === 'miss' ? '点击去补词' : '',
-          onclick: x.kind === 'miss' ? () => { queuePending([x.text]); go('/pinyin-lib'); } : null
+          onclick: x.kind === 'miss'
+            ? () => { queuePending([{ text: x.text, py: x.py || null }]); go('/pinyin-lib'); }
+            : null
         }, kids);
       }));
     stage.appendChild(el('div', { class: 'cv-cov' }, [
@@ -396,7 +400,11 @@ function buildPreview() {
         : `词库试打报告 · ${pr.total} 字全部可打` }),
       segsRow,
       pr.missing.length
-        ? el('button', { class: 'btn sm', onclick: () => { queuePending(pr.missing); go('/pinyin-lib'); } }, ['去拼音字卡库补词'])
+        ? el('button', { class: 'btn sm', onclick: () => {
+          queuePending(pr.segs.filter((x) => x.kind === 'miss')
+            .map((x) => ({ text: x.text, py: x.py || null })));
+          go('/pinyin-lib');
+        } }, ['去拼音字卡库补词'])
         : null
     ]));
   };

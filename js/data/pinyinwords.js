@@ -1439,4 +1439,13 @@ const F = [
   { py: 'dao zhe li', text: '到这里', pos: 'tm', frag: 1 }, { py: 'ni xian mang', text: '你先忙', pos: 'vb', frag: 1 }
 ];
 
-export const WORD_POOL = [...A, ...B, ...C, ...D, ...E, ...F];
+// 批 G · 语气词单字补缺：嘞/喂/嘿/哩/喔/咯/呗/唷/欸/嘻 此前不在内置表也不在词库，
+// 试打会把它们误报成"打不出"——语气词类问题反复出现的根源，补上
+const G = [
+  { py: 'lei', text: '嘞', pos: 'pt' }, { py: 'wei', text: '喂', pos: 'pt' }, { py: 'hei', text: '嘿', pos: 'pt' },
+  { py: 'li', text: '哩', pos: 'pt' }, { py: 'wo', text: '喔', pos: 'pt' }, { py: 'luo', text: '咯', pos: 'pt' },
+  { py: 'bei', text: '呗', pos: 'pt' }, { py: 'yo', text: '唷', pos: 'pt' }, { py: 'ei', text: '欸', pos: 'pt' },
+  { py: 'xi', text: '嘻', pos: 'pt' }
+];
+
+export const WORD_POOL = [...A, ...B, ...C, ...D, ...E, ...F, ...G];

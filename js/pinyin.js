@@ -384,7 +384,7 @@ const TONE_EXTRA = {
   shua: 'shuā', shuai: 'shuài', shun: 'shùn', song: 'sòng', sou: 'sōu', su: 'sù',
   sui: 'suì', tan: 'tán', tao: 'táo', te: 'tè', tie: 'tiē', tuo: 'tuō',
   wa: 'wā', wai: 'wài', wawa: 'wá wa', xiu: 'xiū', xu: 'xǔ', xuan: 'xuǎn',
-  ya: 'yá', yo: 'yō', za: 'zá', zan: 'zán', ze: 'zé', zeng: 'zēng', zhou: 'zhōu',
+  ei: 'ěi', ya: 'yá', yo: 'yō', za: 'zá', zan: 'zán', ze: 'zé', zeng: 'zēng', zhou: 'zhōu',
   zhu: 'zhū', zhuan: 'zhuān', zhuang: 'zhuāng', zhui: 'zhuī', zhun: 'zhǔn', zu: 'zǔ'
 };
 for (const [k, v] of Object.entries(TONE_EXTRA)) if (!TONE_OF.has(k)) TONE_OF.set(k, v);
@@ -404,12 +404,16 @@ for (const x of CHARS) {
    抽成 rebuildWordIndex()：用户在「拼音字卡库」页面增删词条后重新构建，实时生效 */
 const WORD_MAP = new Map();
 const TEXT_MAP = new Map();
+/* 单字 → (音调外拼音 → 出现次数)：从多字词反推某个字的拼音。
+   常见字不在 332 内置单字表也不在单字词条（己/样/昨/候…），打单字时会缺——
+   推得拼音后试打能提示、补词能自动预填拼音 */
+const CHAR_BY_WORD = new Map();
 let MAX_SYL = 1;      // 词库最长音节数
 let MAX_TXT = 1;      // 词库最长汉字数
 /* 按词性分池（句式模板选槽用） */
 const POOLS = { pn: [], tm: [], cj: [], dv: [], pt: [], vb: [], nn: [], aj: [] };
 function rebuildWordIndex() {
-  WORD_MAP.clear(); TEXT_MAP.clear();
+  WORD_MAP.clear(); TEXT_MAP.clear(); CHAR_BY_WORD.clear();
   MAX_SYL = 1; MAX_TXT = 1;
   for (const k of Object.keys(POOLS)) POOLS[k].length = 0;
   for (const w of WORD_POOL) {
@@ -419,6 +423,16 @@ function rebuildWordIndex() {
     if (n > MAX_SYL) MAX_SYL = n;
     if (w.text.length > MAX_TXT) MAX_TXT = w.text.length;
     if (POOLS[w.pos]) POOLS[w.pos].push(w);
+    // 反推索引：每字对齐每个音节（库内验证过音节数=字数才对齐）
+    const ts = [...w.text];
+    const ss = w.py.split(' ');
+    if (ts.length === ss.length) {
+      ts.forEach((ch, i) => {
+        let m = CHAR_BY_WORD.get(ch);
+        if (!m) CHAR_BY_WORD.set(ch, (m = new Map()));
+        m.set(ss[i], (m.get(ss[i]) || 0) + 1);
+      });
+    }
   }
 }
 rebuildWordIndex();
@@ -522,6 +536,18 @@ export function pickAnchor(text) {
   return null;
 }
 
+/** 从多字词反推单字拼音：取出现最多的音节；并列则不猜 */
+function inferCharPy(ch) {
+  const m = CHAR_BY_WORD.get(ch);
+  if (!m) return null;
+  let best = null, bn = 0, tie = false;
+  for (const [py, n] of m) {
+    if (n > bn) { bn = n; best = py; tie = false; }
+    else if (n === bn) tie = true;
+  }
+  return tie ? null : best;
+}
+
 /* ---------- 试打分析（感同身受模式）：输入任意一句话，按引擎同款贪心最长匹配拆解，
    返回能从词库里打出来的词/单字，以及打不出来的缺字 —— 缺字即补词线索 ---------- */
 const PUNCT_RE = /[\s，。！？、；：…~～!?;:.,'"'"（）()《》【】「」“”‘’—·]/;
@@ -551,7 +577,15 @@ export function probeText(text) {
       /* 词库里的单字词条（呀/啦这类语气词常收在词库单字、不在 332 内置单字表） */
       const w1 = TEXT_MAP.get(ch);
       if (w1) segs.push({ text: ch, py: w1.py, tone: withTone(w1.py), kind: 'word', ok: true, pos: w1.pos });
-      else { segs.push({ text: ch, py: '', tone: '', kind: 'miss', ok: false }); missing.push(ch); }
+      else {
+        /* 仍缺：从多字词反推拼音（样→yang、昨→zuo…）→ 单字未入库但仍计入缺字，
+           试打标出推得拼音、补词自动预填；完全无处可推则标纯缺字 */
+        const inf = inferCharPy(ch);
+        segs.push(inf
+          ? { text: ch, py: inf, tone: withTone(inf), kind: 'miss', ok: false, infer: true }
+          : { text: ch, py: '', tone: '', kind: 'miss', ok: false });
+        missing.push(ch);
+      }
     }
     i++;
   }

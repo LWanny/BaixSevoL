@@ -18,6 +18,8 @@ const CATS = [
 ];
 const STEP = 80;
 const lenOf = (w) => [...w.text].length;
+/* 队列条目兼容：旧格式纯字符串 / 新格式 {text, py}（试打推得拼音时带上，预填免手打） */
+const normPend = (e) => (typeof e === 'string' ? { text: e, py: '' } : (e && e.text ? e : null));
 
 export default async function pagePinyinLib(view) {
   fullPage({ back: true, title: '拼音字卡库' });
@@ -43,10 +45,11 @@ export default async function pagePinyinLib(view) {
     if (WORD_POOL.some((x) => x.text === w.text || x.py === w.py)) { toast('这个词库里已经有了'); return; }
     setUserWords([...loadUserWords(), w]);
     pyIn.value = ''; fragOn = 0; fragChip.classList.remove('on');
-    if (pend.length) {                       // 缺字补词：消耗当前预填的，接着填下一个
+    if (pend.length) {                       // 缺字补词：消耗当前预填的，接着填下一个（带拼音）
       pend.shift();
       if (pend.length) {
-        txtIn.value = pend[0];
+        txtIn.value = pend[0].text;
+        pyIn.value = pend[0].py || '';
         toast(`已加入：${w.text}（缺字还剩 ${pend.length} 个）`);
         pyIn.focus();
       } else {
@@ -204,9 +207,12 @@ export default async function pagePinyinLib(view) {
   wrap.appendChild(el('div', { class: 'pw-filters' }, [posSel2]));
   wrap.appendChild(list);
   wrap.appendChild(more);
-  /* 试打报告缺字交接：预填第一个缺字（只窥不取，添加成功才消耗队列） */
-  pend = takePending();
-  if (pend.length) { txtIn.value = pend[0]; }
+  /* 试打报告缺字交接：预填第一个缺字与其拼音（只窥不取，添加成功才消耗队列） */
+  pend = takePending().map(normPend).filter(Boolean);
+  if (pend.length) {
+    txtIn.value = pend[0].text;
+    if (pend[0].py) pyIn.value = pend[0].py;
+  }
   paintPend();
   render();
   view.appendChild(wrap);

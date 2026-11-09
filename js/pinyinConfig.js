@@ -230,8 +230,12 @@ export function parseImportLine(line) {
 const PENDING_KEY = 'zkcx.pinyin.pendingAdd';
 let memPending = [];
 
-export function queuePending(chars) {
-  const list = (Array.isArray(chars) ? chars : [chars]).map((s) => String(s || '').trim()).filter(Boolean);
+/** 缺字入队（对象 {text, py} 或纯字符串都收；py=试打推得的拼音，字库页预填） */
+export function queuePending(items) {
+  const norm = (e) => (typeof e === 'object' && e && e.text)
+    ? { text: String(e.text).trim(), py: String(e.py || '').trim() }
+    : { text: String(e || '').trim(), py: '' };
+  const list = (Array.isArray(items) ? items : [items]).map(norm).filter((e) => e.text);
   if (!list.length) return;
   const cur = takePending();
   memPending = cur.concat(list);
@@ -245,7 +249,9 @@ export function takePending() {
     const raw = localStorage.getItem(PENDING_KEY);
     if (raw) {
       const a = JSON.parse(raw);
-      if (Array.isArray(a)) out = a.map((s) => String(s || '').trim()).filter(Boolean);
+      if (Array.isArray(a)) out = a.map((e) => (typeof e === 'object' && e && e.text)
+        ? { text: String(e.text).trim(), py: String(e.py || '').trim() }
+        : { text: String(e || '').trim(), py: '' }).filter((e) => e.text);
     }
   } catch {}
   memPending = [];

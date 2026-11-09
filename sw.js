@@ -3,7 +3,7 @@
    策略：本站资源走 stale-while-revalidate（先用缓存、后台更新）；导航请求优先网络，失败回落缓存。
    说明：本 SW 只缓存静态外壳，不接触 IndexedDB 里的聊天、字卡与媒体数据。 */
 
-const VERSION = 'zkcx-v96';
+const VERSION = 'zkcx-v97';
 const CORE = [
   './',
   './index.html',
