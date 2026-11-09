@@ -4,7 +4,7 @@
 
 import { put, all, bulkPut, kvGet, kvSet } from './store.js';
 import { buildReply, buildProactive, eligible, drawCards, delayFor } from './engine.js';
-import { cfg } from './pinyinConfig.js';
+import { cfg, typingDurMs } from './pinyinConfig.js';
 import { state } from './state.js';
 import { uid, chance, rndInt, pick } from './util.js';
 import { notify } from './notify.js';
@@ -91,6 +91,14 @@ async function runSteps(steps) {
     for (const seg of segs) for (const syl of String(seg.p || '').split(' ')) if (syl) sylls.push(syl);
     if (!sylls.length) { await wait(300); return; }
 
+    /* 本句总打字时长：typingDuration [最短秒, 最长分钟] 掷一个目标，均摊到每个字母上；
+       分阶段长句按段数平摊（pParts）；forceRandom 忽略用户区间走极端（0.4~120 秒） */
+    const target = (C.forceRandom ? rndInt(400, 120000) : rndInt(...typingDurMs()))
+      / (Number(s.pParts) || 1);
+    const chars = sylls.reduce((n, x) => n + x.length, 0) || 1;
+    // 112 ≈ 100（字母延迟 rndInt(60,140) 的中位）× 1.12（打错退格与句中停顿的溢出）
+    const unit = Math.max(0.15, target / (chars * 112));
+
     let typed = '';
     for (let k = 0; k < sylls.length; k++) {
       const base = typed ? typed + ' ' : '';
@@ -98,7 +106,7 @@ async function runSteps(steps) {
       for (let j = 1; j <= syl.length; j++) {
         typed = base + syl.slice(0, j);
         emit('typing', { on: true, label: '拼音组词中', py: typed });
-        await wait(rndInt(35, 130));
+        await wait(Math.max(18, Math.round(unit * rndInt(60, 140))));
 
         /* 打错字 + 退格：typoRate 区间先随机取点再判定（forceRandom 时极其频繁 25-60%） */
         const typoPct = C.forceRandom

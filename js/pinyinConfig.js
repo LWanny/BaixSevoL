@@ -42,6 +42,7 @@ export const DEFAULT_PCFG = {
   /* ---- 5 主动拼音打字（独立配置） ---- */
   enableProactive: true,     // 主动打字开关（关闭后主动消息不再敲拼音）
   proactiveInterval: [5, 30],// 发送间隔 [最短秒, 最长分钟]
+  typingDuration: [3, 1],    // 打完一句的总时长 [最短秒, 最长分钟]（从开打到落卡）
   proactiveLen: {            // 不同心情下主动一句话的 [最短, 最长] 字数
     lazy: [2, 4], normal: [4, 8], chatty: [8, 14], warm: [5, 10], sad: [3, 6]
   },
@@ -55,7 +56,7 @@ export const DEFAULT_PCFG = {
 
 /* 区间型字段：读档时统一归一成 [lo, hi]（老版本存过单值的自动包成 [v,v]） */
 const RANGE_KEYS = ['wordRatio', 'singleRatio', 'typoRate', 'templateRate',
-  'anchorTailRate', 'anchorRandomRate', 'tailRate', 'headRate', 'proactiveInterval'];
+  'anchorTailRate', 'anchorRandomRate', 'tailRate', 'headRate', 'proactiveInterval', 'typingDuration'];
 
 function normRange(v, dflt) {
   if (typeof v === 'number' && Number.isFinite(v)) return [v, v];
@@ -151,6 +152,15 @@ export function randRange(range, fallback = 0) {
 export function chanceIn(v) {
   const pct = Array.isArray(v) || typeof v === 'number' ? randRange(v, 0) : (Number(v) || 0);
   return Math.random() * 100 < pct;
+}
+
+/** 打完一句的总时长 → 毫秒区间 [lo, hi]：
+    配置按 [最短秒, 最长分钟] 存（与主动发送间隔同一套单位习惯），这里统一换算并保证 hi ≥ lo */
+export function typingDurMs() {
+  const r = cfg().typingDuration || DEFAULT_PCFG.typingDuration;
+  const lo = Math.max(400, (Number(r[0]) || 3) * 1000);
+  const hi = Math.max(lo, (Number(r[1]) || 1) * 60000);
+  return [lo, hi];
 }
 
 /** 抽当前心情：forceRandom 时忽略权重、等概率；否则把每种心情的权重区间取点后加权 */

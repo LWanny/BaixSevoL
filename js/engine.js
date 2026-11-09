@@ -154,6 +154,8 @@ function pushPinyinSteps(steps, py, firstDelay, extra = {}) {
       pinyin: pt.pinyin,
       pinyinTone: pt.pinyinTone,
       pysegs: pt.segs,
+      pParts: parts.length,          // 分阶段段数：打字总时长按段平摊
+      pIdx: i,
       ...extra
     });
   });

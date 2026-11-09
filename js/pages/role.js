@@ -8,7 +8,7 @@ import { state, saveRole, DEFAULT_PARAMS, roleStatusMeta } from '../state.js';
 import { saveMedia, mediaURL } from '../media.js';
 import { toast, confirmBox } from '../ui.js';
 import { go } from '../router.js';
-import { cfg, saveCfg, MOOD_KEYS, randRange } from '../pinyinConfig.js';
+import { cfg, saveCfg, MOOD_KEYS, randRange, typingDurMs } from '../pinyinConfig.js';
 import { PINYIN_POOL_SIZE, PINYIN_WORD_SIZE, WORD_STATS, SLOT_NAMES,
   builtinTemplates, templateText, randomPhrase, pickAnchor, probeText } from '../pinyin.js';
 
@@ -200,6 +200,12 @@ function buildPinyinCfg() {
     () => C().singleRatio, (v) => saveCfg({ singleRatio: v }), 0, 100));
   p1.appendChild(cfgPair('打错字 + 退格', '每个字母打错并按退格删除的概率区间',
     () => C().typoRate, (v) => saveCfg({ typoRate: v }), 0, 100));
+  p1.appendChild(cfgRow('打完一句的时长',
+    '从开打到落卡的总时间：区间取点随机；长句分阶段时按段平摊；预览最多演示 9 秒', []));
+  p1.appendChild(cfgSlider('最短（秒）', () => C().typingDuration[0],
+    (v) => saveCfg({ typingDuration: [v, C().typingDuration[1]] }), 1, 300));
+  p1.appendChild(cfgSlider('最长（分钟）', () => C().typingDuration[1],
+    (v) => saveCfg({ typingDuration: [C().typingDuration[0], v] }), 1, 60));
 
   /* ---- 面板 2 · 句式与接话 ---- */
   const p2 = el('div');
@@ -313,7 +319,10 @@ function buildPreview() {
     const txt = opts.stream || py.pinyin || '';
     const C = cfg();
     const typoPct = C.forceRandom ? rndInt(25, 60) : randRange(C.typoRate, 5);
-    const step = Math.max(40, Math.min(160, Math.round(2400 / Math.max(1, txt.length))));
+    /* 总时长读 typingDuration（最短秒~最长分钟取点；forceRandom 走极端）——预览最多演示 9 秒 */
+    const [durLo, durHi] = typingDurMs();
+    const total = Math.min(C.forceRandom ? rndInt(400, 120000) : rndInt(durLo, durHi), 9000);
+    const step = Math.max(18, Math.min(360, Math.round(total / Math.max(1, txt.length))));
     let t = 420;
     for (let i = 0; i < txt.length; i++) {
       if (chance(typoPct)) {
