@@ -495,12 +495,14 @@ export function anchorFrom(text, mode) {
     if (mode === 'random') return pick(hits);
     return chance(70) ? hits[hits.length - 1] : pick(hits);
   }
-  /* 兜底：最后一个汉字的拼音（单字表里有才收） */
+  /* 兜底：最后一个汉字的拼音（内置单字表或词库单字词条里有才收） */
   const m = s.match(/[\u4e00-\u9fa5]/g);
   if (m) {
     const ch = m[m.length - 1];
     const py = CHAR_BY_TEXT.get(ch);
     if (py) return { py, text: ch };
+    const w1 = TEXT_MAP.get(ch);       // 词库单字词条（呀/啦等语气词常只在词库）
+    if (w1) return w1;
   }
   return null;
 }
@@ -545,7 +547,12 @@ export function probeText(text) {
     }
     const p = CHAR_BY_TEXT.get(ch);
     if (p) segs.push({ text: ch, py: p, tone: TONE_OF[p] || TONE_EXTRA[p] || p, kind: 'char', ok: true });
-    else { segs.push({ text: ch, py: '', tone: '', kind: 'miss', ok: false }); missing.push(ch); }
+    else {
+      /* 词库里的单字词条（呀/啦这类语气词常收在词库单字、不在 332 内置单字表） */
+      const w1 = TEXT_MAP.get(ch);
+      if (w1) segs.push({ text: ch, py: w1.py, tone: withTone(w1.py), kind: 'word', ok: true, pos: w1.pos });
+      else { segs.push({ text: ch, py: '', tone: '', kind: 'miss', ok: false }); missing.push(ch); }
+    }
     i++;
   }
   const chars = segs.filter((x) => x.kind !== 'punct');
