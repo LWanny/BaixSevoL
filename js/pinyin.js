@@ -764,7 +764,9 @@ export function randomPhrase(anchor, opt = {}) {
     if (tS) { sylls.push(...tS); known.push(...tK); }     // 3) 语气词拼回句尾
   }
 
-  /* 音节级最长匹配重组：词库优先组词，匹配不到才退回单字（保证可解析、无死循环） */
+  /* 音节级最长匹配重组：词库优先组词，匹配不到才退回单字（保证可解析、无死循环）。
+     ★ 保留原字：同音词条先到先得会把"雷"显示成"累"、用户的"tao 讨"显示成"桃"——
+     库词文本只在原字缺失时兜底，音节与字始终来自上游、重组不改字 */
   const segs = [];
   let i = 0;
   while (i < sylls.length) {
@@ -773,7 +775,11 @@ export function randomPhrase(anchor, opt = {}) {
     for (let len = Math.min(MAX_SYL, sylls.length - i); len >= 1; len--) {
       const key = sylls.slice(i, i + len).join(' ');
       const w = WORD_MAP.get(key);
-      if (w) { hit = { p: key, t: w.text, pt: withTone(key), m: true }; hitLen = len; break; }
+      if (w) {
+        hit = { p: key, t: known.slice(i, i + len).join('') || w.text, pt: withTone(key), m: true };
+        hitLen = len;
+        break;
+      }
     }
     if (hit) { segs.push(hit); i += hitLen; }
     else { segs.push({ p: sylls[i], t: known[i], pt: toTone(sylls[i]), m: false }); i++; }
@@ -862,7 +868,7 @@ function applyUserWords(clean) {
   for (let i = WORD_POOL.length - 1; i >= 0; i--) if (WORD_POOL[i].u) WORD_POOL.splice(i, 1);
   rebuildWordIndex();                                  // 先回到纯内置状态
   for (const w of clean) {
-    if (TEXT_MAP.has(w.text) || WORD_MAP.has(w.py)) continue;   // 与内置重复 → 丢弃
+    if (TEXT_MAP.has(w.text)) continue;   // 与内置重复（按字）→ 丢弃；同音不同字允许（桃/讨、雷/累…）
     WORD_POOL.push({ ...w, u: 1 });
   }
   rebuildWordIndex();

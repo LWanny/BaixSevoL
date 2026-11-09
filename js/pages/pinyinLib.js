@@ -42,7 +42,8 @@ export default async function pagePinyinLib(view) {
   const doAdd = () => {
     const w = normalizeWord({ py: pyIn.value, text: txtIn.value, pos: posSel.value, frag: fragOn });
     if (!w) { toast('格式有误：拼音空格分隔、音节数须等于汉字数（如 xi huan ni / 喜欢你）'); return; }
-    if (WORD_POOL.some((x) => x.text === w.text || x.py === w.py)) { toast('这个词库里已经有了'); return; }
+    /* 只按"字"判重复：同音不同字（桃tao/讨tao、雷lei/累lei）是不同词，必须能加 */
+    if (WORD_POOL.some((x) => x.text === w.text)) { toast('这个词库里已经有了'); return; }
     setUserWords([...loadUserWords(), w]);
     pyIn.value = ''; fragOn = 0; fragChip.classList.remove('on');
     if (pend.length) {                       // 缺字补词：消耗当前预填的，接着填下一个（带拼音）
@@ -90,8 +91,7 @@ export default async function pagePinyinLib(view) {
     const lines = impText.value.split(/\r?\n/);
     let dup = 0, err = 0; const errs = []; const add = [];
     const texts = new Set(WORD_POOL.map((w) => w.text));
-    const pys = new Set(WORD_POOL.map((w) => w.py));
-    const seenT = new Set(), seenP = new Set();
+    const seenT = new Set();
     lines.forEach((ln, i) => {
       const t = ln.trim();
       if (!t || t.startsWith('#')) return;
@@ -99,9 +99,9 @@ export default async function pagePinyinLib(view) {
       if (!cand) { err++; errs.push(`第 ${i + 1} 行无法识别（至少要有汉字+拼音）`); return; }
       const w = normalizeWord(cand);
       if (!w) { err++; errs.push(`第 ${i + 1} 行「${t.slice(0, 24)}」：拼音空格分隔且音节数=字数`); return; }
-      if (texts.has(w.text) || pys.has(w.py)) { dup++; return; }
-      if (seenT.has(w.text) || seenP.has(w.py)) { dup++; return; }
-      seenT.add(w.text); seenP.add(w.py); add.push(w);
+      if (texts.has(w.text)) { dup++; return; }          // 只按字判重（同音不同字允许）
+      if (seenT.has(w.text)) { dup++; return; }
+      seenT.add(w.text); add.push(w);
     });
     if (add.length) setUserWords([...loadUserWords(), ...add]);
     impRes.innerHTML = '';
