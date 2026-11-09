@@ -539,7 +539,7 @@ export function probeText(text) {
       if (w) { hit = w; hitLen = len; break; }
     }
     if (hit) {
-      segs.push({ text: hit.text, py: hit.py, tone: withTone(hit.py), kind: 'word', ok: true });
+      segs.push({ text: hit.text, py: hit.py, tone: withTone(hit.py), kind: 'word', ok: true, pos: hit.pos });
       i += hitLen;
       continue;
     }

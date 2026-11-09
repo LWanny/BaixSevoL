@@ -195,3 +195,60 @@ export function moodLenRange(mood) {
   const hi = Math.max(lo, Number(r && r[1]) || 8);
   return [lo, hi];
 }
+
+/* ============ 批量导入：逐行解析（字库页与测试共用） ============ */
+export const POS_CN = { 代词: 'pn', 时间: 'tm', 连接: 'cj', 程度: 'dv', 语气: 'pt', 动词: 'vb', 名词: 'nn', 形容词: 'aj' };
+const POS_KEYS = ['pn', 'tm', 'cj', 'dv', 'pt', 'vb', 'nn', 'aj'];
+
+/** 解析一行导入文本 → {py, text, pos, frag} 原始候选；不认识的行返回 null
+    支持：`喜欢 xi huan vb` / `xi huan 喜欢` / `xi huan,喜欢,vb` / `xi huan 喜欢 动词`
+    尾字段可带词性（英文键或中文名）与 `半截话`/`frag` 标记；# 开头为注释 */
+export function parseImportLine(line) {
+  const raw = String(line || '').trim();
+  if (!raw || raw.startsWith('#')) return null;
+  let parts = /[,，\t]/.test(raw)
+    ? raw.split(/[,，\t]+/).map((s) => s.trim()).filter(Boolean)
+    : raw.split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return null;
+  // 尾字段先认标记：词性 / 半截话
+  let pos, frag = 0;
+  const tail = parts[parts.length - 1];
+  if (tail) {
+    if (tail === '半截话' || tail === 'frag') { frag = 1; parts.pop(); }
+    else if (POS_KEYS.includes(tail)) { pos = tail; parts.pop(); }
+    else if (POS_CN[tail]) { pos = POS_CN[tail]; parts.pop(); }
+  }
+  const cjkIdx = parts.findIndex((p) => /[\u4e00-\u9fff]/.test(p));
+  if (cjkIdx === -1 || parts.length < 2) return null;
+  const text = parts[cjkIdx];
+  const py = parts.filter((_, i) => i !== cjkIdx).join(' ');
+  if (!py || !text) return null;
+  return { py, text, pos: pos || 'nn', frag };
+}
+
+/* ============ 试打缺字 → 补词交接（localStorage 队列，字库页打开即取） ============ */
+const PENDING_KEY = 'zkcx.pinyin.pendingAdd';
+let memPending = [];
+
+export function queuePending(chars) {
+  const list = (Array.isArray(chars) ? chars : [chars]).map((s) => String(s || '').trim()).filter(Boolean);
+  if (!list.length) return;
+  const cur = takePending();
+  memPending = cur.concat(list);
+  try { localStorage.setItem(PENDING_KEY, JSON.stringify(memPending)); } catch {}
+}
+
+/** 取走并清空缺字队列（字库页挂载时调用，拿到后表单逐个预填） */
+export function takePending() {
+  let out = memPending;
+  try {
+    const raw = localStorage.getItem(PENDING_KEY);
+    if (raw) {
+      const a = JSON.parse(raw);
+      if (Array.isArray(a)) out = a.map((s) => String(s || '').trim()).filter(Boolean);
+    }
+  } catch {}
+  memPending = [];
+  try { localStorage.removeItem(PENDING_KEY); } catch {}
+  return out;
+}

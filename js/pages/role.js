@@ -8,7 +8,7 @@ import { state, saveRole, DEFAULT_PARAMS, roleStatusMeta } from '../state.js';
 import { saveMedia, mediaURL } from '../media.js';
 import { toast, confirmBox } from '../ui.js';
 import { go } from '../router.js';
-import { cfg, saveCfg, MOOD_KEYS, randRange, typingDurMs } from '../pinyinConfig.js';
+import { cfg, saveCfg, MOOD_KEYS, randRange, typingDurMs, queuePending } from '../pinyinConfig.js';
 import { PINYIN_POOL_SIZE, PINYIN_WORD_SIZE, WORD_STATS, SLOT_NAMES,
   builtinTemplates, templateText, randomPhrase, pickAnchor, probeText } from '../pinyin.js';
 
@@ -378,17 +378,25 @@ function buildPreview() {
     /* 词库试打报告：每个能打的词/字都列出来，缺字标红 → 方便后续补词 */
     const segsRow = el('div', { class: 'cv-segs' }, pr.segs
       .filter((x) => x.kind !== 'punct')
-      .map((x) => el('span', { class: 'cv-seg ' + (x.kind === 'word' ? 'w' : x.kind === 'miss' ? 'miss' : 'c') }, [
-        el('span', { class: 'cv-seg-t', text: x.text }),
-        el('span', { class: 'cv-seg-p', text: x.kind === 'miss' ? '打不出' : x.tone })
-      ])));
+      .map((x) => {
+        const kids = [
+          el('span', { class: 'cv-seg-t', text: x.text }),
+          el('span', { class: 'cv-seg-p', text: x.kind === 'miss' ? '打不出 · 点此补词' : x.tone })
+        ];
+        if (x.kind === 'word' && x.pos) kids.push(el('span', { class: 'cv-seg-pos', text: SLOT_NAMES[x.pos] || '其他' }));
+        return el('span', {
+          class: 'cv-seg ' + (x.kind === 'word' ? 'w' : x.kind === 'miss' ? 'miss' : 'c'),
+          title: x.kind === 'miss' ? '点击去补词' : '',
+          onclick: x.kind === 'miss' ? () => { queuePending([x.text]); go('/pinyin-lib'); } : null
+        }, kids);
+      }));
     stage.appendChild(el('div', { class: 'cv-cov' }, [
       el('div', { class: 'cv-cov-h', text: pr.missing.length
         ? `词库试打报告 · ${pr.hit}/${pr.total} 字可打，缺 ${pr.missing.length} 字`
         : `词库试打报告 · ${pr.total} 字全部可打` }),
       segsRow,
       pr.missing.length
-        ? el('button', { class: 'btn sm', onclick: () => go('/pinyin-lib') }, ['去拼音字卡库补词'])
+        ? el('button', { class: 'btn sm', onclick: () => { queuePending(pr.missing); go('/pinyin-lib'); } }, ['去拼音字卡库补词'])
         : null
     ]));
   };

@@ -2,12 +2,13 @@
    单字库 + 词库（双字/三字/四字/半截话、词性标注）在这里浏览、搜索、筛选；
    自定义词条存 localStorage（zkcx.pinyin.userwords.v1），setUserWords() 后引擎索引立即重建。 */
 
-import { el } from '../util.js';
+import { el, openFile, readText } from '../util.js';
 import { fullPage } from '../shell.js';
 import { toast } from '../ui.js';
 import { WORD_POOL } from '../data/pinyinwords.js';
 import { WORD_STATS, PINYIN_POOL_SIZE, PINYIN_WORD_SIZE, SLOT_NAMES,
   loadUserWords, setUserWords, normalizeWord } from '../pinyin.js';
+import { takePending, parseImportLine } from '../pinyinConfig.js';
 
 const POS_OPTS = [['pn', '代词'], ['tm', '时间'], ['cj', '连接'], ['dv', '程度'],
   ['pt', '语气'], ['vb', '动词'], ['nn', '名词'], ['aj', '形容词']];
@@ -22,6 +23,7 @@ export default async function pagePinyinLib(view) {
   fullPage({ back: true, title: '拼音字卡库' });
 
   let cat = 'all', pos = 'all', q = '', shown = STEP, fragOn = 0;
+  let pend = [];                       // 试打报告跳转带来的缺字队列（逐个预填补词）
   const wrap = el('div', { class: 'page pw-page' });
 
   /* ---- 统计条 ---- */
@@ -40,19 +42,77 @@ export default async function pagePinyinLib(view) {
     if (!w) { toast('格式有误：拼音空格分隔、音节数须等于汉字数（如 xi huan ni / 喜欢你）'); return; }
     if (WORD_POOL.some((x) => x.text === w.text || x.py === w.py)) { toast('这个词库里已经有了'); return; }
     setUserWords([...loadUserWords(), w]);
-    pyIn.value = ''; txtIn.value = ''; fragOn = 0; fragChip.classList.remove('on');
+    pyIn.value = ''; fragOn = 0; fragChip.classList.remove('on');
+    if (pend.length) {                       // 缺字补词：加完一个自动填下一个
+      txtIn.value = pend.shift();
+      toast(`已加入：${w.text}（缺字还剩 ${pend.length} 个）`);
+      paintPend(); pyIn.focus();
+    } else {
+      txtIn.value = '';
+      toast(`已加入：${w.text}`);
+    }
     cat = 'user'; shown = STEP; render();
-    toast(`已加入：${w.text}`);
   };
   addBtn.addEventListener('click', doAdd);
   txtIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAdd(); });
   pyIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAdd(); });
   fragChip.addEventListener('click', () => { fragOn = fragOn ? 0 : 1; fragChip.classList.toggle('on', !!fragOn); });
 
+  const ADD_H0 = '加入自定义词条（实时并入抽词与句式模板）';
+  const addH = el('div', { class: 'pw-add-h', text: ADD_H0 });
+  const paintPend = () => {
+    addH.textContent = pend.length ? `${ADD_H0} · 缺字补词中（还剩 ${pend.length} 个待补）` : ADD_H0;
+    addH.classList.toggle('pw-pend', !!pend.length);
+  };
   const addCard = el('div', { class: 'pw-add' }, [
-    el('div', { class: 'pw-add-h', text: '加入自定义词条（实时并入抽词与句式模板）' }),
+    addH,
     el('div', { class: 'pw-add-row' }, [pyIn, txtIn]),
     el('div', { class: 'pw-add-row' }, [posSel, fragChip, addBtn])
+  ]);
+
+  /* ---- 批量导入 ---- */
+  const impText = el('textarea', { class: 'pw-imp-ta', rows: '6',
+    placeholder: '每行一条，写法任选：\n喜欢 xi huan vb\nxi huan 喜欢\nxi huan,喜欢,动词\n尾字段可写词性（vb / 动词 …）或 半截话；# 开头是注释' });
+  const impRes = el('div', { class: 'pw-imp-res' });
+  const impBtn = el('button', { class: 'btn sm primary', type: 'button', text: '批量导入' });
+  const fileBtn = el('button', { class: 'btn sm', type: 'button', text: '从文件导入 (.txt)' });
+  const doImport = () => {
+    const lines = impText.value.split(/\r?\n/);
+    let dup = 0, err = 0; const errs = []; const add = [];
+    const texts = new Set(WORD_POOL.map((w) => w.text));
+    const pys = new Set(WORD_POOL.map((w) => w.py));
+    const seenT = new Set(), seenP = new Set();
+    lines.forEach((ln, i) => {
+      const t = ln.trim();
+      if (!t || t.startsWith('#')) return;
+      const cand = parseImportLine(t);
+      if (!cand) { err++; errs.push(`第 ${i + 1} 行无法识别（至少要有汉字+拼音）`); return; }
+      const w = normalizeWord(cand);
+      if (!w) { err++; errs.push(`第 ${i + 1} 行「${t.slice(0, 24)}」：拼音空格分隔且音节数=字数`); return; }
+      if (texts.has(w.text) || pys.has(w.py)) { dup++; return; }
+      if (seenT.has(w.text) || seenP.has(w.py)) { dup++; return; }
+      seenT.add(w.text); seenP.add(w.py); add.push(w);
+    });
+    if (add.length) setUserWords([...loadUserWords(), ...add]);
+    impRes.innerHTML = '';
+    impRes.appendChild(el('div', { class: 'pw-imp-sum',
+      text: `成功 ${add.length} 条${dup ? ` · 重复跳过 ${dup}` : ''}${err ? ` · 失败 ${err}` : ''}` }));
+    for (const e of errs.slice(0, 8)) impRes.appendChild(el('div', { class: 'pw-imp-err', text: e }));
+    if (add.length) { render(); toast(`批量导入成功 ${add.length} 条`); impText.value = ''; }
+    else toast('没有可导入的条目');
+  };
+  impBtn.addEventListener('click', doImport);
+  fileBtn.addEventListener('click', async () => {
+    const f = await openFile({ accept: '.txt,text/plain' });
+    if (!f) return;
+    impText.value = await readText(f);
+    doImport();
+  });
+  const impCard = el('div', { class: 'pw-add pw-imp' }, [
+    el('div', { class: 'pw-add-h', text: '批量导入（每行一条，导入后立即并入引擎）' }),
+    impText,
+    el('div', { class: 'pw-add-row' }, [impBtn, fileBtn]),
+    impRes
   ]);
 
   /* ---- 搜索 + 分类筛选 ---- */
@@ -131,11 +191,16 @@ export default async function pagePinyinLib(view) {
 
   wrap.appendChild(stats);
   wrap.appendChild(addCard);
+  wrap.appendChild(impCard);
   wrap.appendChild(el('div', { class: 'pw-filters' }, [search]));
   wrap.appendChild(chips);
   wrap.appendChild(el('div', { class: 'pw-filters' }, [posSel2]));
   wrap.appendChild(list);
   wrap.appendChild(more);
+  /* 试打报告缺字交接：预填第一个缺字，加完自动补下一个 */
+  pend = takePending();
+  if (pend.length) { txtIn.value = pend.shift(); }
+  paintPend();
   render();
   view.appendChild(wrap);
 }

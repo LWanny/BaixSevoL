@@ -3035,6 +3035,26 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
   border-radius:8px;cursor:pointer}
 .pw-del:active{background:var(--danger);color:#fff}
 .pw-more{margin-top:12px}
+/* 缺字补词模式标题 */
+.pw-add-h.pw-pend{color:var(--accent-2)}
+.pw-add-h.pw-pend::before{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;
+  background:var(--accent);margin-right:6px;vertical-align:1.5px;animation:pw-blink 1s infinite}
+@keyframes pw-blink{0%,100%{opacity:1}50%{opacity:.25}}
+/* 批量导入 */
+.pw-imp-ta{width:100%;min-height:118px;resize:vertical;border:1px solid var(--line);border-radius:10px;
+  padding:8px 10px;font-size:13px;line-height:1.7;background:var(--bg-elev2);color:var(--txt);
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.pw-imp-ta:focus{outline:none;border-color:var(--accent-2);background:var(--bg-elev)}
+.pw-imp-ta::placeholder{color:var(--txt-mute);font-family:inherit;font-size:12.5px}
+.pw-imp-res{margin-top:9px}
+.pw-imp-res:empty{display:none}
+.pw-imp-sum{font-size:12.5px;font-weight:700;color:var(--txt-dim)}
+.pw-imp-err{font-size:12px;color:var(--danger);margin-top:3px;line-height:1.5}
+/* 试打报告：词性小标 + 缺字可点 */
+.cv-seg-pos{font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--accent-2)}
+.cv-seg.miss{cursor:pointer}
+.cv-seg.miss:active{transform:scale(.94)}
+.cv-seg.miss .cv-seg-p{font-weight:700}
 /* ---------- 拼音打字 · 效果预览 ---------- */
 .cfg-prev{margin:0 12px 10px}
 .cv-modes{display:flex;gap:8px;margin-bottom:8px}
