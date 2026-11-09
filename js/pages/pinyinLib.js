@@ -43,10 +43,17 @@ export default async function pagePinyinLib(view) {
     if (WORD_POOL.some((x) => x.text === w.text || x.py === w.py)) { toast('这个词库里已经有了'); return; }
     setUserWords([...loadUserWords(), w]);
     pyIn.value = ''; fragOn = 0; fragChip.classList.remove('on');
-    if (pend.length) {                       // 缺字补词：加完一个自动填下一个
-      txtIn.value = pend.shift();
-      toast(`已加入：${w.text}（缺字还剩 ${pend.length} 个）`);
-      paintPend(); pyIn.focus();
+    if (pend.length) {                       // 缺字补词：消耗当前预填的，接着填下一个
+      pend.shift();
+      if (pend.length) {
+        txtIn.value = pend[0];
+        toast(`已加入：${w.text}（缺字还剩 ${pend.length} 个）`);
+        pyIn.focus();
+      } else {
+        txtIn.value = '';
+        toast(`已加入：${w.text}，缺字补词完成`);
+      }
+      paintPend();
     } else {
       txtIn.value = '';
       toast(`已加入：${w.text}`);
@@ -197,9 +204,9 @@ export default async function pagePinyinLib(view) {
   wrap.appendChild(el('div', { class: 'pw-filters' }, [posSel2]));
   wrap.appendChild(list);
   wrap.appendChild(more);
-  /* 试打报告缺字交接：预填第一个缺字，加完自动补下一个 */
+  /* 试打报告缺字交接：预填第一个缺字（只窥不取，添加成功才消耗队列） */
   pend = takePending();
-  if (pend.length) { txtIn.value = pend.shift(); }
+  if (pend.length) { txtIn.value = pend[0]; }
   paintPend();
   render();
   view.appendChild(wrap);
