@@ -210,15 +210,17 @@ export function parseImportLine(line) {
     ? raw.split(/[,，\t]+/).map((s) => s.trim()).filter(Boolean)
     : raw.split(/\s+/).filter(Boolean);
   if (parts.length < 2) return null;
-  // 尾字段先认标记：词性 / 半截话
+  // 尾字段先认标记：词性 / 半截话（最多两个尾标记，顺序不限：`的话 de hua 连接 半截话`）
   let pos, frag = 0;
-  const tail = parts[parts.length - 1];
-  if (tail) {
+  for (let k = 0; k < 2 && parts.length >= 2; k++) {
+    const tail = parts[parts.length - 1];
     if (tail === '半截话' || tail === 'frag') { frag = 1; parts.pop(); }
     else if (POS_KEYS.includes(tail)) { pos = tail; parts.pop(); }
     else if (POS_CN[tail]) { pos = POS_CN[tail]; parts.pop(); }
+    else break;
   }
-  const cjkIdx = parts.findIndex((p) => /[\u4e00-\u9fff]/.test(p));
+  let cjkIdx = parts.findIndex((p) => /[\u4e00-\u9fff]/.test(p));
+  if (cjkIdx === -1) cjkIdx = parts.findIndex((p) => /[0-9]/.test(p));  // 纯数字词条（666）
   if (cjkIdx === -1 || parts.length < 2) return null;
   const text = parts[cjkIdx];
   const py = parts.filter((_, i) => i !== cjkIdx).join(' ');

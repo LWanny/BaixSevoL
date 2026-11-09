@@ -2,7 +2,7 @@
    单字库 + 词库（双字/三字/四字/半截话、词性标注）在这里浏览、搜索、筛选；
    自定义词条存 localStorage（zkcx.pinyin.userwords.v1），setUserWords() 后引擎索引立即重建。 */
 
-import { el, openFile, readText } from '../util.js';
+import { el, openFile, readText, downloadBlob } from '../util.js';
 import { fullPage } from '../shell.js';
 import { toast } from '../ui.js';
 import { WORD_POOL } from '../data/pinyinwords.js';
@@ -118,10 +118,26 @@ export default async function pagePinyinLib(view) {
     impText.value = await readText(f);
     doImport();
   });
+
+  /* ---- 导出：与批量导入同一行格式（导出→粘回 可无损回灌） ---- */
+  const toLine = (w) => `${w.text} ${w.py} ${SLOT_NAMES[w.pos] || 'nn'}${w.frag ? ' 半截话' : ''}`;
+  const doExport = (list, tag) => {
+    if (!list.length) { toast('还没有可导出的词条'); return; }
+    const head = `# 字卡传信 · 拼音词库导出 · ${tag} · ${list.length} 条 · ${new Date().toLocaleDateString('zh-CN')}\n`
+      + '# 每行：汉字 拼音 词性 [半截话] —— 直接粘进「批量导入」即可回灌\n';
+    downloadBlob(new Blob([head + list.map(toLine).join('\n') + '\n'], { type: 'text/plain;charset=utf-8' }),
+      `拼音词库-${tag}-${list.length}条.txt`);
+    toast(`已导出 ${list.length} 条（${tag}）`);
+  };
+  const expAllBtn = el('button', { class: 'btn sm', type: 'button', text: '导出全部 (.txt)',
+    onclick: () => doExport(WORD_POOL, '全部') });
+  const expUserBtn = el('button', { class: 'btn sm', type: 'button', text: '导出自定义',
+    onclick: () => doExport(loadUserWords(), '自定义') });
   const impCard = el('div', { class: 'pw-add pw-imp' }, [
-    el('div', { class: 'pw-add-h', text: '批量导入（每行一条，导入后立即并入引擎）' }),
+    el('div', { class: 'pw-add-h', text: '批量导入 / 导出（每行一条，格式互通，可无损回灌）' }),
     impText,
     el('div', { class: 'pw-add-row' }, [impBtn, fileBtn]),
+    el('div', { class: 'pw-add-row' }, [expAllBtn, expUserBtn]),
     impRes
   ]);
 
