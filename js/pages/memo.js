@@ -170,7 +170,7 @@ function openEditor(m) {
       el('div', { class: 'field' }, [
         el('label', { text: '⏰ 到点弹窗提醒' }),
         remindInput,
-        el('div', { class: 'hint', text: '留空＝不提醒。到点时（应用开着）弹窗：「知道了」完成本轮；「推迟 10 分钟」或直接关掉＝稍后再提醒。' })
+        el('div', { class: 'hint', text: '留空＝不提醒。到点时弹窗并在消息页发一条系统提醒：「知道了」完成本轮；「推迟 10 分钟」或直接关掉＝稍后再提醒。' })
       ]),
       el('div', { class: 'field' }, [
         el('label', { text: '💬 聊天中随机提醒' }),

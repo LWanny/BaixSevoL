@@ -54,7 +54,23 @@ function recordEnd(rec) {
   const s = parseYMD(rec.start);
   const guess = new Date(s.getTime() + (periodLen - 1) * DAY);
   const t = today();
-  return guess > t ? t : guess;
+  /* 未结束：已开始 → 推算日与今天取早；还没开始（未来日期）→ 直接用推算日。
+     否则未来开始的记录会被截成 end < start（列表显示负天数、日历不染色） */
+  return (guess > t && s <= t) ? t : guess;
+}
+
+/** 补掉忘了点「结束」的过期记录：推算结束日早于今天 → 自动补结束日，
+    避免记录永远停在「进行中」、干扰覆盖率判断 */
+async function closeStaleOpens() {
+  const t = today();
+  for (const r of items) {
+    if (r.end) continue;
+    const guess = new Date(parseYMD(r.start).getTime() + (periodLen - 1) * DAY);
+    if (guess < t) {
+      r.end = ymd(guess);
+      await put('periods', r);
+    }
+  }
 }
 
 function markSets() {
@@ -66,11 +82,7 @@ function markSets() {
   items.forEach((rec) => eachDay(rec.start, ymd(recordEnd(rec)), (k) => real.add(k)));
 
   if (items.length) {
-    const lastStart = parseYMD(items[0].start);
-    let next = new Date(lastStart.getTime() + cycleLen * DAY);
-    const t = today();
-    // 把预测推到「今天及以后」的那一个周期
-    while (next.getTime() + (periodLen - 1) * DAY < t.getTime()) next = new Date(next.getTime() + cycleLen * DAY);
+    const next = nextStartDate();       // 与首页倒计时同一个源，日历预测和大字提示保持一致
     eachDay(ymd(next), ymd(new Date(next.getTime() + (periodLen - 1) * DAY)), (k) => predicted.add(k));
 
     const day = new Date(next.getTime() - 14 * DAY);
@@ -85,7 +97,9 @@ function nextStartDate() {
   const lastStart = parseYMD(items[0].start);
   let next = new Date(lastStart.getTime() + cycleLen * DAY);
   const t = today();
-  while (next < t) next = new Date(next.getTime() + cycleLen * DAY);
+  /* 推到「预测期包含今天」或今天之后的那次：今天落在预测窗内就返回该窗的开始日。
+     旧逻辑（next < t 就往后跳）会让首页说「还有 26 天」、日历却正标着预测经期，自相矛盾 */
+  while (next.getTime() + (periodLen - 1) * DAY < t.getTime()) next = new Date(next.getTime() + cycleLen * DAY);
   return next;
 }
 
@@ -213,7 +227,10 @@ function phaseTip(sets) {
   if (!next) return null;
   let phase;
   if (sets.real.has(ymd(t))) phase = 'during';
-  else phase = diffDays(t, next) >= 7 ? 'late' : 'before';
+  else {
+    const dd = diffDays(t, next);
+    phase = dd <= 0 ? 'during' : dd >= 7 ? 'late' : 'before';   // dd≤0：正落在预测窗内
+  }
   const TIPS = {
     before: [
       '可能出现乳房胀痛、食欲增加，都是激素的正常反应。',
@@ -288,15 +305,25 @@ function paint() {
 
   /* 概览（参考图样式：粉渐变大卡，大字距下次 + 副行预计日期 + 三项横排统计） */
   const dd = next ? diffDays(today(), next) : null;
-  const heroTitle = next
-    ? (dd === 0
-      ? el('div', { class: 'pd-hero-t', text: '经期就是今天' })
-      : el('div', { class: 'pd-hero-t' }, [
-          el('span', { text: '距下次经期还有 ' }),
-          el('b', { text: String(dd) }),
-          el('span', { text: ' 天' })
-        ]))
-    : el('div', { class: 'pd-hero-t', text: '还没有记录' });
+  /* 今天在真实记录里 → 经期第 N 天；落在预测窗内 → 预计经期第 N 天；否则倒计时 */
+  const curRec = items.find((r) => {
+    const s = parseYMD(r.start);
+    return today() >= s && today() <= recordEnd(r);
+  });
+  const numHero = (pre, n) => el('div', { class: 'pd-hero-t' }, [
+    el('span', { text: pre }),
+    el('b', { text: String(n) }),
+    el('span', { text: ' 天' })
+  ]);
+  const heroTitle = curRec
+    ? numHero('经期第 ', diffDays(parseYMD(curRec.start), today()) + 1)
+    : next
+      ? (dd === 0
+        ? el('div', { class: 'pd-hero-t', text: '经期就是今天' })
+        : dd < 0
+          ? numHero('预计经期第 ', -dd + 1)
+          : numHero('距下次经期还有 ', dd))
+      : el('div', { class: 'pd-hero-t', text: '还没有记录' });
   const hstat = (k, v) => el('div', {}, [
     el('div', { class: 'k', text: k }),
     el('div', { class: 'v', text: v })
@@ -309,7 +336,7 @@ function paint() {
       el('div', { class: 'pd-hero-stats' }, [
         hstat('平均周期', `${avgCycle()}天`),
         hstat('经期天数', `${avgPeriodLen()}天`),
-        hstat('距下次', dd === null ? '—' : (dd === 0 ? '今天' : `${dd}天`))
+        hstat('距下次', dd === null ? '—' : (dd > 0 ? `${dd}天` : (dd === 0 ? '今天' : '已到')))
       ])
     ])
   ]));
@@ -415,6 +442,7 @@ function calendar(sets) {
 async function reload() {
   items = (await all('periods')).sort((a, b) => String(b.start).localeCompare(String(a.start)));
   logs = (await kvGet('periodLogs', [])) || [];
+  await closeStaleOpens();     // 自动补上过期未结束记录的结束日
   paint();
 }
 
@@ -442,6 +470,7 @@ async function startToday() {
 async function endToday() {
   const open = items.find((r) => !r.end);
   if (!open) { toast('当前没有进行中的经期'); return; }
+  if (parseYMD(open.start) > today()) { toast(`这条记录从 ${open.start} 才开始`); return; }
   open.end = ymd(today());
   await put('periods', open);
   await reload();
@@ -466,12 +495,19 @@ function dayMenu(key) {
     } });
   }
   acts.push({ label: `从 ${key} 开始`, icon: 'IC-MIO-033', onSelect: async () => {
+    /* 覆盖检查：这天已在某条记录范围内 → 拒绝重复建记录（否则两条 open 互相打架） */
+    const covered = items.some((r) => {
+      const s = parseYMD(r.start), e = recordEnd(r);
+      return parseYMD(key) >= s && parseYMD(key) <= e;
+    });
+    if (covered) { toast('这天已经在记录里了'); return; }
     await put('periods', { id: uid(), start: key, end: null, note: '', ts: Date.now() });
     await reload();
     toast('已添加');
   } });
   if (rec) {
     acts.push({ label: '把这一天记为结束', icon: 'IC-MIO-003', onSelect: async () => {
+      if (parseYMD(key) < parseYMD(rec.start)) { toast('结束日不能早于开始日'); return; }
       rec.end = key;
       await put('periods', rec);
       await reload();
@@ -493,6 +529,7 @@ function recMenu(rec) {
     { label: '查看当天详情（经量 / 身体状况）', icon: 'IC-MIO-033', onSelect: () => openDayForm(rec.start) },
     { label: '编辑备注', icon: 'IC-CRD-006', onSelect: () => editNote(rec) },
     { label: '标记结束在今天', icon: 'IC-MIO-003', onSelect: async () => {
+      if (parseYMD(rec.start) > today()) { toast(`这条记录从 ${rec.start} 才开始`); return; }
       rec.end = ymd(today());
       await put('periods', rec);
       await reload();

@@ -39,7 +39,7 @@ export default async function pageMoments(view) {
 
   /* ---------------- 顶栏 + 内容 ---------------- */
   async function paint() {
-    view.innerHTML = '';
+    const keepTop = view.scrollTop;      // 重画后恢复滚动位置，避免“莫名其妙”跳顶
     normalPage('moments', {
       back: true,
       title: mode === 'feed' ? '朋友圈' : (mode === 'ta' ? `${taName()}的主页` : '我的主页')
@@ -61,7 +61,6 @@ export default async function pageMoments(view) {
       : moments;
 
     const wrap = el('div', { class: 'page tight mn-page' });
-    view.appendChild(wrap);
 
     if (mode !== 'feed') wrap.appendChild(await coverCard(mode));
 
@@ -75,6 +74,12 @@ export default async function pageMoments(view) {
     }
     wrap.appendChild(feed);
     wrap.appendChild(tabBar());
+
+    /* 内容全部构建完（含头像等异步素材）再一次性换入：
+       旧内容一直显示到新内容就绪，消除重建过程中的空白闪烁 */
+    view.innerHTML = '';
+    view.appendChild(wrap);
+    view.scrollTop = keepTop;
   }
 
   /* ---------------- 底部一栏：动态 / TA的主页 / 我的主页 ---------------- */
@@ -160,21 +165,38 @@ export default async function pageMoments(view) {
     else if (m.song) nodes.push(neteasePill(m.song));
 
     /* 互动气泡：点赞名单 + 评论（参考微信灰色气泡） */
-    nodes.push(actionBubble(m));
+    const bubble = actionBubble(m);
+    nodes.push(bubble);
 
     /* 底部操作行：左「点赞 / 评论」，右「收藏 / 删除」（纯图标按钮） */
     const likedByMe = m.likes.some((l) => l.who === 'me');
-    const likeBtn = el('button', { class: 'mn-act' + (likedByMe ? ' on' : ''), title: '点赞', onclick: () => toggleLike(m) }, [
+    const likeBtn = el('button', { class: 'mn-act' + (likedByMe ? ' on' : ''), title: '点赞', onclick: () => toggleLike(m, refresh) }, [
       /* 点过赞 = 红色实心爱心，不再用角标显示次数 */
       iconImg(likedByMe ? 'IC-MOM-007' : 'IC-MOM-003')
     ]);
-    const cmtBtn = el('button', { class: 'mn-act', title: '评论', onclick: () => openComment(m) }, [iconImg('IC-MOM-004')]);
-    const favBtn = el('button', { class: 'mn-act' + (m.fav ? ' fav' : ''), title: m.fav ? '取消收藏' : '收藏', onclick: () => toggleFav(m) }, [iconImg('IC-MIO-038')]);
+    const cmtBtn = el('button', { class: 'mn-act', title: '评论', onclick: () => openComment(m, refresh) }, [iconImg('IC-MOM-004')]);
+    const favBtn = el('button', { class: 'mn-act' + (m.fav ? ' fav' : ''), title: m.fav ? '取消收藏' : '收藏', onclick: () => toggleFav(m, refresh) }, [
+      iconImg(m.fav ? 'IC-MIO-045' : 'IC-MIO-038')   /* 收藏后换实心星标 */
+    ]);
     const delBtn = el('button', { class: 'mn-act danger', title: '删除', onclick: () => removeMoment(m) }, [iconImg('IC-CRD-007')]);
     nodes.push(el('div', { class: 'mn-foot' }, [
       el('div', { class: 'l' }, [likeBtn, cmtBtn]),
       el('div', { class: 'r' }, [favBtn, delBtn])
     ]));
+
+    /* 局部刷新：点赞/收藏/评论只换自己的按钮和气泡，不整页重画（避免闪屏） */
+    let bubbleNode = bubble;
+    function refresh(mm) {
+      const liked = mm.likes.some((l) => l.who === 'me');
+      likeBtn.classList.toggle('on', liked);
+      likeBtn.replaceChildren(iconImg(liked ? 'IC-MOM-007' : 'IC-MOM-003'));
+      favBtn.classList.toggle('fav', !!mm.fav);
+      favBtn.title = mm.fav ? '取消收藏' : '收藏';
+      favBtn.replaceChildren(iconImg(mm.fav ? 'IC-MIO-045' : 'IC-MIO-038'));
+      const nb = actionBubble(mm);
+      bubbleNode.replaceWith(nb);
+      bubbleNode = nb;
+    }
 
     return el('div', { class: 'mn-post' }, nodes);
   }
@@ -241,7 +263,7 @@ export default async function pageMoments(view) {
   }
 
   /* ---------------- 点赞 / 评论 / 收藏 / 删除 ---------------- */
-  async function toggleLike(m) {
+  async function toggleLike(m, refresh) {
     const next = normalizeMoment(m);
     const i = next.likes.findIndex((l) => l.who === 'me');
     if (i >= 0) next.likes.splice(i, 1);
@@ -249,15 +271,17 @@ export default async function pageMoments(view) {
     await put('moments', next);
     // 我新增点赞 → TA 可能回赞
     if (i < 0) scheduleLikeBack(next).catch(() => {});
-    await paint();
+    Object.assign(m, next);          // 原地更新，后续操作基于最新数据
+    refresh(next);                    // 只换按钮和气泡，不整页重画（闪屏根源）
   }
 
-  async function toggleFav(m) {
+  async function toggleFav(m, refresh) {
     const next = normalizeMoment(m);
     next.fav = !next.fav;
     await put('moments', next);
     toast(next.fav ? '已收藏' : '已取消收藏');
-    await paint();
+    Object.assign(m, next);
+    refresh(next);
   }
 
   async function removeMoment(m) {
@@ -270,7 +294,7 @@ export default async function pageMoments(view) {
     await paint();
   }
 
-  function openComment(m) {
+  function openComment(m, refresh) {
     const input = el('textarea', { class: 'input', placeholder: '写下评论…' });
     sheet({
       title: '添加评论',
@@ -283,7 +307,8 @@ export default async function pageMoments(view) {
         next.comments.push({ id: cid, who: 'me', text, ts: Date.now() });
         await put('moments', next);
         await scheduleReplyBack(next, cid);
-        await paint();
+        Object.assign(m, next);
+        refresh(next);                 // 局部刷新，不整页重画
       } }]
     });
   }
@@ -470,7 +495,7 @@ async function publish(opts = {}) {
       await put('moments', m);
       if (text) maybePickInspiration({ text, source: 'moment', sourceId: m.id }).catch(() => {});
       await scheduleReactions(m);
-      location.reload();
+      await paint();   // 局部重画代替整页 reload（避免闪屏与滚动丢失）
       toast('已发布，TA 会来看');
     } }]
   });

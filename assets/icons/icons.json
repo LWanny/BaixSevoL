@@ -10,7 +10,7 @@
     "MOD": "情绪态度",
     "MIO": "通用"
   },
-  "count": 100,
+  "count": 101,
   "icons": [
     {
       "id": "IC-CHT-001",
@@ -1009,6 +1009,16 @@
       "category": "MIO",
       "categoryName": "通用",
       "file": "assets/icons/misc/IC-MIO-044.svg",
+      "replaced": false,
+      "replacement": null
+    },
+    {
+      "id": "IC-MIO-045",
+      "name": "星标实心",
+      "desc": "收藏后的实心星标",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-045.svg",
       "replaced": false,
       "replacement": null
     }

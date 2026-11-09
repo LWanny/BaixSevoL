@@ -126,6 +126,7 @@ async function boot() {
   });
 
   start();
+  import('./call.js').then((m) => m.resumeCall()).catch(() => {});   // 刷新/重进后恢复进行中的通话
   startMailbox();
   startMomentsAI();
   startXhsAI();

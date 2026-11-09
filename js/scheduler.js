@@ -361,10 +361,9 @@ export async function catchUpProactive() {
 /* ---------- 备忘录 · 两种提醒（到点弹窗 / 聊天中随机） ---------- */
 let memoPopupBusy = false;
 
-/** 到点弹窗：每 20 秒查一次，最早的那条到期就弹 */
+/** 到点提醒：每 20 秒查一次，最早的那条到期 → 先在消息页发系统提醒，页面可见时再弹窗 */
 async function tickMemoDue() {
   if (memoPopupBusy) return;
-  if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
   try {
     const rows = await all('memos');
     const now = Date.now();
@@ -372,6 +371,19 @@ async function tickMemoDue() {
       .sort((a, b) => a.remindAt - b.remindAt);
     if (!due.length) return;
     const m = due[0];
+
+    /* 消息页提醒：到点发一条系统消息（只发一次；「推迟 10 分钟」到新时间会再发）。
+       放在可见性判断之前——页面没开着也要留痕，进消息页就能看到 */
+    if (m.remindMsgAt !== m.remindAt) {
+      const lines0 = String(m.text || '').split('\n').filter((x) => x.trim());
+      const short = (lines0[0] || '（空备忘）').slice(0, 60);
+      m.remindMsgAt = m.remindAt;
+      m.updatedAt = Date.now();
+      await put('memos', m);
+      await addMessage({ role: 'sys', type: 'sys', text: `⏰ 备忘录到点提醒：${short}` });
+    }
+
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
     memoPopupBusy = true;
     const { confirmBox } = await import('./ui.js');
     const lines = String(m.text || '').split('\n').filter((x) => x.trim());

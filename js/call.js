@@ -14,12 +14,18 @@ import { saveMedia, mediaURL } from './media.js';
 import { sheet, actionSheet, confirmBox, toast } from './ui.js';
 
 const MAX_SEC = 360000;   // 时长上限（秒）
+const SESSION_KEY = 'callSession';   // 通话进行态持久化：刷新/重进后原地恢复
 
 let host = null;          // 全屏通话浮层
 let mini = null;          // 悬浮小窗
-let session = null;       // { state, direction, startedAt, sec, bgId }
+let session = null;       // { state, direction, startedAt, sec, bgId, answerAt }
 let tickId = null;
 let answerId = null;
+
+/** 把当前通话状态写进 kv（state 变化时调用）；active 的秒数不落库，恢复时按 startedAt 算 */
+function persist() {
+  kvSet(SESSION_KEY, session ? { ...session } : null).catch(() => {});
+}
 
 /** 聊天「＋」面板里的通话入口 */
 export function openCallMenu() {
@@ -78,31 +84,35 @@ function rowMenu(r, listNode) {
 }
 
 /* ---------------- 通话流程 ---------------- */
+/** 呼叫后按概率接听 / 忙线 / 拒接 / 未接（可被刷新打断，剩余时间重新排程） */
+function scheduleAnswer(delayMs) {
+  if (answerId) clearTimeout(answerId);
+  answerId = setTimeout(() => { answerId = null; resolveAnswer(); }, Math.max(0, delayMs));
+}
+
+async function resolveAnswer() {
+  if (!session || session.state !== 'calling') return;
+  const p = state.role.params;
+  if (chance(Number(p.callAnswerPct) || 0)) beginTalk();
+  else if (chance(Number(p.callBusyPct) || 0)) endCall('busy', true);
+  else if (chance(Number(p.callRejectPct) || 0)) endCall('rejected', true);
+  else endCall('missed', true);
+}
+
 async function startOutgoing() {
   if (session) { restore(); return; }
-  session = { state: 'calling', direction: 'out', startedAt: 0, sec: 0 };
+  session = { state: 'calling', direction: 'out', startedAt: 0, sec: 0,
+    answerAt: Date.now() + rndInt(2200, 4200) };
+  persist();
   paintCall();
   toast('正在呼叫…');
-  answerId = setTimeout(async () => {
-    answerId = null;
-    if (!session || session.state !== 'calling') return;
-    const p = state.role.params;
-    // 接听 / 忙线 / 拒接 / 未接（互斥概率）
-    if (chance(Number(p.callAnswerPct) || 0)) {
-      beginTalk();
-    } else if (chance(Number(p.callBusyPct) || 0)) {
-      endCall('busy', true);
-    } else if (chance(Number(p.callRejectPct) || 0)) {
-      endCall('rejected', true);
-    } else {
-      endCall('missed', true);
-    }
-  }, rndInt(2200, 4200));
+  scheduleAnswer(session.answerAt - Date.now());
 }
 
 function startIncoming() {
   if (session) { restore(); return; }
   session = { state: 'incoming', direction: 'in', startedAt: 0, sec: 0 };
+  persist();
   paintCall();
 }
 
@@ -111,10 +121,39 @@ export function triggerIncoming() {
   startIncoming();
 }
 
+/** 刷新 / 重新进入应用后恢复进行中的通话（main.js 启动时调用）：
+    呼叫中→补排剩余接听时间；来电→重画来电屏；通话中→按 startedAt 续上计时 */
+export async function resumeCall() {
+  if (session) return;
+  let s = null;
+  try { s = await kvGet(SESSION_KEY, null); } catch { return; }
+  if (!s || !s.state) return;
+  if (s.state === 'calling') {
+    session = s;
+    paintCall();
+    const remain = Number(s.answerAt || 0) - Date.now();
+    if (remain > 0) scheduleAnswer(remain);
+    else resolveAnswer();
+  } else if (s.state === 'incoming') {
+    session = s;
+    paintCall();
+  } else if (s.state === 'active') {
+    session = s;
+    session.sec = Math.max(0, Math.floor((Date.now() - Number(s.startedAt || Date.now())) / 1000));
+    if (session.sec >= MAX_SEC) { endCall('ended'); return; }
+    paintCall();
+    tick();
+  } else {
+    session = null;
+    kvSet(SESSION_KEY, null).catch(() => {});
+  }
+}
+
 function beginTalk() {
   session.state = 'active';
   session.startedAt = Date.now();
   session.sec = 0;
+  persist();
   paintCall();
   tick();
 }
@@ -142,6 +181,7 @@ async function endCall(status, record = true) {
   if (answerId) { clearTimeout(answerId); answerId = null; }
   const s = session;
   session = null;
+  persist();
 
   if (record && s) {
     await put('calls', {
