@@ -3037,6 +3037,7 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .pw-more{margin-top:12px}
 /* ---------- 拼音打字 · 效果预览 ---------- */
 .cfg-prev{margin:0 12px 10px}
+.cv-modes{display:flex;gap:8px;margin-bottom:8px}
 .cfg-prev-bar{display:flex;align-items:center;gap:8px}
 .cfg-prev-l{flex:0 0 auto;font-size:13px;font-weight:700;color:var(--txt-mute);letter-spacing:2px}
 .cfg-prev-bar .cfg-add-in{flex:1 1 auto;min-width:0}
@@ -3046,5 +3047,18 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .cv-meta{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
 .cv-bub{max-width:100%;margin-top:8px}
 .cv-bub .content{max-width:100%}
+.cv-miss{color:var(--danger)!important;font-weight:700}
+.cv-cov{margin-top:10px;padding-top:9px;border-top:1px dashed var(--line-soft)}
+.cv-cov-h{font-size:12.5px;font-weight:700;color:var(--txt-dim);margin-bottom:8px}
+.cv-segs{display:flex;flex-wrap:wrap;gap:6px}
+.cv-seg{display:inline-flex;flex-direction:column;align-items:center;gap:1px;
+  padding:4px 8px;border-radius:8px;border:1px solid var(--line-soft);background:var(--bg-elev2)}
+.cv-seg.w{border-color:var(--line);background:var(--accent-soft)}
+.cv-seg.miss{border-color:rgba(210,75,63,.5);background:rgba(210,75,63,.07)}
+.cv-seg-t{font-size:13.5px;font-weight:600;white-space:nowrap}
+.cv-seg.miss .cv-seg-t{color:var(--danger)}
+.cv-seg-p{font-size:10.5px;color:var(--txt-mute);letter-spacing:.03em;white-space:nowrap}
+.cv-seg.miss .cv-seg-p{color:var(--danger)}
+.cv-cov .btn{margin-top:10px}
 .cfg-mood-h:first-child{margin-top:4px}
 .cfg-mood-h+.cfg-slider{padding-top:4px}

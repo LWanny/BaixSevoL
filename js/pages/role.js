@@ -10,7 +10,7 @@ import { toast, confirmBox } from '../ui.js';
 import { go } from '../router.js';
 import { cfg, saveCfg, MOOD_KEYS, randRange } from '../pinyinConfig.js';
 import { PINYIN_POOL_SIZE, PINYIN_WORD_SIZE, WORD_STATS, SLOT_NAMES,
-  builtinTemplates, templateText, randomPhrase, pickAnchor } from '../pinyin.js';
+  builtinTemplates, templateText, randomPhrase, pickAnchor, probeText } from '../pinyin.js';
 
 export default async function pageRole(view) {
   fullPage({ back: true, title: '角色', actions: [
@@ -264,6 +264,11 @@ function buildPinyinCfg() {
    全部读取当前配置（心情/区间/forceRandom），改完设置点一下即可看效果；
    打字气泡与落卡样式直接复用聊天页的 typing.hypy / py-card，所见即所得。 */
 function buildPreview() {
+  /* 两种模式：随机句预览（配置驱动） / 感同身受·试打（输入一句话，模拟对方逐字母打出来
+     并报告词库能切出哪些词、哪些字打不出来 → 补词线索） */
+  let mode = 'random';
+  const chipRand = el('div', { class: 'chip on', text: '随机句预览' });
+  const chipProbe = el('div', { class: 'chip', text: '感同身受 · 试打' });
   const input = el('input', { class: 'cfg-add-in', type: 'text',
     placeholder: '对方说的话（试接话锚点，留空随机）' });
   const btn = el('button', { class: 'btn sm', type: 'button', text: '预览效果' });
@@ -273,20 +278,21 @@ function buildPreview() {
   const stop = () => { timers.forEach(clearTimeout); timers = []; };
   const later = (fn, ms) => { timers.push(setTimeout(fn, ms)); };
 
-  const play = () => {
-    stop();
-    const incoming = input.value.trim();
-    const anchor = incoming ? pickAnchor(incoming) : null;
-    const py = randomPhrase(anchor);
+  const setMode = (m) => {
+    mode = m;
+    chipRand.classList.toggle('on', m === 'random');
+    chipProbe.classList.toggle('on', m === 'probe');
+    input.placeholder = m === 'random'
+      ? '对方说的话（试接话锚点，留空随机）'
+      : '输入任意一句话，看词库能打出什么（缺字=补词线索）';
+    btn.textContent = m === 'random' ? '预览效果' : '试打';
+    stop(); stage.innerHTML = ''; stage.classList.remove('on');
+  };
+  chipRand.addEventListener('click', () => setMode('random'));
+  chipProbe.addEventListener('click', () => setMode('probe'));
 
-    stage.innerHTML = '';
-    stage.classList.add('on');
-    stage.appendChild(el('div', { class: 'cv-meta' }, [
-      el('span', { class: 'pw-tag pos', text: '心情 · ' + (py.stateLabel || '平常') }),
-      anchor ? el('span', { class: 'pw-tag', text: '锚点 · ' + anchor.text }) : null,
-      py.madeUp ? el('span', { class: 'pw-tag frag', text: '含生造词 · 发送后补 [dǎ cuò le]' }) : null
-    ]));
-
+  /* 打字动画：逐字符打出（无声调拼音），按当前 typoRate 敲错+退格 → 落卡 */
+  const typeAndCard = (py, opts = {}) => {
     const typing = el('div', { class: 'typing hypy' }, [
       el('span', { class: 'typing-l', text: '正在输入' }),
       el('span', { class: 'typing-py' }),
@@ -294,22 +300,17 @@ function buildPreview() {
     ]);
     const typed = typing.querySelector('.typing-py');
     const typingBub = el('div', { class: 'bub ta' }, [typing]);
-
     const card = el('div', { class: 'bub ta cv-bub' }, [
       el('div', { class: 'content py-card' }, [
-        el('div', { class: 'py-line' }, (py.segs || []).flatMap((sg, i) => [
-          i ? document.createTextNode(' ') : null,
-          el('span', { class: sg.m ? 'py-w' : 'py-r', text: sg.pt || sg.p || '' })
-        ])),
-        el('div', { class: 'py-text', text: py.text })
+        el('div', { class: 'py-line' }, opts.line || []),
+        el('div', { class: 'py-text', text: opts.text || py.text || '' })
       ])
     ]);
     card.style.display = 'none';
     stage.appendChild(typingBub);
     stage.appendChild(card);
 
-    /* 逐字符打字：无声调拼音，按当前 typoRate（forceRandom 走极端 25-60%）敲错+退格 */
-    const txt = py.pinyin || '';
+    const txt = opts.stream || py.pinyin || '';
     const C = cfg();
     const typoPct = C.forceRandom ? rndInt(25, 60) : randRange(C.typoRate, 5);
     const step = Math.max(40, Math.min(160, Math.round(2400 / Math.max(1, txt.length))));
@@ -326,9 +327,75 @@ function buildPreview() {
     later(() => { typingBub.style.display = 'none'; card.style.display = ''; }, t + 340);
   };
 
+  /* 模式一：随机句（完整读取当前配置） */
+  const playRandom = () => {
+    const incoming = input.value.trim();
+    const anchor = incoming ? pickAnchor(incoming) : null;
+    const py = randomPhrase(anchor);
+    stage.appendChild(el('div', { class: 'cv-meta' }, [
+      el('span', { class: 'pw-tag pos', text: '心情 · ' + (py.stateLabel || '平常') }),
+      anchor ? el('span', { class: 'pw-tag', text: '锚点 · ' + anchor.text }) : null,
+      py.madeUp ? el('span', { class: 'pw-tag frag', text: '含生造词 · 发送后补 [dǎ cuò le]' }) : null
+    ]));
+    const line = (py.segs || []).flatMap((sg, i) => [
+      i ? document.createTextNode(' ') : null,
+      el('span', { class: sg.m ? 'py-w' : 'py-r', text: sg.pt || sg.p || '' })
+    ]);
+    typeAndCard(py, { line, text: py.text });
+  };
+
+  /* 模式二：感同身受 · 试打（模拟把这句话打出来 + 词库拆解报告） */
+  const playProbe = () => {
+    const txt = input.value.trim();
+    const pr = probeText(txt);
+    stage.appendChild(el('div', { class: 'cv-meta' }, [
+      el('span', { class: 'pw-tag pos', text: '感同身受 · 模拟对方打字' }),
+      el('span', { class: 'pw-tag' + (pr.missing.length ? ' frag' : ''), text: `词库可打 ${pr.hit}/${pr.total} 字` }),
+      pr.missing.length ? el('span', { class: 'pw-tag frag', text: '缺字：' + pr.missing.join('、') }) : null
+    ]));
+    /* 打字流：命中部分打无声调拼音，打不出的字直接打出原字 */
+    const stream = pr.segs
+      .filter((x) => x.kind !== 'punct')
+      .map((x) => (x.kind === 'miss' ? x.text : x.py))
+      .join(' ');
+    /* 落卡：带调拼音行（词写实、单字常规、缺字标红 ?）+ 原文行 */
+    const line = pr.segs.flatMap((x) => {
+      if (x.kind === 'punct') return [];
+      if (x.kind === 'miss') return [el('span', { class: 'py-r cv-miss', text: '?' })];
+      if (x.kind === 'word') return [el('span', { class: 'py-w', text: x.tone })];
+      return [el('span', { class: 'py-r', text: x.tone })];
+    }).flatMap((n, i) => (i ? [document.createTextNode(' '), n] : [n]));
+    typeAndCard({ text: txt }, { line, text: txt, stream });
+    /* 词库试打报告：每个能打的词/字都列出来，缺字标红 → 方便后续补词 */
+    const segsRow = el('div', { class: 'cv-segs' }, pr.segs
+      .filter((x) => x.kind !== 'punct')
+      .map((x) => el('span', { class: 'cv-seg ' + (x.kind === 'word' ? 'w' : x.kind === 'miss' ? 'miss' : 'c') }, [
+        el('span', { class: 'cv-seg-t', text: x.text }),
+        el('span', { class: 'cv-seg-p', text: x.kind === 'miss' ? '打不出' : x.tone })
+      ])));
+    stage.appendChild(el('div', { class: 'cv-cov' }, [
+      el('div', { class: 'cv-cov-h', text: pr.missing.length
+        ? `词库试打报告 · ${pr.hit}/${pr.total} 字可打，缺 ${pr.missing.length} 字`
+        : `词库试打报告 · ${pr.total} 字全部可打` }),
+      segsRow,
+      pr.missing.length
+        ? el('button', { class: 'btn sm', onclick: () => go('/pinyin-lib') }, ['去拼音字卡库补词'])
+        : null
+    ]));
+  };
+
+  const play = () => {
+    if (mode === 'probe' && !input.value.trim()) {
+      toast('先输入一句话，比如「我们今晚也试试拼音打字」'); return;
+    }
+    stop(); stage.innerHTML = ''; stage.classList.add('on');
+    (mode === 'random' ? playRandom : playProbe)();
+  };
+
   btn.addEventListener('click', play);
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') play(); });
   return el('div', { class: 'cfg-prev' }, [
+    el('div', { class: 'cv-modes' }, [chipRand, chipProbe]),
     el('div', { class: 'cfg-prev-bar' }, [
       el('span', { class: 'cfg-prev-l', text: '预览' }), input, btn
     ]),

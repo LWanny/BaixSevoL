@@ -520,6 +520,43 @@ export function pickAnchor(text) {
   return null;
 }
 
+/* ---------- 试打分析（感同身受模式）：输入任意一句话，按引擎同款贪心最长匹配拆解，
+   返回能从词库里打出来的词/单字，以及打不出来的缺字 —— 缺字即补词线索 ---------- */
+const PUNCT_RE = /[\s，。！？、；：…~～!?;:.,'"'"（）()《》【】「」“”‘’—·]/;
+
+export function probeText(text) {
+  const s = String(text || '').trim();
+  const segs = [];
+  const missing = [];
+  let i = 0;
+  while (i < s.length) {
+    const ch = s[i];
+    if (PUNCT_RE.test(ch)) { segs.push({ text: ch, py: '', tone: '', kind: 'punct', ok: true }); i++; continue; }
+    const rest = s.slice(i);
+    let hit = null, hitLen = 0;
+    for (let len = Math.min(MAX_TXT, rest.length); len >= 2; len--) {
+      const w = TEXT_MAP.get(rest.slice(0, len));
+      if (w) { hit = w; hitLen = len; break; }
+    }
+    if (hit) {
+      segs.push({ text: hit.text, py: hit.py, tone: withTone(hit.py), kind: 'word', ok: true });
+      i += hitLen;
+      continue;
+    }
+    const p = CHAR_BY_TEXT.get(ch);
+    if (p) segs.push({ text: ch, py: p, tone: TONE_OF[p] || TONE_EXTRA[p] || p, kind: 'char', ok: true });
+    else { segs.push({ text: ch, py: '', tone: '', kind: 'miss', ok: false }); missing.push(ch); }
+    i++;
+  }
+  const chars = segs.filter((x) => x.kind !== 'punct');
+  return {
+    segs,
+    missing,
+    hit: chars.reduce((n, x) => n + (x.ok ? x.text.length : 0), 0),
+    total: chars.reduce((n, x) => n + x.text.length, 0)
+  };
+}
+
 /* ---------- 断句：按标点把 segs 切成小句（engine 裁剪后重建 parts 也用它） ---------- */
 const SPLIT_PUNCT = /[，。！？…~～、；;!?]$/;
 export function partsOf(segs) {
@@ -580,8 +617,11 @@ export function randomPhrase(anchor, opt = {}) {
 
   const pieces = [];
   let tpl = null;
+  /* forceRandom 的极端短句：30% 概率只打 1-2 个单字，且不加连接词/语气词/锚点/模板，
+     保证"极短"一定出现（否则极端长句会把极短完全淹没） */
+  const extremeShort = extreme && chance(30);
   // 模板使用概率是区间：每次生成取点再掷；forceRandom 忽略开关与用户区间
-  const useTpl = extreme ? chance(50)
+  const useTpl = extreme ? (!extremeShort && chance(50))
     : (st.key !== 'chatty' && C.useTemplate && chance(randRange(C.templateRate, 60)));
   if (useTpl) {
     /* 句式模板：按 [代词]+[动词]+[名词]+[语气] 之类预设句型填槽（内置 + 用户自定义） */
@@ -592,15 +632,15 @@ export function randomPhrase(anchor, opt = {}) {
     }
   } else {
     /* 词 / 单字比例：词概率区间与单字概率区间各取一点，按两者比例决定每次抽词还是抽单字；
-       forceRandom 时词概率 0-100 均匀、单字 = 100 − 词 */
+       forceRandom 时词概率 0-100 均匀、单字 = 100 − 词；极端短句则强制全单字 */
     const wPct = extreme ? rndInt(0, 100) : randRange(C.wordRatio, 70);
-    const sPct = extreme ? 100 - wPct : randRange(C.singleRatio, 30);
+    const sPct = extremeShort ? 100 : (extreme ? 100 - wPct : randRange(C.singleRatio, 30));
     const pWordPct = (wPct + sPct) > 0 ? (wPct / (wPct + sPct)) * 100 : 50;
     const n = extreme
-      ? (chance(30) ? rndInt(1, 2) : rndInt(10, 16))     // 极端字数：极短或极长
+      ? (extremeShort ? rndInt(1, 2) : rndInt(10, 16))     // 极端字数：极短或极长
       : rndInt(sylMin, sylMax);                          // 心情音节区间（心情覆盖底层）
     for (let k = 0; k < n; k++) {
-      if (chance(pWordPct)) {
+      if (!extremeShort && chance(pWordPct)) {
         const w = pick(WORD_POOL);
         pieces.push({ py: w.py, text: w.text });
       } else {
@@ -609,21 +649,21 @@ export function randomPhrase(anchor, opt = {}) {
       }
     }
   }
-  /* 句首连接词：headRate 区间先取点再掷（forceRandom 忽略区间，0-100 均匀） */
-  const headPct = extreme ? rndInt(0, 100) : randRange(C.headRate, 60);
+  /* 句首连接词：headRate 区间先取点再掷（forceRandom 忽略区间，0-100 均匀；极端短句不加） */
+  const headPct = extremeShort ? 0 : (extreme ? rndInt(0, 100) : randRange(C.headRate, 60));
   if (!(tpl && tpl[0] === 'cj') && chance(headPct)) {
     const c = pick(CONNECTORS);
     pieces.unshift({ py: c.py, text: c.text });
   }
-  /* 锚点：把对方话里的实词强制插进随机位置，保证能接上话 */
+  /* 锚点：把对方话里的实词强制插进随机位置，保证能接上话（极端短句不插） */
   let anchorIdx = -1;
-  if (anchor && anchor.py) {
+  if (anchor && anchor.py && !extremeShort) {
     anchorIdx = rndInt(0, pieces.length);
     pieces.splice(anchorIdx, 0, { py: anchor.py, text: anchor.text });
   }
   /* 句尾语气词：useTailWord 开关 + tailRate 概率区间（拼音 UI 会连同 ba 这类拼音一起显示） */
-  const tailOn = extreme ? chance(50)
-    : (C.useTailWord && chance(randRange(C.tailRate, 80)));
+  const tailOn = !extremeShort && (extreme ? chance(50)
+    : (C.useTailWord && chance(randRange(C.tailRate, 80))));
   let tailLen = 0;                                    // 句尾语气词音节数（裁剪时永远保留）
   if (tailOn && !(tpl && tpl[tpl.length - 1] === 'pt')) {
     const m = pick(MOODS);
