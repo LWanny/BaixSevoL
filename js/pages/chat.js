@@ -176,7 +176,9 @@ export default async function pageChat(view) {
   const typingPy = el('span', { class: 'typing-py' });   // 拟真打字机：逐音节弹出的拼音
   const typing = el('div', { class: 'typing hidden' }, [typingLabel, typingPy, el('i'), el('i'), el('i')]);
 
-  let messages = (await all('messages')).sort((a, b) => a.ts - b.ts);
+  /* 通牌的出牌/回牌和聊天共用 messages 表，但那类消息没有文字、也不属于对话，
+     不过滤的话会渲染成空白气泡（在「通牌」页里看它们） */
+  let messages = (await all('messages')).filter((m) => m.type !== 'tong').sort((a, b) => a.ts - b.ts);
   const byId = new Map(messages.map((m) => [m.id, m]));
 
   /* 时间分隔：首条 / 跨天 / 间隔超过 5 分钟时插入（参考图 2） */
@@ -608,7 +610,7 @@ export default async function pageChat(view) {
   const onAskAnswered = async () => {
     // 重新拉取 messages（更新后的 ask 消息已落库），rerender 聊天气泡
     const fresh = await all('messages');
-    messages.splice(0, messages.length, ...fresh);
+    messages.splice(0, messages.length, ...fresh.filter((m) => m.type !== 'tong'));   // 同上：通牌消息不进对话
     rerenderAll();
   };
   sched.on('ask-answered', onAskAnswered);
@@ -1568,7 +1570,7 @@ export default async function pageChat(view) {
 
   /* ---------------- 聊天记录导出 / 导入 ---------------- */
   async function exportChat() {
-    const list = await all('messages');
+    const list = (await all('messages')).filter((m) => m.type !== 'tong');   // 聊天导出不含通牌出牌
     if (!list.length) { toast('还没有聊天记录'); return; }
     toast('正在打包…');
     try {
@@ -1632,7 +1634,7 @@ export default async function pageChat(view) {
       const add = incoming.filter((m) => m && m.id && !existIds.has(m.id));
       await bulkPut('messages', add);
 
-      messages = (await all('messages')).sort((a, b) => a.ts - b.ts);
+      messages = (await all('messages')).filter((m) => m.type !== 'tong').sort((a, b) => a.ts - b.ts);
       byId.clear();
       messages.forEach((m) => byId.set(m.id, m));
       rerenderAll();
@@ -1643,9 +1645,9 @@ export default async function pageChat(view) {
   }
 
   async function clearChat() {
-    const yes = await confirmBox({ title: '删除全部聊天记录', text: '将删除全部聊天消息（字卡、相册、朋友圈不受影响）。此操作不可撤销，建议先导出备份。', okText: '全部删除', danger: true });
+    const yes = await confirmBox({ title: '删除全部聊天记录', text: '将删除全部聊天消息（字卡、相册、朋友圈、通牌出牌不受影响）。此操作不可撤销，建议先导出备份。', okText: '全部删除', danger: true });
     if (!yes) return;
-    const list = await all('messages');
+    const list = (await all('messages')).filter((m) => m.type !== 'tong');   // 通牌记录不属于聊天，别连带删掉
     await Promise.all(list.map((m) => sched.updateMessage(m.id, { deleted: true })));
     // 直接从库里移除
     const { del } = await import('../store.js');
