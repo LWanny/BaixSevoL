@@ -102,7 +102,15 @@ function headTip() {
 function paintBoard() {
   if (!boardNode) return;
   boardNode.innerHTML = '';
+  const bw = boardNode.clientWidth, bh = boardNode.clientHeight;
   board.forEach((b, i) => {
+    /* 兜底：坐标非法或落在板外（旧数据/窗口变小）→ 收回可视区，否则牌会“消失”抓不到 */
+    if (!Number.isFinite(b.x)) b.x = 20;
+    if (!Number.isFinite(b.y)) b.y = 20;
+    if (bw && bh) {
+      b.x = Math.min(Math.max(0, b.x), Math.max(0, bw - 72));
+      b.y = Math.min(Math.max(0, b.y), Math.max(0, bh - 96));
+    }
     const node = cardEl(b.card, b.flipped, true);
     node.style.left = b.x + 'px';
     node.style.top = b.y + 'px';
@@ -127,33 +135,46 @@ function cardEl(card, flipped, draggable) {
 function dragExisting(node, b, idx) {
   node.addEventListener('pointerdown', (e) => {
     e.preventDefault();
-    const sx = e.clientX, sy = e.clientY, ox = b.x, oy = b.y;
+    const sx = e.clientX, sy = e.clientY;
+    const ox = Number.isFinite(b.x) ? b.x : 20;
+    const oy = Number.isFinite(b.y) ? b.y : 20;
+    const bw = boardNode.clientWidth, bh = boardNode.clientHeight;
+    const cw = node.offsetWidth || 72, ch = node.offsetHeight || 96;
+    const clamp = (v, max) => (max > 0 ? Math.min(Math.max(0, v), max) : Math.max(0, v));
     let moved = false;
     try { node.setPointerCapture(e.pointerId); } catch (_) {}
+    boardNode.appendChild(node);        // 按下的牌提到最上层，别被后上的牌盖住抓不到
     const mv = (ev) => {
       const dx = ev.clientX - sx, dy = ev.clientY - sy;
       if (!moved && Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
       moved = true;
-      b.x = Math.max(0, ox + dx);
-      b.y = Math.max(0, oy + dy);
+      b.x = clamp(ox + dx, bw - cw);    // 移动中就夹在板内，拖不出可视区
+      b.y = clamp(oy + dy, bh - ch);
       node.style.left = b.x + 'px';
       node.style.top = b.y + 'px';
       node.classList.add('lift');
     };
-    const up = () => {
+    const finish = (allowFlip) => {
       document.removeEventListener('pointermove', mv);
       document.removeEventListener('pointerup', up);
+      document.removeEventListener('pointercancel', cancel);
       node.classList.remove('lift');
       if (!moved) {
-        b.flipped = !b.flipped;          // 点击翻开 / 翻回
+        if (allowFlip) b.flipped = !b.flipped;   // 点击翻开 / 翻回（系统打断则不翻）
         paintBoard();
         saveBoard();
-      } else {
-        saveBoard();                     // 位置已存
+        return;
       }
+      /* 拖过的牌提到最上层并持久化置顶，下次进来还在这张上面 */
+      const i = board.indexOf(b);
+      if (i !== -1) { board.splice(i, 1); board.push(b); boardNode.appendChild(node); }
+      saveBoard();
     };
+    const up = () => finish(true);
+    const cancel = () => finish(false);  // 系统打断（来电/切后台）：只收尾不翻转
     document.addEventListener('pointermove', mv);
     document.addEventListener('pointerup', up);
+    document.addEventListener('pointercancel', cancel);
   });
 }
 
@@ -197,25 +218,36 @@ function dragFromTray(e, node, card) {
     ghost.style.left = (ev.clientX - 36) + 'px';
     ghost.style.top = (ev.clientY - 52) + 'px';
   };
-  const up = (ev) => {
+  const cleanup = () => {
     document.removeEventListener('pointermove', mv);
     document.removeEventListener('pointerup', up);
+    document.removeEventListener('pointercancel', cancel);
     trayNode.classList.remove('dragging');
+  };
+  const up = (ev) => {
+    cleanup();
     if (!ghost) return;   // 没拖动：底部牌只看背面，点击无动作
     ghost.remove();
     const bx = boardNode.getBoundingClientRect();
     const px = ev.clientX - bx.left - 36;
     const py = ev.clientY - bx.top - 52;
     if (ev.clientX >= bx.left && ev.clientX <= bx.right && ev.clientY >= bx.top && ev.clientY <= bx.bottom) {
-      board.push({ card, x: Math.max(0, px), y: Math.max(0, py), flipped: false });
+      /* 落点夹在板内：卡心贴近边缘时也整张留在可视区，不会半张出界抓不到 */
+      const maxX = Math.max(0, bx.width - 72), maxY = Math.max(0, bx.height - 96);
+      board.push({ card, x: Math.min(Math.max(0, px), maxX), y: Math.min(Math.max(0, py), maxY), flipped: false });
       tray = tray.filter((c) => c.id !== card.id);   // 上桌一张，底部去掉一张
       saveBoard();
       paintBoard();
       paintTray();
     }
   };
+  const cancel = () => {   // 系统打断（来电/切后台）：丢掉影子牌，不落桌
+    cleanup();
+    if (ghost) ghost.remove();
+  };
   document.addEventListener('pointermove', mv);
   document.addEventListener('pointerup', up);
+  document.addEventListener('pointercancel', cancel);
 }
 
 function reshuffleTray() {
