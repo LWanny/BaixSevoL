@@ -370,7 +370,7 @@ function buildPreview() {
     /* 落卡：带调拼音行（词写实、单字常规、缺字标红 ?）+ 原文行 */
     const line = pr.segs.flatMap((x) => {
       if (x.kind === 'punct') return [];
-      if (x.kind === 'miss') return [el('span', { class: 'py-r cv-miss', text: '?' })];
+      if (x.kind === 'miss') return [...x.text].map(() => el('span', { class: 'py-r cv-miss', text: '?' }));
       if (x.kind === 'word') return [el('span', { class: 'py-w', text: x.tone })];
       return [el('span', { class: 'py-r', text: x.tone })];
     }).flatMap((n, i) => (i ? [document.createTextNode(' '), n] : [n]));
@@ -382,7 +382,8 @@ function buildPreview() {
         const kids = [
           el('span', { class: 'cv-seg-t', text: x.text }),
           el('span', { class: 'cv-seg-p', text: x.kind === 'miss'
-            ? (x.infer ? `${x.tone} · 单字未入库 · 点此补词` : '打不出 · 点此补词')
+            ? (x.merged ? `${x.tone} · 词未入库 · 点此补词`
+              : x.infer ? `${x.tone} · 单字未入库 · 点此补词` : '打不出 · 点此补词')
             : x.tone })
         ];
         if (x.kind === 'word' && x.pos) kids.push(el('span', { class: 'cv-seg-pos', text: SLOT_NAMES[x.pos] || '其他' }));

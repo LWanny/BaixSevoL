@@ -589,6 +589,21 @@ export function probeText(text) {
     }
     i++;
   }
+  /* 连续缺字合并成“词”候选：平安、干嘛… 各字拼音都推得出来时合成一条，
+     试打报告点一下即可整词补进词库（否则只能一个字一个字补） */
+  for (let a = 0; a < segs.length;) {
+    const sg = segs[a];
+    if (sg.kind !== 'miss' || !sg.py) { a++; continue; }
+    let b = a;
+    while (b + 1 < segs.length && segs[b + 1].kind === 'miss' && segs[b + 1].py) b++;
+    if (b > a) {
+      const texts = segs.slice(a, b + 1).map((x) => x.text).join('');
+      const pys = segs.slice(a, b + 1).map((x) => x.py).join(' ');
+      segs.splice(a, b - a + 1, { text: texts, py: pys, tone: withTone(pys),
+        kind: 'miss', ok: false, infer: true, merged: true });
+      a++;
+    } else a++;
+  }
   const chars = segs.filter((x) => x.kind !== 'punct');
   return {
     segs,
