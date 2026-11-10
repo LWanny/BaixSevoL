@@ -38,6 +38,7 @@ export default async function pagePeriod(v) {
   periodLen = Number(await kvGet('periodDays', 5)) || 5;
   items = (await all('periods')).sort((a, b) => String(b.start).localeCompare(String(a.start)));
   logs = (await kvGet('periodLogs', [])) || [];
+  await closeStaleOpens();     // 进页面就补过期未关记录，别让首屏还显示「进行中」
   cursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   paint();
 }
