@@ -9,7 +9,7 @@ import { state, roleAvatarSrc, pickRoleStatus, roleStatusMeta, applySkin, saveSk
 import { all, put, get, bulkPut, kvGet, kvSet } from '../store.js';
 import { mediaURL, saveMedia, audioEl, probeDuration, delMedia } from '../media.js';
 import { sheet, actionSheet, confirmBox, toast, alertBox } from '../ui.js';
-import { openCallMenu, callHistory, triggerIncoming } from '../call.js';
+import { openCallMenu, callHistory } from '../call.js';
 import { openBulkImport } from '../bulkimport.js';
 import { taPostChatShot } from '../momentShot.js';
 import * as sched from '../scheduler.js';
@@ -603,8 +603,8 @@ export default async function pageChat(view) {
   sched.on('message', onMsg);
   sched.on('message-updated', onUpd);
   sched.on('typing', onTyping);
-  const onCallReq = () => triggerIncoming();
-  sched.on('call-request', onCallReq);
+  /* call-request 已改由 call.js 全局监听（任何页面都弹来电屏），
+     这里不再挂聊天页局部监听——之前离开聊天页事件就丢了 */
   const onAskAnswered = async () => {
     // 重新拉取 messages（更新后的 ask 消息已落库），rerender 聊天气泡
     const fresh = await all('messages');
@@ -616,7 +616,6 @@ export default async function pageChat(view) {
     sched.off('message', onMsg);
     sched.off('message-updated', onUpd);
     sched.off('typing', onTyping);
-    sched.off('call-request', onCallReq);
     sched.off('ask-answered', onAskAnswered);
   });
 

@@ -12,9 +12,15 @@ import { state, roleAvatarSrc } from './state.js';
 import { all, put, del, kvGet, kvSet } from './store.js';
 import { saveMedia, mediaURL } from './media.js';
 import { sheet, actionSheet, confirmBox, toast } from './ui.js';
+import * as sched from './scheduler.js';
+import { notifySupported, requestNotifyPermission, playSound, beep } from './notify.js';
 
 const MAX_SEC = 360000;   // 时长上限（秒）
 const SESSION_KEY = 'callSession';   // 通话进行态持久化：刷新/重进后原地恢复
+
+/* 通话请求全局监听：TA 在聊天里发起通话时弹出来电屏。
+   之前只挂在聊天页上，人一离开聊天页事件就丢了——消息落了库、来电屏却不弹 */
+sched.on('call-request', () => triggerIncoming());
 
 let host = null;          // 全屏通话浮层
 let mini = null;          // 悬浮小窗
@@ -29,6 +35,7 @@ function persist() {
 
 /** 聊天「＋」面板里的通话入口 */
 export function openCallMenu() {
+  requestNotifyPermission();   // 借这次点击申请系统通知权限：人在其他软件时才收得到来电邀请
   actionSheet('通话', [
     { label: '打给 ' + (state.role.name || 'TA'), icon: 'IC-CHT-012', onSelect: () => startOutgoing() },
     { label: '让 ' + (state.role.name || 'TA') + ' 打给我', icon: 'IC-MIO-011', onSelect: () => startIncoming() },
@@ -118,7 +125,30 @@ function startIncoming() {
 
 /** scheduler.js 调用：TA 主动打来电（概率由 callProactivePct 控制） */
 export function triggerIncoming() {
-  startIncoming();
+  if (session && session.state !== 'incoming') { restore(); return; }   // 通话中/呼叫中：只回到画面
+  if (!session) startIncoming();
+  else paintCall();   // 上一个来电还没接：刷新来电屏再响一遍，不闷声丢掉
+  ringIncoming();
+}
+
+/** 来电提醒：应用内响铃+震动；人在其他软件（页面不在前台）时补一条系统通知，
+    点通知回来直接进来电屏。通知只看浏览器授权，不看「新消息系统通知」开关——这是来电 */
+function ringIncoming() {
+  if (state.settings.bubbleSound) playSound(); else beep(660, 520);
+  if (navigator.vibrate) { try { navigator.vibrate([300, 160, 300, 160, 300]); } catch (_) {} }
+  if (document.visibilityState === 'visible') return;   // 在应用里：来电屏本身就会弹
+  if (!notifySupported() || Notification.permission !== 'granted') return;
+  try {
+    const n = new Notification((state.role.name || 'TA') + ' 发来语音通话邀请', {
+      body: '点一下回到应用接听', tag: 'call-in',
+      icon: 'assets/icons/misc/IC-MIO-006.svg'
+    });
+    n.onclick = () => {
+      try { window.focus(); } catch (_) {}
+      if (session) restore();
+      n.close();
+    };
+  } catch (_) { /* 非 HTTPS 或浏览器不支持时忽略 */ }
 }
 
 /** 刷新 / 重新进入应用后恢复进行中的通话（main.js 启动时调用）：
