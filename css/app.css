@@ -622,27 +622,27 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
   font-size:24px;color:var(--txt-dim);
 }
 .mnh-av img{width:100%;height:100%;object-fit:cover}
-.mnh-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-top:44px}
+.mnh-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-top:44px;padding-left:10px}
 .mnh-name{font-size:17px;font-weight:700;line-height:1.3}
 .mnh-pen{
-  width:30px;height:30px;flex:0 0 auto;border:none;background:none;padding:0;margin:-6px -6px 0 0;
+  width:30px;height:30px;flex:0 0 auto;border:none;background:none;padding:0;margin:-6px 4px 0 0;
   display:flex;align-items:center;justify-content:center;color:var(--txt);opacity:.5;cursor:pointer;
 }
 .mnh-pen .ico,.mnh-pen .ico-img{width:18px;height:18px}
-.mnh-sign{font-size:12.5px;color:var(--txt-dim);margin-top:2px}
+.mnh-sign{font-size:12.5px;color:var(--txt-dim);margin-top:2px;padding-left:10px}
 .mnh-sign.mute{color:var(--txt-mute)}
-.mnh-stats{display:flex;align-items:baseline;gap:22px;margin-top:14px}
+.mnh-stats{display:flex;align-items:baseline;gap:22px;margin-top:14px;padding-left:10px}
 .mnh-stats .it{display:flex;align-items:baseline;gap:6px}
 .mnh-stats span{font-size:13px;color:var(--txt-dim)}
 .mnh-stats b{font-size:17px;font-weight:700}
 /* 「动态」标题 + 细分隔线 */
-.mnh-sec{padding:20px 16px 0}
+.mnh-sec{padding:20px 16px 0 26px}
 .mnh-sec .t{
   font-size:24px;font-weight:600;color:#b7b7b4;line-height:1.2;
   padding-bottom:10px;border-bottom:1px solid var(--line);
 }
 /* 日期 + 小框 */
-.mnh-feed{padding:0 16px 20px}
+.mnh-feed{padding:0 16px 20px 26px}
 .mnh-group{display:flex;align-items:flex-start;gap:12px;padding:16px 0 2px}
 .mnh-date{flex:0 0 42px;padding-top:2px;color:#b7b7b4}
 .mnh-date .d{font-size:28px;font-weight:700;line-height:1}

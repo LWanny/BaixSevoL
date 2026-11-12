@@ -6,8 +6,7 @@
 import { el, uid, openFile, compressImage, readBuf } from '../util.js';
 import { iconImg } from '../icons.js';
 import { normalPage } from '../shell.js';
-import { go } from '../router.js';
-import { state, saveSkin } from '../state.js';
+import { state, saveSkin, saveRole } from '../state.js';
 import { all, put, del, kvGet, kvSet } from '../store.js';
 import { saveMedia, mediaURL, probeDuration } from '../media.js';
 import { sheet, actionSheet, confirmBox, toast } from '../ui.js';
@@ -28,6 +27,8 @@ export default async function pageMoments(view) {
   if (detach) { detach(); detach = null; }
   let mode = 'feed';   // feed | ta | me
   const taName = () => state.role.name || 'TA';
+  /* 朋友圈里「我」的显示名（设置里可改，空则用「我」） */
+  const myName = () => state.skin?.mnNameMe || '我';
 
   await flushReactions();
   await paint();
@@ -103,7 +104,7 @@ export default async function pageMoments(view) {
   /* ---------------- 主页资料头：渐变封面 + 悬浮卡片（新版） ---------------- */
   async function coverCard(who) {
     const isMe = who !== 'ta';
-    const name = isMe ? '我' : taName();
+    const name = isMe ? myName() : taName();
     const avSrc = isMe
       ? (state.skin?.avatarMeId ? await mediaURL(state.skin.avatarMeId) : '')
       : (state.role.avatarId ? await mediaURL(state.role.avatarId) : '');
@@ -198,9 +199,10 @@ export default async function pageMoments(view) {
 
   /* ---------------- 主页设置（卡片右上角铅笔） ---------------- */
   async function pickCover(isMe) {
-    const files = await openFile({ accept: 'image/*' });
-    if (!files || !files.length) return;
-    const { blob } = await compressImage(files[0], 1440);
+    /* 注意：openFile 不带 multiple 时返回单个 File（不是数组），原来按数组判断导致直接 return、换了没反应 */
+    const f = await openFile({ accept: 'image/*' });
+    if (!f) return;
+    const { blob } = await compressImage(f, 1440);
     const id = await saveMedia(blob, { type: 'image', source: 'me' });
     await kvSet(isMe ? 'mnCoverMe' : 'mnCoverTa', id);
     await paint();
@@ -211,25 +213,51 @@ export default async function pageMoments(view) {
     const key = isMe ? 'mnCoverMe' : 'mnCoverTa';
     const hasCover = !!(await kvGet(key));
     actionSheet('设置', [
+      { label: '修改名字', icon: 'IC-CRD-006', onSelect: () => editName(isMe) },
+      { label: '修改签名', icon: 'IC-CRD-006', onSelect: () => editSign(isMe) },
       { label: '更换封面图', icon: 'IC-MIO-015', onSelect: () => pickCover(isMe) },
       hasCover ? {
         label: '恢复默认封面',
         onSelect: async () => { await kvSet(key, null); await paint(); toast('已恢复默认封面'); }
-      } : null,
-      { label: isMe ? '修改签名' : '编辑资料', icon: 'IC-CRD-006', onSelect: () => isMe ? editMySign() : go('/role') },
-      isMe ? { label: '发布动态', icon: 'IC-MOM-002', onSelect: () => publish() } : null
+      } : null
     ]);
   }
 
-  function editMySign() {
-    const input = el('input', { class: 'input', maxLength: 40, value: state.skin.mySign || '', placeholder: '一句话介绍自己' });
+  function editName(isMe) {
+    const cur = isMe ? myName() : taName();
+    const input = el('input', { class: 'input', maxLength: 16, value: cur === '我' ? '' : cur, placeholder: '显示在朋友圈的名字' });
+    sheet({
+      title: '修改名字',
+      node: el('div', { class: 'field' }, [input]),
+      actions: [{
+        label: '保存', onSelect: async () => {
+          const v = input.value.trim();
+          if (isMe) {
+            state.skin.mnNameMe = v || '';   // 空 = 恢复默认「我」
+            await saveSkin();
+          } else {
+            if (!v) return toast('名字不能为空');
+            state.role.name = v;
+            await saveRole();
+          }
+          await paint();
+          toast('已保存');
+        }
+      }]
+    });
+  }
+
+  function editSign(isMe) {
+    const cur = isMe ? (state.skin.mySign || '') : (state.role.signature || '');
+    const input = el('input', { class: 'input', maxLength: 40, value: cur, placeholder: '一句话介绍自己' });
     sheet({
       title: '修改签名',
       node: el('div', { class: 'field' }, [input]),
       actions: [{
         label: '保存', onSelect: async () => {
-          state.skin.mySign = input.value.trim();
-          await saveSkin();
+          const v = input.value.trim();
+          if (isMe) { state.skin.mySign = v; await saveSkin(); }
+          else { state.role.signature = v; await saveRole(); }
           await paint();
           toast('已保存');
         }
@@ -243,7 +271,7 @@ export default async function pageMoments(view) {
     const avSrc = isMe
       ? (state.skin?.avatarMeId ? await mediaURL(state.skin.avatarMeId) : '')
       : (state.role.avatarId ? await mediaURL(state.role.avatarId) : '');
-    const name = isMe ? '我' : taName();
+    const name = isMe ? myName() : taName();
 
     const av = el('div', { class: 'mn-av' }, [avSrc ? el('img', { src: avSrc, alt: '头像' }) : document.createTextNode(name.slice(0, 1))]);
 
@@ -418,7 +446,7 @@ export default async function pageMoments(view) {
 /* ---------------- 小组件 ---------------- */
 /** 评论者名字：我 / TA / 朋友 */
 function whoName(who) {
-  if (who === 'me') return '我';
+  if (who === 'me') return state.skin?.mnNameMe || '我';
   if (who === 'ta') return state.role.name || 'TA';
   const f = friendMap.get(who);
   return f ? f.name : '朋友';
