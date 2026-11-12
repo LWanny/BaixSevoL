@@ -600,26 +600,68 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 /* ---------- 朋友圈（布局参考微信朋友圈） ---------- */
 .page.mn-page{padding:0 0 0;display:flex;flex-direction:column}
 .mn-page>.mn-feed{padding:12px 12px 8px}
-/* 主页资料头（TA / 我）：浅色卡片：圆头像 + 三项统计 + 名字 + 按钮 */
-.mn-cover{background:var(--bg-elev);border-radius:20px;margin:12px 12px 0;padding:18px 16px 16px}
-.mn-cover .mn-c-av{
-  width:76px;height:76px;flex:0 0 auto;border-radius:50%;overflow:hidden;
-  background:var(--bg-sunken);border:1px solid var(--line);
-  display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--txt-dim);
+/* 主页（我 / TA）：顶部渐变封面（可换图）+ 悬浮资料卡 + 日期时间线 */
+.mnh{padding-bottom:4px}
+.mnh-cv{
+  position:relative;height:150px;overflow:hidden;cursor:pointer;
+  background-image:linear-gradient(180deg,#77797d 0%,#9a9ca0 34%,#e6e6e5 74%,#fff 100%);
+  background-size:cover;background-position:center;
 }
-.mn-cover .mn-c-av img{width:100%;height:100%;object-fit:cover}
-.mn-c-top{display:flex;align-items:center;gap:20px}
-.mn-c-stats{flex:1;display:flex;justify-content:space-around;text-align:center}
-.mn-c-stats b{display:block;font-size:18px;font-weight:600;line-height:1.25}
-.mn-c-stats span{display:block;font-size:12px;color:var(--txt-dim);margin-top:4px}
-.mn-c-name{font-size:17px;font-weight:700;margin-top:14px}
-.mn-c-sign{font-size:12.5px;color:var(--txt-mute);margin-top:3px}
-.mn-c-btns{display:flex;gap:10px;margin-top:14px}
-.mn-c-btns button{
-  flex:1;height:44px;border:none;border-radius:13px;background:var(--bg-sunken);
-  font-size:14px;font-weight:500;color:var(--txt);cursor:pointer;
+/* 自定义封面图之上再盖同一层渐变：上半压暗、下半渐白，图片在下半部分不显示 */
+.mnh-cv.has-img::after{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(18,20,24,.55) 0%,rgba(18,20,24,.22) 40%,rgba(255,255,255,.9) 82%,#fff 100%);
 }
-.mn-c-btns button:active{background:#eaeae7}
+.mnh-card{
+  position:relative;margin:-56px 14px 0;background:var(--bg-elev);
+  border-radius:16px;padding:14px 16px 16px;box-shadow:0 10px 26px rgba(20,20,25,.10);
+}
+.mnh-av{
+  position:absolute;left:18px;top:-54px;width:92px;height:92px;border-radius:50%;overflow:hidden;
+  background:var(--bg-sunken);display:flex;align-items:center;justify-content:center;
+  font-size:24px;color:var(--txt-dim);
+}
+.mnh-av img{width:100%;height:100%;object-fit:cover}
+.mnh-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-top:44px}
+.mnh-name{font-size:17px;font-weight:700;line-height:1.3}
+.mnh-pen{
+  width:30px;height:30px;flex:0 0 auto;border:none;background:none;padding:0;margin:-6px -6px 0 0;
+  display:flex;align-items:center;justify-content:center;color:var(--txt);opacity:.5;cursor:pointer;
+}
+.mnh-pen .ico,.mnh-pen .ico-img{width:18px;height:18px}
+.mnh-sign{font-size:12.5px;color:var(--txt-dim);margin-top:2px}
+.mnh-sign.mute{color:var(--txt-mute)}
+.mnh-stats{display:flex;align-items:baseline;gap:22px;margin-top:14px}
+.mnh-stats .it{display:flex;align-items:baseline;gap:6px}
+.mnh-stats span{font-size:13px;color:var(--txt-dim)}
+.mnh-stats b{font-size:17px;font-weight:700}
+/* 「动态」标题 + 细分隔线 */
+.mnh-sec{padding:20px 16px 0}
+.mnh-sec .t{
+  font-size:24px;font-weight:600;color:#b7b7b4;line-height:1.2;
+  padding-bottom:10px;border-bottom:1px solid var(--line);
+}
+/* 日期 + 小框 */
+.mnh-feed{padding:0 16px 20px}
+.mnh-group{display:flex;align-items:flex-start;gap:12px;padding:16px 0 2px}
+.mnh-date{flex:0 0 42px;padding-top:2px;color:#b7b7b4}
+.mnh-date .d{font-size:28px;font-weight:700;line-height:1}
+.mnh-date .m{font-size:13px;font-weight:600;margin-top:4px}
+.mnh-tiles{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:10px}
+.mnh-tile{
+  width:88px;height:88px;border-radius:18px;border:none;padding:0;overflow:hidden;position:relative;
+  background:var(--bg-elev);box-shadow:0 6px 16px rgba(20,20,25,.10);cursor:pointer;
+}
+.mnh-tile img{width:100%;height:100%;object-fit:cover;display:block}
+.mnh-tile .txt{
+  width:100%;height:100%;padding:9px;font-size:11.5px;line-height:1.45;color:var(--txt-dim);
+  text-align:left;overflow:hidden;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;
+}
+.mnh-tile .cap{
+  position:absolute;left:0;right:0;bottom:0;padding:12px 8px 6px;text-align:left;
+  background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.6));color:#fff;
+  font-size:10.5px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
 /* 动态列表 */
 .mn-feed{display:flex;flex-direction:column;gap:10px}
 .mn-post{background:var(--bg-elev);border-radius:18px;padding:14px 14px 13px}

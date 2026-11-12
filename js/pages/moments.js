@@ -7,8 +7,8 @@ import { el, uid, openFile, compressImage, readBuf } from '../util.js';
 import { iconImg } from '../icons.js';
 import { normalPage } from '../shell.js';
 import { go } from '../router.js';
-import { state } from '../state.js';
-import { all, put, del, kvGet } from '../store.js';
+import { state, saveSkin } from '../state.js';
+import { all, put, del, kvGet, kvSet } from '../store.js';
 import { saveMedia, mediaURL, probeDuration } from '../media.js';
 import { sheet, actionSheet, confirmBox, toast } from '../ui.js';
 import { openMomentsManage } from '../momentManage.js';
@@ -62,17 +62,22 @@ export default async function pageMoments(view) {
 
     const wrap = el('div', { class: 'page tight mn-page' });
 
-    if (mode !== 'feed') wrap.appendChild(await coverCard(mode));
-
-    const feed = el('div', { class: 'mn-feed' });
-    if (!list.length) {
-      feed.appendChild(el('div', { class: 'mn-post' }, [
-        el('div', { class: 'mn-empty', text: mode === 'ta' ? `${taName()}还没有发过动态。` : '还没有动态，点右上角「发布」发第一条。' })
-      ]));
+    if (mode !== 'feed') {
+      /* 主页：渐变封面 + 资料卡 + 日期时间线（动态流不变） */
+      wrap.appendChild(await coverCard(mode));
+      wrap.appendChild(el('div', { class: 'mnh-sec' }, [el('div', { class: 't', text: '动态' })]));
+      wrap.appendChild(await homeTimeline(list));
     } else {
-      for (const m of list) feed.appendChild(await postNode(m));
+      const feed = el('div', { class: 'mn-feed' });
+      if (!list.length) {
+        feed.appendChild(el('div', { class: 'mn-post' }, [
+          el('div', { class: 'mn-empty', text: `还没有动态，点右上角「发布」发第一条。` })
+        ]));
+      } else {
+        for (const m of list) feed.appendChild(await postNode(m));
+      }
+      wrap.appendChild(feed);
     }
-    wrap.appendChild(feed);
     wrap.appendChild(tabBar());
 
     /* 内容全部构建完（含头像等异步素材）再一次性换入：
@@ -95,45 +100,141 @@ export default async function pageMoments(view) {
     ]);
   }
 
-  /* ---------------- 主页资料头：TA / 我（参考微信个人主页卡片） ---------------- */
+  /* ---------------- 主页资料头：渐变封面 + 悬浮卡片（新版） ---------------- */
   async function coverCard(who) {
     const isMe = who !== 'ta';
     const name = isMe ? '我' : taName();
     const avSrc = isMe
       ? (state.skin?.avatarMeId ? await mediaURL(state.skin.avatarMeId) : '')
       : (state.role.avatarId ? await mediaURL(state.role.avatarId) : '');
-    const av = el('div', { class: 'mn-c-av' }, [avSrc ? el('img', { src: avSrc, alt: '头像' }) : document.createTextNode(name.slice(0, 1))]);
+    const av = el('div', { class: 'mnh-av' }, [avSrc ? el('img', { src: avSrc, alt: '头像' }) : document.createTextNode(name.slice(0, 1))]);
 
     const rawMoments = await all('moments');
     const mine = rawMoments.filter((m) => isMe ? m.author !== 'ta' : m.author === 'ta');
     const photoN = mine.reduce((s, m) => s + (m.mediaIds || []).length, 0);
     const likeN = mine.reduce((s, m) => s + (m.likes || []).length, 0);
 
-    const stat = (n, label) => el('div', {}, [
-      el('b', { text: String(n) }), el('span', { text: label })
+    /* 顶部渐变区：默认灰黑渐变；换成自定义图后仍盖同一层渐变，下摆渐白、
+       图片在下半部分被白色盖住不显示（点一下即可换图 / 恢复默认） */
+    const coverId = isMe ? await kvGet('mnCoverMe') : await kvGet('mnCoverTa');
+    const coverSrc = coverId ? await mediaURL(coverId) : '';
+    const cv = el('div', { class: 'mnh-cv' + (coverSrc ? ' has-img' : ''), title: '更换封面' });
+    if (coverSrc) cv.style.backgroundImage = `url("${coverSrc}")`;
+    cv.addEventListener('click', () => pickCover(isMe));
+
+    const stat = (n, label) => el('div', { class: 'it' }, [
+      el('span', { text: label }), el('b', { text: String(n) })
     ]);
+    const sign = isMe ? (state.skin?.mySign || '') : (state.role.signature || '');
 
-    const btns = el('div', { class: 'mn-c-btns' });
-    if (isMe) {
-      btns.appendChild(el('button', { onclick: () => go('/role') }, ['编辑资料']));
-      btns.appendChild(el('button', { onclick: () => publish() }, ['发布动态']));
-    } else {
-      btns.appendChild(el('button', { onclick: () => go('/role') }, ['查看资料']));
-    }
-
-    return el('div', { class: 'mn-cover' }, [
-      el('div', { class: 'mn-c-top' }, [
+    return el('div', { class: 'mnh' }, [
+      cv,
+      el('div', { class: 'mnh-card' }, [
         av,
-        el('div', { class: 'mn-c-stats' }, [
-          stat(mine.length, '帖子'),
-          stat(photoN, '照片'),
-          stat(likeN, '获赞')
-        ])
-      ]),
-      el('div', { class: 'mn-c-name', text: name }),
-      (!isMe && state.role.sign) ? el('div', { class: 'mn-c-sign', text: state.role.sign }) : null,
-      btns
+        el('div', { class: 'mnh-head' }, [
+          el('div', { class: 'mnh-name', text: name }),
+          el('button', { class: 'mnh-pen', title: '设置', onclick: () => profileMenu(isMe) }, [iconImg('IC-CRD-006')])
+        ]),
+        el('div', { class: 'mnh-sign' + (sign ? '' : ' mute'), text: sign || '签名' }),
+        el('div', { class: 'mnh-stats' }, [stat(mine.length, '帖子'), stat(photoN, '照片'), stat(likeN, '获赞')])
+      ])
     ]);
+  }
+
+  /* 主页时间线：按日期分组，左边日/月，右边小框（点开看完整动态） */
+  async function homeTimeline(list) {
+    const box = el('div', { class: 'mnh-feed' });
+    if (!list.length) return box;
+    const groups = new Map();
+    for (const m of list) {
+      const d = new Date(m.ts);
+      const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+      if (!groups.has(key)) groups.set(key, { d, items: [] });
+      groups.get(key).items.push(m);
+    }
+    for (const g of groups.values()) {
+      const tiles = el('div', { class: 'mnh-tiles' });
+      for (const m of g.items) tiles.appendChild(await homeTile(m));
+      box.appendChild(el('div', { class: 'mnh-group' }, [
+        el('div', { class: 'mnh-date' }, [
+          el('div', { class: 'd', text: String(g.d.getDate()).padStart(2, '0') }),
+          el('div', { class: 'm', text: (g.d.getMonth() + 1) + '月' })
+        ]),
+        tiles
+      ]));
+    }
+    return box;
+  }
+
+  /* 小框：有图显示图（同时有文字就在图底部压一行开头几个字）；
+     纯文字直接显示文字；点开看完整帖子 */
+  async function homeTile(m) {
+    const t = el('button', { class: 'mnh-tile', title: '查看动态' });
+    const mid = (m.mediaIds || [])[0];
+    let painted = false;
+    if (mid) {
+      const src = await mediaURL(mid);
+      if (src) {
+        const img = el('img', { src, alt: '' });
+        img.addEventListener('error', () => {
+          img.replaceWith(el('div', { class: 'txt', text: m.text || '' }));
+          const cap = t.querySelector('.cap');
+          if (cap) cap.remove();
+        });
+        t.appendChild(img);
+        painted = true;
+      }
+    }
+    if (painted) {
+      if (m.text) t.appendChild(el('div', { class: 'cap', text: m.text.slice(0, 9) }));
+    } else {
+      t.appendChild(el('div', { class: 'txt', text: m.text || (m.song ? '分享了一首歌' : m.audioId ? '分享了一段语音' : '') }));
+    }
+    t.addEventListener('click', async () => {
+      sheet({ title: '动态', node: await postNode(m) });
+    });
+    return t;
+  }
+
+  /* ---------------- 主页设置（卡片右上角铅笔） ---------------- */
+  async function pickCover(isMe) {
+    const files = await openFile({ accept: 'image/*' });
+    if (!files || !files.length) return;
+    const { blob } = await compressImage(files[0], 1440);
+    const id = await saveMedia(blob, { type: 'image', source: 'me' });
+    await kvSet(isMe ? 'mnCoverMe' : 'mnCoverTa', id);
+    await paint();
+    toast('封面已更新');
+  }
+
+  async function profileMenu(isMe) {
+    const key = isMe ? 'mnCoverMe' : 'mnCoverTa';
+    const hasCover = !!(await kvGet(key));
+    actionSheet('设置', [
+      { label: '更换封面图', icon: 'IC-MIO-015', onSelect: () => pickCover(isMe) },
+      hasCover ? {
+        label: '恢复默认封面',
+        onSelect: async () => { await kvSet(key, null); await paint(); toast('已恢复默认封面'); }
+      } : null,
+      { label: isMe ? '修改签名' : '编辑资料', icon: 'IC-CRD-006', onSelect: () => isMe ? editMySign() : go('/role') },
+      isMe ? { label: '发布动态', icon: 'IC-MOM-002', onSelect: () => publish() } : null
+    ]);
+  }
+
+  function editMySign() {
+    const input = el('input', { class: 'input', maxLength: 40, value: state.skin.mySign || '', placeholder: '一句话介绍自己' });
+    sheet({
+      title: '修改签名',
+      node: el('div', { class: 'field' }, [input]),
+      actions: [{
+        label: '保存', onSelect: async () => {
+          state.skin.mySign = input.value.trim();
+          await saveSkin();
+          await paint();
+          toast('已保存');
+        }
+      }]
+    });
   }
 
   /* ---------------- 一条动态 ---------------- */
