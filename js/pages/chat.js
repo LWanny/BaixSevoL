@@ -27,6 +27,77 @@ let cleanups = [];
    若挂在函数体里会因 TDZ 报错。 */
 const money = (n) => Number(n || 0).toFixed(2);
 
+/* ---------------- 链接分享：识别平台 + 卡片 ---------------- */
+const LINK_SITES = [
+  { re: /xiaohongshu\.com|xhslink\.com/i, name: '小红书', ch: '红', a: '#ff5f7e', b: '#d92848' },
+  { re: /douyin\.com|iesdouyin\.com/i, name: '抖音', ch: '抖', a: '#3de1f2', b: '#fe2c55' },
+  { re: /bilibili\.com|b23\.tv/i, name: '哔哩哔哩', ch: 'B', a: '#7fd0ff', b: '#fb7299' },
+  { re: /y\.qq\.com/i, name: 'QQ音乐', ch: 'Q', a: '#7bffb2', b: '#31c27c' },
+  { re: /music\.163\.com|163cn\.tv/i, name: '网易云音乐', ch: '云', a: '#ff8a8a', b: '#c20c0c' },
+  { re: /v\.qq\.com/i, name: '腾讯视频', ch: '视', a: '#ffc46b', b: '#ff7a00' },
+  { re: /weibo\.com|weibo\.cn|t\.cn/i, name: '微博', ch: '微', a: '#ff7a8a', b: '#e6162d' },
+  { re: /kuaishou\.com/i, name: '快手', ch: '快', a: '#ffb35c', b: '#ff5c00' },
+  { re: /zhihu\.com/i, name: '知乎', ch: '知', a: '#7fb8ff', b: '#0066ff' },
+  { re: /mp\.weixin\.qq\.com/i, name: '微信公众号', ch: '信', a: '#8fd47f', b: '#2aae67' },
+  { re: /tieba\.baidu\.com/i, name: '百度贴吧', ch: '贴', a: '#8fc2ff', b: '#3388ff' }
+];
+
+function detectLinkSite(url) {
+  const s = LINK_SITES.find((x) => x.re.test(url));
+  if (s) return { name: s.name, ch: s.ch, a: s.a, b: s.b };
+  let host = '';
+  try { host = new URL(url).hostname.replace(/^www\./, ''); } catch (_) {}
+  return { name: '网页链接', ch: '链', a: '#c9ccd4', b: '#8f96a3' };
+}
+
+/* 分享口令里常夹着文字（"7.79 复制打开抖音… https://v.douyin.com/xx …"），
+   优先抓出其中的 http(s) 链接；裸域名也能兜住 */
+function normalizeUrl(s) {
+  if (!s) return '';
+  const m = s.match(/https?:\/\/\S+/i);
+  if (m) return m[0].replace(/[，。；、"']+$/, '');
+  const t = s.trim().split(/\s+/)[0];
+  if (!t || !t.includes('.')) return '';
+  return 'https://' + t;
+}
+
+function linkCardNode(p, url) {
+  let host = '';
+  try { host = new URL(url).hostname.replace(/^www\./, ''); } catch (_) {}
+  return el('div', { class: 'link-card' }, [
+    el('span', { class: 'link-logo', style: { background: `linear-gradient(145deg,${p.a},${p.b})` }, text: p.ch }),
+    el('div', { class: 'link-main' }, [
+      el('div', { class: 'link-name', text: p.name }),
+      el('div', { class: 'link-url', text: host || url })
+    ]),
+    el('span', { class: 'link-open', text: '↗' })
+  ]);
+}
+
+function sendLink() {
+  const input = el('input', { class: 'input', placeholder: '粘贴链接，支持小红书 / 抖音 / B站 / QQ音乐 / 网易云…' });
+  const prev = el('div', { class: 'link-prev hidden' });   // 识别结果预览
+  const paint = () => {
+    prev.innerHTML = '';
+    const url = normalizeUrl(input.value.trim());
+    if (!url) { prev.classList.add('hidden'); return; }
+    prev.classList.remove('hidden');
+    prev.appendChild(linkCardNode(detectLinkSite(url), url));
+  };
+  input.addEventListener('input', paint);
+  sheet({
+    title: '发送链接',
+    node: el('div', { class: 'field' }, [el('label', { text: '链接地址' }), input, prev]),
+    actions: [{ label: '发送', icon: 'IC-CHT-004', onSelect: async () => {
+      const url = normalizeUrl(input.value.trim());
+      if (!url) return toast('没认出链接，请检查一下');
+      const plat = detectLinkSite(url);
+      const m = await sched.addMessage({ role: 'me', type: 'link', url, plat, text: `分享了一个${plat.name}的链接` });
+      await sched.replyTo(m);
+    } }]
+  });
+}
+
 /* 骰子：与「抉择 · 扔骰子」同款的 3D 立方体——连续翻滚 1.6s，再落定到结果面。
    同样必须放在 pageChat 之外——msgNode 在首次 rerenderAll() 时就会用到 */
 const DICE_DOTS = {
@@ -522,6 +593,15 @@ export default async function pageChat(view) {
       if (Date.now() - m.ts < DICE_ROLL_MS + DICE_LAND_MS + 500) playDiceRoll(cube, m);
       else landDice(cube, m.value, true);
       content.appendChild(el('div', { class: 'cdice-wrap' }, [cube]));
+    } else if (m.type === 'link') {
+      /* 链接分享卡：点开跳原站 */
+      content.classList.add('link-msg');
+      const card = linkCardNode(m.plat || detectLinkSite(m.url), m.url);
+      card.addEventListener('click', (e) => {
+        e.stopPropagation();
+        try { window.open(m.url, '_blank', 'noopener'); } catch (_) {}
+      });
+      content.appendChild(card);
     } else {
       content.appendChild(el('span', { text: m.text || '' }));
     }
@@ -808,6 +888,7 @@ export default async function pageChat(view) {
       { label: '昵称 / 头像库', icon: 'IC-MIO-020', onSelect: () => go('/avatarLib') },
       { label: '涂鸦',   icon: 'IC-MOM-005', onSelect: openGraffitiSheet },
       { label: '相册',   icon: 'IC-MIO-015', onSelect: sendImage },
+      { label: '链接',   icon: 'IC-MIO-046', onSelect: sendLink },
       { label: '表情包', icon: 'IC-CHT-008', onSelect: openStickerPicker },
       { label: '转账',   icon: 'IC-CHT-015', onSelect: sendTransfer },
       { label: '红包',   icon: 'IC-CHT-016', onSelect: sendPacket },

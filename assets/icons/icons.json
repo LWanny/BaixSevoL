@@ -1021,6 +1021,16 @@
       "file": "assets/icons/misc/IC-MIO-045.svg",
       "replaced": false,
       "replacement": null
+    },
+    {
+      "id": "IC-MIO-046",
+      "name": "链接",
+      "desc": "发送链接 / 分享网页",
+      "category": "MIO",
+      "categoryName": "通用",
+      "file": "assets/icons/misc/IC-MIO-046.svg",
+      "replaced": false,
+      "replacement": null
     }
   ]
 }

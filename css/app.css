@@ -1710,6 +1710,16 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .pay-st{font-size:10.5px;opacity:.72;margin-top:3px}
 .bub .content.pay .meta,.bub .meta .more{color:inherit}
 
+/* ---------- 链接分享消息卡片 ---------- */
+.link-msg .link-card{display:flex;align-items:center;gap:10px;min-width:190px;max-width:230px;cursor:pointer}
+.link-logo{width:34px;height:34px;flex:0 0 auto;border-radius:9px;color:#fff;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.link-main{flex:1;min-width:0}
+.link-name{font-size:13.5px;font-weight:600;line-height:1.3}
+.link-url{font-size:11px;color:var(--txt-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.link-open{flex:0 0 auto;font-size:15px;opacity:.4}
+.link-prev{margin-top:9px}
+.link-prev .link-card{padding:9px 11px;border:1px solid var(--line);border-radius:12px;background:var(--bg-elev2)}
+
 /* ---------- 语音录制弹层 ---------- */
 .rec-box{display:flex;flex-direction:column;align-items:center;gap:12px;padding:14px 2px 4px}
 .rec-time{font-size:30px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:.5px}
