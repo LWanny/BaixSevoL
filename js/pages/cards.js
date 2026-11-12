@@ -347,7 +347,7 @@ async function batchAddCards() {
 
   const ta = el('textarea', {
     class: 'input',
-    placeholder: '一行一条，可以一次添加多条。\n例如：\n在干嘛\n早点睡\n我想你了\n好呀好呀\n今天也要甜',
+    placeholder: '一行一条，可以一次添加多条。\n例如：\n在干嘛\n早点睡\n我想你了\n\n也可以带分组：【分组名】单独一行，\n下面的行都归入该分组：\n【日常关心】\n在干嘛\n早点睡\n【睡前晚安】\n晚安，做个好梦',
     rows: 10,
     style: { resize: 'vertical', minHeight: '160px', lineHeight: '1.55' }
   });
@@ -359,6 +359,7 @@ async function batchAddCards() {
     node: el('div', { class: 'field' }, [
       el('label', { text: '所属分组' }),
       groupSel,
+      el('div', { class: 'hint', text: '不带【分组名】的行归到这里；粘贴内容里带了【分组名】则按它自动归组。' }),
       el('div', { style: { height: '4px' } }),
       el('label', { text: '字卡内容' }),
       ta,
@@ -386,34 +387,56 @@ async function batchAddCards() {
   });
 
   async function saveBatch() {
-    const gid = groupSel.value;
-    if (!gid || gid === '__new__') return toast('请先选择或创建分组');
     const lines = ta.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
     if (!lines.length) return toast('请至少输入一条字卡');
+    const gid = groupSel.value;
+    if (!gid || gid === '__new__') return toast('请先选择或创建分组');
 
+    /* 两种写法混着用：
+       ① 一行一张 → 全部归入上面选的分组；
+       ② 【分组名】单独一行 → 下面的行归入该分组（不存在会自动建），
+          开头还没出现【分组名】的行仍归入选的分组 */
+    const headerRe = /^【(.+)】$/;
     const existing = new Set(cards.map((c) => c.content));
-    const nextOrder = Math.max(0, ...cards.filter((c) => c.groupId === gid).map((c) => c.order ?? 0)) + 1;
+    const createdGroups = [];
+    const ensureGroup = (name) => {
+      let g = groups.find((x) => x.name === name) || createdGroups.find((x) => x.name === name);
+      if (!g) { g = { id: uid(), name, order: groups.length + createdGroups.length, enabled: true, createdAt: Date.now() }; createdGroups.push(g); }
+      return g;
+    };
+
+    const buckets = new Map();   // groupId -> 内容行
+    let cur = gid;
+    for (const line of lines) {
+      const m = line.match(headerRe);
+      if (m) { cur = ensureGroup(m[1].trim()).id; continue; }
+      if (!buckets.has(cur)) buckets.set(cur, []);
+      buckets.get(cur).push(line);
+    }
+
     const newCards = [];
     let skipped = 0;
-    for (const content of lines) {
-      if (existing.has(content)) { skipped++; continue; }
-      existing.add(content);
-      newCards.push({
-        id: uid(), groupId: gid, content, enabled: true, count: 0,
-        weight: 1, kind: 'text', order: nextOrder + newCards.length, createdAt: Date.now()
-      });
+    for (const [groupId, list] of buckets) {
+      let order = Math.max(0, ...cards.filter((c) => c.groupId === groupId).map((c) => c.order ?? 0));
+      for (const content of list) {
+        if (existing.has(content)) { skipped++; continue; }
+        existing.add(content);
+        order++;
+        newCards.push({ id: uid(), groupId, content, enabled: true, count: 0, weight: 1, kind: 'text', order, createdAt: Date.now() });
+      }
     }
-    if (!newCards.length) {
+    if (!newCards.length && !createdGroups.length) {
       savedHint.textContent = skipped ? `这 ${skipped} 条都已存在，没有新增。` : '没有可添加的内容。';
       return toast('没有可添加的新字卡');
     }
-    await bulkPut('cards', newCards);
+    if (createdGroups.length) await bulkPut('groups', createdGroups);
+    if (newCards.length) await bulkPut('cards', newCards);
     await reload();
     render(document.getElementById('view'));
     ctl.close();
     alertBox({
       title: '添加完成',
-      text: `新增 ${newCards.length} 张字卡${skipped ? `，跳过重复 ${skipped} 张` : ''}。`
+      text: `新增 ${newCards.length} 张字卡${createdGroups.length ? `，新建分组 ${createdGroups.length} 个` : ''}${skipped ? `，跳过重复 ${skipped} 张` : ''}。`
     });
   }
 }
