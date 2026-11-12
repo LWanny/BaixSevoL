@@ -371,7 +371,11 @@ function meaningOf(item) {
   }
   if (item.src === 'lenormand') {
     const i = LENORMAND.findIndex((x) => x.name === item.name);
-    if (i >= 0 && i < D_LENO.length) return { poker: D_LENO[i].poker, up: D_LENO[i].upright, rev: D_LENO[i].reversed };
+    /* 通牌 40 张里的扩展四张（时钟/桥/骰子/面具）与占卜的扩展四张不同名，
+       按名字再核一次，避免错位拿到别人的释义 */
+    if (i >= 0 && D_LENO[i] && D_LENO[i].name === item.name) {
+      return { poker: D_LENO[i].poker, up: D_LENO[i].upright, rev: D_LENO[i].reversed };
+    }
   }
   return null;
 }

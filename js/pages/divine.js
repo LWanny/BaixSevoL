@@ -9,22 +9,26 @@ import { all, put, del, kvGet, kvSet } from '../store.js';
 import { actionSheet, alertBox, confirmBox, toast, sheet } from '../ui.js';
 import { SYSTEMS, TAROT, LENORMAND, PLANETS, SIGNS, HOUSES, SPREADS, SHUFFLES } from '../data/divination.js';
 import { TAROT_FACE, TAROT_BACK_SRC } from '../data/tarotfaces.js';
+import { LENORMAND_FACE, LENORMAND_BACK_SRC } from '../data/lenormandfaces.js';
 import { eligible, drawCards } from '../engine.js';
 import { addMessage } from '../scheduler.js';
 import { state } from '../state.js';
 import { imgEl, saveMedia, delMedia } from '../media.js';
 
+/* 两套内置默认牌面合并查（key 不冲突：tarot-* / len-*） */
+const BUILTIN_FACE = { ...TAROT_FACE, ...LENORMAND_FACE };
+
 const SYSTEM_ICON = { tarot: 'IC-DIV-002', lenormand: 'IC-DIV-003', astro: 'IC-DIV-004' };
 const SYSTEM_TAG = { tarot: '象征之语', lenormand: '直白之言', astro: '星轨落定' };
 
-/** 这张牌有没有图：自定义 imgId 优先，其次内置默认牌面（韦特图） */
+/** 这张牌有没有图：自定义 imgId 优先，其次内置默认牌面（韦特图 / 雷诺曼图） */
 function hasFace(c) {
-  return !!(c && (c.imgId || (c.id && TAROT_FACE[c.id])));
+  return !!(c && (c.imgId || (c.id && BUILTIN_FACE[c.id])));
 }
 /** 默认牌面静态图地址（没有自定义图才有） */
 function defaultFace(c) {
   if (!c || c.imgId) return null;
-  return (c.id && TAROT_FACE[c.id]) || null;
+  return (c.id && BUILTIN_FACE[c.id]) || null;
 }
 /** 牌面节点：自定义库图 > 内置默认牌面 > null（调用方给占位） */
 function faceNode(c, cls, alt) {
@@ -98,7 +102,7 @@ register({
   function tabDefs() {
     return [
       { key: 'tarot', label: '塔罗 78' },
-      { key: 'lenormand', label: '雷诺曼 36' },
+      { key: 'lenormand', label: '雷诺曼 40' },
       { key: 'astro', label: '占星骰 36' },
       ...myDecks.map((d) => ({ key: 'deck:' + d.id, label: d.name }))
     ];
@@ -250,8 +254,8 @@ register({
     const rv = el('input', { class: 'input', value: card.reversed || '', placeholder: '逆位释义' });
     let imgId = card.imgId || '';
     const thumb = el('div', { class: 'cc-thumb' });
-    // 没有自定义图时，内置塔罗显示默认牌面
-    const defFace = (card.id && TAROT_FACE[card.id]) || null;
+    // 没有自定义图时，内置牌显示默认牌面
+    const defFace = (card.id && BUILTIN_FACE[card.id]) || null;
     const drawThumb = () => {
       thumb.innerHTML = '';
       thumb.appendChild(imgId ? imgEl(imgId, 'cc-img')
@@ -358,7 +362,7 @@ register({
               '· 牌背：文件名含「背面 / 牌背」的图会自动设为该体系牌背\n' +
               '· 体系前缀：塔罗-愚人.png、雷诺曼-骑士.jpg、tarot-魔术师.png\n' +
               '· 前缀序号：07-战车.png（名字优先，名字没中才用序号）\n' +
-              '· 纯编号：塔罗 00–77、雷诺曼 1–36（同名跨体系按当前页签；' +
+              '· 纯编号：塔罗 00–77、雷诺曼 1–40（同名跨体系按当前页签；' +
               '塔罗编号从 0 起，如你的素材从 1 开始请打开「编号从 1 起」）\n\n' +
               '文件名可含扩展名（.jpg/.png/.webp）、可含空格和下划线。\n' +
               '匹配顺序：体系前缀 → 前缀序号（名字优先）→ 牌名 → 尾部编号 → 纯编号。\n' +
@@ -449,7 +453,7 @@ export function normCardKey(s) {
       3. 牌名：牌名含在文件名任意位置即可，前后缀都不管
          （愚人-高清.jpg / 塔罗牌愚人.png / 韦特-02女祭祀.jpg 都能认）
       4. 尾部编号：战车07.png（名字已确认含牌名时不用尾号）
-      5. 纯编号：塔罗 00–77 = 数组索引（numFromOne 开启时 1–78 → 索引-1）；雷诺曼 1–36 → 索引-1
+      5. 纯编号：塔罗 00–77 = 数组索引（numFromOne 开启时 1–78 → 索引-1）；雷诺曼 1–40 → 索引-1
       同名跨体系（塔/星星/月亮/太阳）按无前缀时传入的当前页签体系。 */
 export function matchBuiltinCard(rawBase, system, deck, numFromOne = false) {
   if (!rawBase) return null;
@@ -489,7 +493,7 @@ export function matchBuiltinCard(rawBase, system, deck, numFromOne = false) {
       const idx = numFromOne ? n - 1 : n;
       if (idx >= 0 && idx < TAROT.length) return { card: TAROT[idx], system: 'tarot' };
     } else if (n >= 1 && n <= LENORMAND.length) {
-      // 雷诺曼 1–36 → 索引-1
+      // 雷诺曼 1–40 → 索引-1
       return { card: LENORMAND[n - 1], system: 'lenormand' };
     }
   }
@@ -810,6 +814,8 @@ function cardBack() {
   if (bkId) return el('div', { class: 'dback' }, [imgEl(bkId, 'dback-img', '牌背')]);
   // 塔罗内置默认牌背（韦特背面）
   if (sess?.system === 'tarot') return el('div', { class: 'dback' }, [el('img', { class: 'dback-img', src: TAROT_BACK_SRC, alt: '牌背' })]);
+  // 雷诺曼内置默认牌背
+  if (sess?.system === 'lenormand') return el('div', { class: 'dback' }, [el('img', { class: 'dback-img', src: LENORMAND_BACK_SRC, alt: '牌背' })]);
   return el('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' } }, [
     iconImg('IC-DIV-006'),
     el('div', { class: 'back-lbl', text: '点击翻牌' })
@@ -1386,8 +1392,8 @@ function cardForm(existing) {
 
   let imgId = (target || existing)?.imgId || '';
   const thumb = el('div', { class: 'cc-thumb' });
-  // 没有自定义图时，内置塔罗显示默认牌面
-  const defFace = ((target || existing)?.id && TAROT_FACE[(target || existing).id]) || null;
+  // 没有自定义图时，内置牌显示默认牌面
+  const defFace = ((target || existing)?.id && BUILTIN_FACE[(target || existing).id]) || null;
   const drawThumb = () => {
     thumb.innerHTML = '';
     thumb.appendChild(imgId ? imgEl(imgId, 'cc-img')

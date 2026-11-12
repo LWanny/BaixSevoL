@@ -1,0 +1,48 @@
+/* 占卜 · 内置默认雷诺曼牌面（40 张，来自 assets/lenormand）
+   用法与 tarotfaces.js 一致：没有自定义 imgId 时，按 card.id 取这里的默认图。
+   编号 1–36 为经典雷诺曼，37–40 为扩展四张（灵体 / 香炉 / 床 / 市场）。 */
+
+export const LENORMAND_FACE = {
+  'len-0': 'assets/lenormand/01骑士.jpg',
+  'len-1': 'assets/lenormand/02四叶草.jpg',
+  'len-2': 'assets/lenormand/03船.jpg',
+  'len-3': 'assets/lenormand/04房子.jpg',
+  'len-4': 'assets/lenormand/05树.jpg',
+  'len-5': 'assets/lenormand/06云.jpg',
+  'len-6': 'assets/lenormand/07蛇.jpg',
+  'len-7': 'assets/lenormand/08棺材.jpg',
+  'len-8': 'assets/lenormand/09花束.jpg',
+  'len-9': 'assets/lenormand/10镰刀.jpg',
+  'len-10': 'assets/lenormand/11鞭子.jpg',
+  'len-11': 'assets/lenormand/12鸟.jpg',
+  'len-12': 'assets/lenormand/13孩子.jpg',
+  'len-13': 'assets/lenormand/14狐狸.jpg',
+  'len-14': 'assets/lenormand/15熊.jpg',
+  'len-15': 'assets/lenormand/16星星.jpg',
+  'len-16': 'assets/lenormand/17鹳.jpg',
+  'len-17': 'assets/lenormand/18狗.jpg',
+  'len-18': 'assets/lenormand/19塔.jpg',
+  'len-19': 'assets/lenormand/20花园.jpg',
+  'len-20': 'assets/lenormand/21山.jpg',
+  'len-21': 'assets/lenormand/22路口.jpg',
+  'len-22': 'assets/lenormand/23老鼠.jpg',
+  'len-23': 'assets/lenormand/24心.jpg',
+  'len-24': 'assets/lenormand/25戒指.jpg',
+  'len-25': 'assets/lenormand/26书.jpg',
+  'len-26': 'assets/lenormand/27信.jpg',
+  'len-27': 'assets/lenormand/28男人.jpg',
+  'len-28': 'assets/lenormand/29女人.jpg',
+  'len-29': 'assets/lenormand/30百合.jpg',
+  'len-30': 'assets/lenormand/31太阳.jpg',
+  'len-31': 'assets/lenormand/32月亮.jpg',
+  'len-32': 'assets/lenormand/33钥匙.jpg',
+  'len-33': 'assets/lenormand/34鱼.jpg',
+  'len-34': 'assets/lenormand/35锚.jpg',
+  'len-35': 'assets/lenormand/36十字架.jpg',
+  'len-36': 'assets/lenormand/37灵体.jpg',
+  'len-37': 'assets/lenormand/38香炉.jpg',
+  'len-38': 'assets/lenormand/39床.jpg',
+  'len-39': 'assets/lenormand/40市场.jpg',
+};
+
+export const LENORMAND_BACK_SRC = 'assets/lenormand/背面.jpg';
