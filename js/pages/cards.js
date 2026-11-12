@@ -33,6 +33,17 @@ async function reload() {
   if (curGroup !== 'all' && !groups.find((g) => g.id === curGroup)) curGroup = 'all';
 }
 
+/* 改完一张/一批字卡后重渲染要保持滚动位置：
+   屏蔽或启用后不该把人甩回列表最上面，还得重新往下翻半天 */
+function renderKeepScroll() {
+  const view = document.getElementById('view');
+  const before = view.querySelector('.page');
+  const top = before ? before.scrollTop : 0;
+  render(view);
+  const after = view.querySelector('.page');
+  if (after && top) after.scrollTop = top;
+}
+
 function render(view) {
   view.innerHTML = '';
   const wrap = el('div', { class: 'page tight' });
@@ -207,7 +218,7 @@ async function onDragEnd(e) {
   const updates = list.map((c, i) => ({ ...c, order: i }));
   await bulkPut('cards', updates);
   cards = await all('cards');
-  render(document.getElementById('view'));
+  renderKeepScroll();
   toast('顺序已更新');
 }
 
@@ -520,7 +531,7 @@ async function cardEditor(card) {
     node,
     actions: [
       isNew ? null : { label: '删除这张字卡', icon: 'IC-CRD-007', danger: true, onSelect: async () => {
-        await del('cards', card.id); await reload(); render(document.getElementById('view')); toast('已删除');
+        await del('cards', card.id); await reload(); renderKeepScroll(); toast('已删除');
       } },
       { label: '保存', icon: 'IC-MIO-003', onSelect: save }
     ].filter(Boolean)
@@ -547,7 +558,7 @@ async function cardEditor(card) {
     }
     await put('cards', payload);
     await reload();
-    render(document.getElementById('view'));
+    renderKeepScroll();
     ctl.close();
     toast(isNew ? '字卡已添加' : '已保存');
   }
@@ -560,7 +571,7 @@ async function batchSet(field, value) {
   await bulkPut('cards', updates);
   selected.clear();
   await reload();
-  render(document.getElementById('view'));
+  renderKeepScroll();
   toast('已更新');
 }
 
@@ -580,13 +591,13 @@ function batchMove() {
           await put('groups', g);
           const list = (await all('cards')).filter((c) => selected.has(c.id));
           await bulkPut('cards', list.map((c, i) => ({ ...c, groupId: g.id, order: i })));
-          selected.clear(); await reload(); render(document.getElementById('view')); toast('已移动');
+          selected.clear(); await reload(); renderKeepScroll(); toast('已移动');
         } }] });
       } },
       { label: '移动', icon: 'IC-MIO-003', onSelect: async () => {
         const list = (await all('cards')).filter((c) => selected.has(c.id));
         await bulkPut('cards', list.map((c, i) => ({ ...c, groupId: sel.value, order: i })));
-        selected.clear(); await reload(); render(document.getElementById('view')); toast('已移动');
+        selected.clear(); await reload(); renderKeepScroll(); toast('已移动');
       } }
     ]
   });
@@ -624,7 +635,7 @@ function batchEdit() {
         return { ...c, content };
       });
       await bulkPut('cards', updates);
-      selected.clear(); await reload(); render(document.getElementById('view')); toast('已修改');
+      selected.clear(); await reload(); renderKeepScroll(); toast('已修改');
     } }]
   });
 }
@@ -636,7 +647,7 @@ async function batchDelete() {
   await Promise.all(ids.map((id) => del('cards', id)));
   selected.clear();
   await reload();
-  render(document.getElementById('view'));
+  renderKeepScroll();
   toast('已删除');
 }
 
