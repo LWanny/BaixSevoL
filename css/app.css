@@ -614,7 +614,7 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 }
 .mnh-card{
   position:relative;margin:-56px 14px 0;background:var(--bg-elev);
-  border-radius:16px;padding:14px 16px 16px;box-shadow:0 10px 26px rgba(20,20,25,.10);
+  border-radius:16px;padding:14px 16px 20px;box-shadow:0 10px 26px rgba(20,20,25,.10);
 }
 .mnh-av{
   position:absolute;left:18px;top:-54px;width:92px;height:92px;border-radius:50%;overflow:hidden;
@@ -633,8 +633,8 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .mnh-sign.mute{color:var(--txt-mute)}
 .mnh-stats{display:flex;align-items:baseline;gap:22px;margin-top:14px;padding-left:10px}
 .mnh-stats .it{display:flex;align-items:baseline;gap:6px}
-.mnh-stats span{font-size:13px;color:var(--txt-dim)}
-.mnh-stats b{font-size:17px;font-weight:700}
+.mnh-stats span{font-size:13px;color:var(--txt-dim);line-height:1}
+.mnh-stats b{font-size:17px;font-weight:700;line-height:1}
 /* 「动态」标题 + 细分隔线 */
 .mnh-sec{padding:20px 16px 0 26px}
 .mnh-sec .t{
@@ -647,9 +647,10 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .mnh-date{flex:0 0 42px;padding-top:2px;color:#b7b7b4}
 .mnh-date .d{font-size:28px;font-weight:700;line-height:1}
 .mnh-date .m{font-size:13px;font-weight:600;margin-top:4px}
-.mnh-tiles{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:10px}
+/* 小框固定一排 3 个：三等分自适应屏宽（窄屏也塞得下，不再第 3 个掉到下一行） */
+.mnh-tiles{flex:1;min-width:0;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 .mnh-tile{
-  width:88px;height:88px;border-radius:18px;border:none;padding:0;overflow:hidden;position:relative;
+  width:100%;aspect-ratio:1;border-radius:18px;border:none;padding:0;overflow:hidden;position:relative;
   background:var(--bg-elev);box-shadow:0 6px 16px rgba(20,20,25,.10);cursor:pointer;
 }
 .mnh-tile img{width:100%;height:100%;object-fit:cover;display:block}
