@@ -3,7 +3,7 @@
    - 回牌设置：一人一句（只回 1 张）/ 随机（回 1~N 张，N 由我设 1~10）
    - 来源开关：字卡库 / 牌面图鉴（塔罗 78 + 雷诺曼 40）；未开启的来源发不了，标「未开启」
    - 聊天流里每张牌是小卡片；对方的牌是牌背，手动点击翻面才显示
-   - 发牌抽屉：3 张随机牌（点击即发为一轮）+「换一批」+ 底部「字卡库」全屏多选合并发送 */
+   - 发牌抽屉：3 张随机牌（点击即发为一轮）+ 底部「字卡库」全屏多选合并发送 */
 
 import { el, uid, rndInt, pickN } from '../util.js';
 import { iconImg } from '../icons.js';
@@ -17,10 +17,10 @@ import { TAROT as D_TAROT, LENORMAND as D_LENO } from '../data/divination.js';
 const CFG_KEY = 'tongCfg';
 /* 底部预览四档：前三个点名字随机刷新，「实际发出」固定显示对方最近 3 张 */
 const TABS = [
-  { k: 'want', label: '想收到', hint: '他从你这儿想听到的 · 点一张推过去' },
-  { k: 'expect', label: '以为你会说', hint: '他猜你会这样回他 · 点一张推过去' },
-  { k: 'say', label: '他想说', hint: '他此刻想递给你的 · 点一张推过去' },
-  { k: 'sent', label: '实际发出', hint: '他这一场真的递出来的 · 只能看' }
+  { k: 'want', label: '想收到' },
+  { k: 'expect', label: '以为你会说' },
+  { k: 'say', label: '他想说' },
+  { k: 'sent', label: '实际发出' }
 ];
 let curTab = 'want';
 let view = null;
@@ -193,7 +193,16 @@ async function paintStream() {
       el('span', { text: '对方回牌中…' })
     ]));
   }
-  stream.scrollTop = stream.scrollHeight;
+  scrollToLatest();
+}
+
+/* 滚到最新一轮：滚动容器是 .tg-stream-wrap（.tg-stream 本身不滚）。
+   首次进入时布局/图片可能还没就位，再排一帧后补一次 */
+function scrollToLatest() {
+  const wrap = view.querySelector('.tg-stream-wrap');
+  if (!wrap) return;
+  wrap.scrollTop = wrap.scrollHeight;
+  requestAnimationFrame(() => { wrap.scrollTop = wrap.scrollHeight; });
 }
 
 /** 塔罗牌面图：item 自带 face（新数据），老消息按牌名从图鉴反查 */
@@ -291,7 +300,6 @@ function paintDrawer() {
   if (!drawer) return;
   const wait = waitingTaSync();
   const isSent = curTab === 'sent';
-  const tab = TABS.find((t) => t.k === curTab) || TABS[0];
   drawer.innerHTML = '';
 
   /* 四个 tab：点名字即切换并随机刷新（「实际发出」固定不随机） */
@@ -307,7 +315,6 @@ function paintDrawer() {
     }, [tb.label]));
   });
   drawer.appendChild(tabs);
-  drawer.appendChild(el('div', { class: 'tg-tab-hint', text: tab.hint }));
 
   const handRow = el('div', { class: 'tg-hand' + (wait && !isSent ? ' off' : '') + (isSent ? ' only' : '') });
   if (isSent) {
@@ -318,16 +325,9 @@ function paintDrawer() {
     sent.forEach(({ item, msg }) => handRow.appendChild(cardNode(item, true, () => openDetail(item, msg))));
   } else {
     hand.forEach((item) => handRow.appendChild(cardNode(item, true, wait ? null : () => sendRound([item]))));
-    handRow.appendChild(el('button', {
-      class: 'tg-redeal' + (wait ? ' off' : ''),
-      onclick: () => { if (waitingTaSync()) { toast('等对方回牌'); return; } redeal(); paintDrawer(); }
-    }, ['换一批']));
   }
   drawer.appendChild(handRow);
 
-  if (!isSent) {
-    drawer.appendChild(el('div', { class: 'tg-drawer-tip', text: wait ? '等对方回牌后再出' : '点牌即出 · 一张或合并发送各算一轮' }));
-  }
   drawer.appendChild(el('button', {
     class: 'btn block tg-lib-btn',
     onclick: () => { if (waitingTaSync()) { toast('等对方回牌'); return; } openPicker(); }

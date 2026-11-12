@@ -60,14 +60,17 @@ export default async function pageHome(view) {
   hideTopbar();
 
   const [messages, cards] = await Promise.all([all('messages'), all('cards')]);
-  const unread = messages.filter((m) => m.role === 'ta' && !m.read).length;
+  /* 通牌出牌没有文字、聊天页不显示也不标已读，混进未读数小红点就永远清不掉；
+     「最后一条」预览同理，不该被一条牌记录占住 */
+  const chatMsgs = messages.filter((m) => m.type !== 'tong');
+  const unread = chatMsgs.filter((m) => m.role === 'ta' && !m.read).length;
   setUnread(unread);
 
   const inbox = (await mail.allLetters()).filter((l) => l.dir === 'in');
   const unreadMail = inbox.filter((l) => !l.read).length;
   const lastInbox = inbox[0] || null;
 
-  const last = messages.length ? messages.reduce((a, b) => (a.ts > b.ts ? a : b)) : null;
+  const last = chatMsgs.length ? chatMsgs.reduce((a, b) => (a.ts > b.ts ? a : b)) : null;
   const mood = todayMood();
   const metDays = daysSince(state.role.metAt);
   const enabledCards = cards.filter((c) => c.enabled).length;

@@ -2901,22 +2901,19 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .tg-card.back.face{background:none;border-color:transparent;min-height:0}
 .tg-card.back.face::after{display:none}
 .tg-card.back .tg-card-nm,.tg-card.back .tg-card-sub{display:none}
-.tg-drawer{border-top:1px solid var(--line);background:var(--bg-elev2);margin:0 -16px;padding:10px 16px calc(12px + env(safe-area-inset-bottom))}
-.tg-drawer-tip{font-size:10.5px;color:var(--txt-dim);text-align:center;margin-bottom:8px}
-.tg-hand{display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:9px}
+/* 抽屉整体压缩：去掉提示行与换一批后，卡再收一档，把空间还给聊天流 */
+.tg-drawer{border-top:1px solid var(--line);background:var(--bg-elev2);margin:0 -16px;padding:8px 16px calc(8px + env(safe-area-inset-bottom))}
+.tg-hand{display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:8px}
 .tg-hand.off{opacity:.45}
-.tg-hand .tg-card{flex:1 1 0;max-width:none;min-height:136px;display:flex;flex-direction:column;justify-content:center;text-align:center}
-.tg-hand .tg-card.face .tg-card-img{width:auto;height:100px;max-width:100%;margin:8px auto 2px;object-fit:contain;background:none}
+.tg-hand .tg-card{flex:1 1 0;max-width:none;min-height:104px;display:flex;flex-direction:column;justify-content:center;text-align:center}
+.tg-hand .tg-card.face .tg-card-img{width:auto;height:76px;max-width:100%;margin:6px auto 2px;object-fit:contain;background:none}
 .tg-hand .tg-empty{flex:1 1 100%;padding:16px 0}
-.tg-redeal{flex:0 0 auto;border:1px dashed var(--line);background:transparent;border-radius:11px;padding:10px 9px;font-size:11px;color:var(--txt-dim);min-height:52px}
-.tg-redeal.off{opacity:.45}
-.tg-lib-btn{display:flex;align-items:center;justify-content:center;gap:6px;height:40px;border-radius:12px}
+.tg-lib-btn{display:flex;align-items:center;justify-content:center;gap:6px;height:36px;border-radius:12px}
 .tg-lib-btn svg{width:17px;height:17px}
 /* 底部四档：想收到 / 以为你会说 / 他想说 / 实际发出 */
-.tg-tabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:7px}
-.tg-tab{border:1px solid var(--line);background:var(--bg-elev2);border-radius:999px;padding:6px 13px;font-size:12.5px;color:var(--txt-dim);cursor:pointer;transition:.15s}
+.tg-tabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:6px}
+.tg-tab{border:1px solid var(--line);background:var(--bg-elev2);border-radius:999px;padding:5px 12px;font-size:12.5px;color:var(--txt-dim);cursor:pointer;transition:.15s}
 .tg-tab.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
-.tg-tab-hint{font-size:11.5px;color:var(--txt-dim);margin-bottom:8px}
 /* 聊天卡底部 meta：谁出的 + 时间 */
 .tg-card-meta{display:flex;justify-content:space-between;gap:6px;padding-top:7px;font-size:10px;color:var(--txt-mute);width:100%}
 .tg-card.face .tg-card-meta{padding:3px 6px 5px}
