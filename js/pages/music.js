@@ -140,6 +140,7 @@ function cloudCard() {
       el('button', { class: 'btn sm' + (logged ? '' : ' primary'), onclick: openLogin }, [logged ? '账号' : '登录'])
     ]),
     el('div', { class: 'mc-cloud-acts' }, [
+      el('button', { class: 'mc-act', onclick: openGuess }, [iconImg('IC-MIO-029'), '猜你喜欢']),
       el('button', { class: 'mc-act', onclick: () => openSearch() }, [iconImg('IC-CRD-010'), '搜索网易云']),
       el('button', { class: 'mc-act', onclick: () => openPlaylistImport() }, [iconImg('IC-MIO-022'), '导入歌单']),
       el('button', { class: 'mc-act', onclick: addByFile }, [iconImg('IC-MIO-010'), '上传音频'])
@@ -711,6 +712,78 @@ async function collectSong(t, owner) {
   songs.unshift(row);
   if (curList !== 'all') await addToPlaylist(row.id, curList);
   return row;
+}
+
+/* ---------------- 猜你喜欢：随机挑歌直接播 ---------------- */
+const GUESS_SEEDS = [
+  '周杰伦', '林俊杰', '陈奕迅', '薛之谦', '邓紫棋', '五月天', '孙燕姿', '梁静茹',
+  '王心凌', '许嵩', '毛不易', '周深', '李荣浩', '陶喆', '告五人', '万能青年旅店',
+  'KTV必点', '华语经典', '90后金曲', '网易云热歌', '小众宝藏', '粤语经典',
+  '民谣', '轻快节奏', '抒情慢歌', '深夜电台', '夏日微风', '雨天心情', '通勤路上'
+];
+
+function openGuess() {
+  const status = el('div', { class: 'mc-note', text: '正在随机挑歌…' });
+  const results = el('div', { class: 'mc-results' });
+  let batch = [];
+
+  const shuffleBtn = el('button', { class: 'btn sm', onclick: () => gen(true) }, ['换一批']);
+  const playBtn = el('button', { class: 'btn sm primary', onclick: playRandom }, ['随机播放']);
+  const s = sheet({ title: '猜你喜欢', node: el('div', { class: 'mc-search' }, [
+    status, results,
+    el('div', { class: 'mc-search-row', style: { marginTop: '10px' } }, [shuffleBtn, playBtn])
+  ]) });
+
+  function playRandom() {
+    if (!batch.length) { toast('还没挑到歌，稍等一下'); return; }
+    const t = batch[rndInt(0, batch.length - 1)];
+    s.close();
+    play(t);
+  }
+
+  async function gen(swap) {
+    shuffleBtn.disabled = true;
+    playBtn.disabled = true;
+    status.textContent = swap ? '换一批中…' : '正在随机挑歌…';
+    results.innerHTML = '';
+    try {
+      const seed = GUESS_SEEDS[rndInt(0, GUESS_SEEDS.length - 1)];
+      const list = await searchNetease(seed, 30);
+      const have = new Set(songs.filter((x) => x.source === 'netease').map((x) => x.neteaseId));
+      const fresh = list.filter((t) => !have.has(t.neteaseId));
+      batch = pickN(fresh.length >= 4 ? fresh : list, 8);
+      status.textContent = `按「${seed}」随机挑了 ${batch.length} 首 · 点歌名播放，或收藏进歌单`;
+      batch.forEach((t) => results.appendChild(guessRow(t, s)));
+    } catch (err) {
+      status.textContent = '挑歌失败：' + (err.message || '网易云接口连不上');
+      results.appendChild(el('div', { class: 'mc-fail' }, [
+        el('div', { class: 'small', text: '稍后再试一次，或直接用搜索挑歌。' })
+      ]));
+    } finally {
+      shuffleBtn.disabled = false;
+      playBtn.disabled = false;
+    }
+  }
+
+  function guessRow(t, sheetRef) {
+    const row = el('div', { class: 'mc-res' }, [
+      el('div', { class: 'mc-res-main', onclick: () => { sheetRef.close(); play(t); } }, [
+        el('div', { class: 'mc-res-t', text: t.title }),
+        el('div', { class: 'mc-res-s', text: [t.artist, t.album, t.vip ? 'VIP' : ''].filter(Boolean).join(' · ') || '网易云' })
+      ]),
+      el('button', { class: 'btn sm', onclick: async () => {
+        await collectSong(t, tab);
+        sheetRef.close();
+        await reload();
+        paint();
+        toast('已收藏「' + t.title + '」');
+      } }, ['收藏'])
+    ]);
+    row.querySelector('.mc-res-main').style.cursor = 'pointer';
+    return row;
+  }
+
+  gen(false);
 }
 
 /* ---------------- 导入网易云歌单 ---------------- */

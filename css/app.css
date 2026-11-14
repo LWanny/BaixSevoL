@@ -1540,7 +1540,7 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .mc-cloud-main{flex:1;min-width:0}
 .mc-cloud-t{font-size:14px;font-weight:600}
 .mc-cloud-s{font-size:11.5px;color:var(--txt-mute);margin-top:3px;line-height:1.5}
-.mc-cloud-acts{display:flex;gap:8px;margin-top:12px}
+.mc-cloud-acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
 .mc-act{
   flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;
   padding:9px 4px;border:1px solid var(--line);background:var(--bg-elev2);
