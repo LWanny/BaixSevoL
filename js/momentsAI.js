@@ -64,12 +64,9 @@ async function bumpCounts(cardIds, store = 'cards') {
 }
 
 /* ---------------- 朋友圈配乐 ----------------
-   只有在一起听里连过网易云（本地存了 MUSIC_U）才会挑歌，
-   优先从 TA 自己收的歌里选，没有就从他歌单里的全部网易云歌曲里选。 */
+   从曲库里的在线歌曲挑一首当配乐，优先 TA 自己收的歌。 */
 export async function pickMomentSong() {
   try {
-    const cookie = await kvGet('neteaseCookie', '');
-    if (!cookie) return null;
     const songs = await all('songs');
     const pool = songs.filter((s) => s && s.neteaseId);
     if (!pool.length) return null;
