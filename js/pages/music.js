@@ -1,6 +1,6 @@
 /* 音乐 · 网易云 + 本地音频 + 一起听
    两种使用方式：
-   1) 网易云：搜索、导入歌单链接、扫码 / 手动粘贴 MUSIC_U 登录
+   1) 在线曲库：搜索、导入歌单链接、试听（公共接口；VIP/无版权的歌可能没有音源）
    2) 上传本地音频：mp3 / wav / m4a 等，离线可播
    TA（梦角）会自己搜歌、收藏、用字卡随机拼出歌单名并建歌单。 */
 
@@ -15,8 +15,7 @@ import { saveMedia, mediaURL, delMedia } from '../media.js';
 import { actionSheet, confirmBox, sheet, toast, topBanner } from '../ui.js';
 import { eligible, drawCards, joinFragments } from '../engine.js';
 import {
-  searchNetease, fetchPlaylist, resolveSongUrl, parsePlaylistId,
-  normalizeCookie, maskCookie, createQrKey, qrImageURL, checkQrKey, setNeteaseCookie
+  searchNetease, fetchPlaylist, resolveSongUrl, parsePlaylistId
 } from '../musicapi.js';
 
 let view = null;
@@ -40,16 +39,18 @@ let audio = null;
 let together = false;
 let togetherTimer = null;
 let taBusy = false;
-let neteaseCookie = '';
+let alive = false;           // 页面存活标志：离开后丢弃所有未完成的异步渲染
+let recentPlays = [];        // 近期播放 [{id, ts}]，最新在前，上限 50
 let cleanups = [];
 
 export default async function pageMusic(v) {
   cleanup();
+  alive = true;
   window.addEventListener('hashchange', cleanup, { once: true });
 
   view = v;
   fullPage({
-    back: true, title: '音乐', sub: '网易云 · 本地音频 · 一起听',
+    back: true, title: '音乐', sub: '在线曲库 · 本地音频 · 一起听',
     actions: [
       { label: '歌词', onclick: () => openLyrics() },
       { label: '添加音乐', onclick: addMenu }
@@ -65,14 +66,14 @@ export default async function pageMusic(v) {
   audio.addEventListener('error', () => {
     if (!cur) return;
     toast(cur.source === 'netease'
-      ? '这首歌暂时无法播放，可能需要网易云 VIP 或已下架'
+      ? '这首歌暂时无法播放，可能需要 VIP 或已下架'
       : '这段音频无法播放，文件可能已损坏');
   });
 
   await reload();
   together = !!(await kvGet('musicTogether', false));
-  neteaseCookie = (await kvGet('neteaseCookie', '')) || '';
-  setNeteaseCookie(neteaseCookie);
+  recentPlays = (await kvGet('recentPlays')) || [];
+  if (!alive) return;                          // 等待期间已离开页面：别把 DOM 画回去
   paint();
   if (together) startTogetherLoop();
 }
@@ -84,6 +85,7 @@ async function reload() {
 }
 
 function cleanup() {
+  alive = false;
   cleanups.forEach((f) => { try { f(); } catch { /* ignore */ } });
   cleanups = [];
   if (togetherTimer) { clearInterval(togetherTimer); togetherTimer = null; }
@@ -94,7 +96,7 @@ function cleanup() {
    页面
    ============================================================ */
 function paint() {
-  if (!view) return;
+  if (!alive || !view) return;
   view.innerHTML = '';
   const page = el('div', { class: 'page music' });
 
@@ -126,28 +128,21 @@ function tabsBar() {
   return el('div', { class: 'mail-tabs' }, [me, ta]);
 }
 
-/* ---------------- 网易云连接卡 ---------------- */
+/* ---------------- 在线曲库卡 ---------------- */
 function cloudCard() {
-  const cookie = neteaseCookie;
-  const logged = !!cookie;
   return el('div', { class: 'card mc-cloud' }, [
     el('div', { class: 'mc-cloud-h' }, [
       el('div', { class: 'mc-cloud-ic' }, [iconImg('IC-MIO-016')]),
       el('div', { class: 'mc-cloud-main' }, [
-        el('div', { class: 'mc-cloud-t', text: '网易云 · 在线曲库' }),
-        el('div', { class: 'mc-cloud-s', text: logged ? maskCookie(cookie) + '（仅本地备用，接口暂不校验登录态）' : '搜索、导入歌单、试听不受登录影响；部分 VIP / 无版权歌曲没有音源' })
-      ]),
-      el('button', { class: 'btn sm' + (logged ? '' : ' primary'), onclick: openLogin }, [logged ? '账号' : '登录'])
+        el('div', { class: 'mc-cloud-t', text: '在线曲库' }),
+        el('div', { class: 'mc-cloud-s', text: '搜索、导入公开歌单、试听；接口解不出的歌（多为 VIP）会提示无音源' })
+      ])
     ]),
     el('div', { class: 'mc-cloud-acts' }, [
       el('button', { class: 'mc-act', onclick: openGuess }, [iconImg('IC-MIO-029'), '猜你喜欢']),
-      el('button', { class: 'mc-act', onclick: () => openSearch() }, [iconImg('IC-CRD-010'), '搜索网易云']),
+      el('button', { class: 'mc-act', onclick: () => openSearch() }, [iconImg('IC-CRD-010'), '搜索歌曲']),
       el('button', { class: 'mc-act', onclick: () => openPlaylistImport() }, [iconImg('IC-MIO-022'), '导入歌单']),
       el('button', { class: 'mc-act', onclick: addByFile }, [iconImg('IC-MIO-010'), '上传音频'])
-    ]),
-    el('div', { class: 'mc-cloud-foot' }, [
-      el('span', { text: '没有 VIP 时部分歌曲无法播放' }),
-      el('button', { class: 'mc-link', onclick: openCookieGuide }, ['登录教程'])
     ])
   ]);
 }
@@ -171,6 +166,18 @@ function playlistStrip() {
   wrap.appendChild(listTile('全部', songs.filter((s) => (s.addedBy || 'me') === tab).length, curList === 'all', () => {
     curList = 'all'; paint();
   }));
+
+  /* 近期播放：按最近播放排序（只在我的歌单页签展示） */
+  if (tab === 'me') {
+    const byId = new Map(songs.map((s) => [s.id, s]));
+    const recentCount = recentPlays.filter((r) => {
+      const s = byId.get(r.id);
+      return s && (s.addedBy || 'me') === 'me';
+    }).length;
+    wrap.appendChild(listTile('近期播放', recentCount, curList === 'recent', () => {
+      curList = 'recent'; paint();
+    }));
+  }
 
   owned.forEach((p) => {
     const count = p.songIds ? p.songIds.length : 0;
@@ -217,6 +224,10 @@ function playlistMenu(pl) {
 /* ---------------- 列表 ---------------- */
 function currentRows() {
   let rows = songs.filter((s) => (s.addedBy || 'me') === tab);
+  if (curList === 'recent') {
+    const byId = new Map(songs.map((s) => [s.id, s]));
+    return recentPlays.map((r) => byId.get(r.id)).filter(Boolean).filter((s) => (s.addedBy || 'me') === tab);
+  }
   if (curList !== 'all') {
     const pl = playlists.find((p) => p.id === curList);
     const ids = new Set((pl && pl.songIds) || []);
@@ -232,10 +243,10 @@ function renderList(list) {
     const isTa = tab === 'ta';
     list.appendChild(el('div', { class: 'empty' }, [
       iconImg('IC-MIO-016'),
-      el('div', { class: 'e-h', text: curList === 'all' ? (isTa ? 'TA 还没有收藏歌曲' : '还没有收藏歌曲') : '这个歌单还是空的' }),
-      el('div', { class: 'e-p', text: isTa ? '点「自己找歌」，TA 会去网易云搜；也可以把本地音频交给 TA' : '搜索网易云、导入歌单链接，或上传本地音频' }),
+      el('div', { class: 'e-h', text: curList === 'recent' ? '还没播放过歌曲' : (curList === 'all' ? (isTa ? 'TA 还没有收藏歌曲' : '还没有收藏歌曲') : '这个歌单还是空的') }),
+      el('div', { class: 'e-p', text: isTa ? '点「自己找歌」，TA 会去在线曲库搜；也可以把本地音频交给 TA' : '搜索歌曲、导入歌单链接，或上传本地音频' }),
       el('div', { class: 'row', style: { justifyContent: 'center', marginTop: '14px', flexWrap: 'wrap', gap: '8px' } }, [
-        el('button', { class: 'btn sm primary', onclick: () => openSearch() }, ['搜索网易云']),
+        el('button', { class: 'btn sm primary', onclick: () => openSearch() }, ['搜索歌曲']),
         el('button', { class: 'btn sm', onclick: addByFile }, ['上传音频']),
         isTa ? el('button', { class: 'btn sm', onclick: () => taSearchAndCollect() }, ['让 TA 找歌']) : null
       ].filter(Boolean))
@@ -363,6 +374,11 @@ async function play(s) {
     return;
   }
   cur = s;
+  /* 近期播放：仅记录歌单里的歌（搜索草稿没有本地 id） */
+  if (s.id) {
+    recentPlays = [{ id: s.id, ts: Date.now() }, ...recentPlays.filter((r) => r.id !== s.id)].slice(0, 50);
+    kvSet('recentPlays', recentPlays).catch(() => {});
+  }
   if (!audio) audio = new Audio();
   audio.onerror = () => {
     if (cur !== s) return;                       // 已经切到别的歌，不重复报错
@@ -593,8 +609,8 @@ function editLyricSheet(song) {
    ============================================================ */
 function addMenu() {
   actionSheet('添加音乐', [
-    { label: '搜索网易云', sub: '按歌名、歌手或关键词搜索', icon: 'IC-CRD-010', onSelect: () => openSearch() },
-    { label: '导入网易云歌单', sub: '粘贴歌单链接，整单收藏', icon: 'IC-MIO-022', onSelect: () => openPlaylistImport() },
+    { label: '搜索歌曲', sub: '按歌名、歌手或关键词搜索', icon: 'IC-CRD-010', onSelect: () => openSearch() },
+    { label: '导入在线歌单', sub: '粘贴歌单链接，整单收藏', icon: 'IC-MIO-022', onSelect: () => openPlaylistImport() },
     { label: '上传本地音频', sub: 'mp3 / wav / m4a 等，可离线播放', icon: 'IC-MIO-010', onSelect: addByFile }
   ]);
 }
@@ -651,10 +667,10 @@ function probeDurationSafe(blob) {
 /* ---------------- 网易云搜索 ---------------- */
 function openSearch(prefill = '') {
   const input = el('input', { class: 'input', placeholder: '搜歌名 / 歌手 / 关键词', value: prefill });
-  const status = el('div', { class: 'mc-note', text: '搜索由网易云公共接口提供；VIP 或无版权歌曲可能无法播放。' });
+  const status = el('div', { class: 'mc-note', text: '搜索由公共音乐接口提供；VIP 或无版权歌曲可能无法播放。' });
   const results = el('div', { class: 'mc-results' });
   const btn = el('button', { class: 'btn sm primary', onclick: run }, ['搜索']);
-  const s = sheet({ title: '搜索网易云', node: el('div', { class: 'mc-search' }, [
+  const s = sheet({ title: '搜索歌曲', node: el('div', { class: 'mc-search' }, [
     el('div', { class: 'mc-search-row' }, [input, btn]), status, results
   ]) });
 
@@ -662,17 +678,16 @@ function openSearch(prefill = '') {
     const q = input.value.trim();
     if (!q) { toast('先输入关键词'); return; }
     btn.disabled = true; btn.textContent = '搜索中…';
-    status.textContent = '正在连接网易云…';
+    status.textContent = '正在搜索…';
     results.innerHTML = '';
     try {
       const list = await searchNetease(q, 20);
       status.textContent = list.length ? `找到 ${list.length} 首，点「收藏」放进${tab === 'ta' ? ' TA 的' : '我的'}歌单` : '没有搜到，换个关键词试试';
       list.forEach((t) => results.appendChild(resultRow(t, s)));
     } catch (err) {
-      status.textContent = '搜索失败：' + (err.message || '网易云接口连不上');
+      status.textContent = '搜索失败：' + (err.message || '接口连不上');
       results.appendChild(el('div', { class: 'mc-fail' }, [
-        el('div', { class: 'small', text: '可以改用「上传本地音频」，或先按教程保存 MUSIC_U 登录信息。' }),
-        el('button', { class: 'btn sm', onclick: openCookieGuide }, ['查看登录教程'])
+        el('div', { class: 'small', text: '稍后再试，或改用「上传本地音频」。' })
       ]));
     } finally {
       btn.disabled = false; btn.textContent = '搜索';
@@ -834,8 +849,7 @@ function openPlaylistImport(prefill = '') {
     } catch (err) {
       status.textContent = '读取失败：' + (err.message || '接口连不上');
       preview.appendChild(el('div', { class: 'mc-fail' }, [
-        el('div', { class: 'small', text: '私密歌单需要登录态；浏览器也可能拦截网易云直连。' }),
-        el('button', { class: 'btn sm', onclick: openCookieGuide }, ['查看 MUSIC_U 教程'])
+        el('div', { class: 'small', text: '公开歌单一般能直接导入；私密歌单可能读取不了。' })
       ]));
     } finally {
       btn.disabled = false; btn.textContent = '读取歌单';
@@ -1136,148 +1150,4 @@ async function taFillPlaylist(pl) {
   await reload();
   paint();
   toast('已放进 ' + picks.length + ' 首');
-}
-
-/* ============================================================
-   网易云登录 / Cookie 教程
-   ============================================================ */
-function openLogin() {
-  const body = el('div', { class: 'mc-login' });
-  const tabs = el('div', { class: 'mail-tabs' });
-  let mode = 'qr';
-  let qrTimer = null;
-
-  const s = sheet({
-    title: '网易云登录',
-    node: el('div', {}, [tabs, body]),
-    onClose: () => { if (qrTimer) { clearInterval(qrTimer); qrTimer = null; } }
-  });
-
-  function render() {
-    tabs.innerHTML = '';
-    [['qr', '扫码登录'], ['cookie', 'Cookie 登录'], ['list', '歌单链接']].forEach(([k, label]) => {
-      tabs.appendChild(el('button', {
-        class: 'mail-tab' + (mode === k ? ' on' : ''), type: 'button',
-        onclick: () => { mode = k; render(); }
-      }, [label]));
-    });
-    body.innerHTML = '';
-    if (mode === 'qr') renderQr();
-    else if (mode === 'cookie') renderCookie();
-    else renderList();
-  }
-
-  function renderQr() {
-    body.appendChild(el('div', { class: 'mc-note', text: '二维码登录需要浏览器直连网易云，可能被跨域限制拦截。若无法获取二维码，请用电脑按教程复制 MUSIC_U。' }));
-    const box = el('div', { class: 'mc-qr' });
-    const status = el('div', { class: 'mc-note', text: '' });
-    const btn = el('button', { class: 'btn sm primary block', onclick: tryQr }, ['获取登录二维码']);
-    body.appendChild(box);
-    body.appendChild(btn);
-    body.appendChild(status);
-    body.appendChild(el('button', { class: 'btn sm block', style: { marginTop: '10px' }, onclick: openCookieGuide }, ['查看 MUSIC_U 教程']));
-
-    async function tryQr() {
-      if (qrTimer) { clearInterval(qrTimer); qrTimer = null; }
-      btn.disabled = true; btn.textContent = '连接中…';
-      status.textContent = '';
-      box.innerHTML = '';
-      try {
-        const key = await createQrKey();
-        box.appendChild(el('img', { class: 'mc-qr-img', src: qrImageURL(key), alt: '网易云登录二维码' }));
-        box.appendChild(el('div', { class: 'mc-note', text: '用网易云音乐 App 扫码并确认' }));
-        status.textContent = '等待扫码…';
-        qrTimer = setInterval(async () => {
-          try {
-            const r = await checkQrKey(key);
-            const code = r && r.code;
-            if (code === 800) { clearInterval(qrTimer); qrTimer = null; status.textContent = '二维码已过期，请重新获取'; }
-            else if (code === 801) status.textContent = '已扫码，请在手机上确认';
-            else if (code === 802) status.textContent = '等待扫码…';
-            else if (code === 803) {
-              clearInterval(qrTimer); qrTimer = null;
-              status.textContent = '已确认登录，但浏览器无法读取登录 Cookie。请改用 Cookie 登录，或按教程手动复制 MUSIC_U。';
-            }
-          } catch {
-            clearInterval(qrTimer); qrTimer = null;
-            status.textContent = '登录状态检查被浏览器拦截，请改用 Cookie 登录。';
-          }
-        }, 2000);
-      } catch (err) {
-        status.textContent = '无法直连网易云：' + (err.message || '浏览器跨域限制');
-      } finally {
-        btn.disabled = false; btn.textContent = '重新获取二维码';
-      }
-    }
-  }
-
-  function renderCookie() {
-    const saved = neteaseCookie;
-    body.appendChild(el('div', { class: 'mc-note', text: '先说实话：当前走的是公共音乐接口，实测不认个人 Cookie——保存后不会显示账号、也不会解锁 VIP 或私密歌单，VIP 歌曲能否播放取决于接口自己的音源池。Cookie 仅作本地备用保存。' }));
-    if (saved) {
-      body.appendChild(el('div', { class: 'mc-cookie-on' }, [
-        el('span', { text: maskCookie(saved) }),
-        el('button', { class: 'mc-link', onclick: async () => {
-          await kvSet('neteaseCookie', '');
-          neteaseCookie = '';
-          setNeteaseCookie('');
-          toast('已清除登录信息');
-          render();
-          paint();
-        } }, ['清除'])
-      ]));
-    }
-    const input = el('input', { class: 'input', placeholder: 'MUSIC_U=… 或只粘贴值', value: '' });
-    body.appendChild(el('div', { class: 'field' }, [el('div', { class: 'field-l', text: 'MUSIC_U' }), input]));
-    body.appendChild(el('button', { class: 'btn sm primary block', onclick: async () => {
-      const cookie = normalizeCookie(input.value);
-      if (!cookie || cookie.replace('MUSIC_U=', '').length < 10) { toast('Cookie 看起来不完整'); return; }
-      await kvSet('neteaseCookie', cookie);
-      neteaseCookie = cookie;
-      setNeteaseCookie(cookie);
-      toast('已保存在本地（接口暂不校验，不解锁 VIP）');
-      render();
-      paint();
-    } }, ['保存登录信息']));
-    body.appendChild(el('button', { class: 'btn sm block', style: { marginTop: '10px' }, onclick: openCookieGuide }, ['查看电脑端复制教程']));
-  }
-
-  function renderList() {
-    const input = el('input', { class: 'input', placeholder: '粘贴网易云歌单链接或歌单 ID' });
-    body.appendChild(el('div', { class: 'mc-note', text: '公开歌单可以直接导入；私密歌单可能需要登录态。' }));
-    body.appendChild(el('div', { class: 'field' }, [el('div', { class: 'field-l', text: '歌单链接' }), input]));
-    body.appendChild(el('button', { class: 'btn sm primary block', onclick: () => {
-      const v = input.value.trim();
-      if (!parsePlaylistId(v)) { toast('没有识别到歌单 ID'); return; }
-      s.close();
-      openPlaylistImport(v);
-    } }, ['读取并导入']));
-  }
-
-  render();
-}
-
-function openCookieGuide() {
-  const steps = [
-    '在电脑浏览器打开 music.163.com，扫码或账号登录。',
-    '登录后按 F12 打开开发者工具，切到「Application / 应用」。',
-    '左侧 Storage → Cookies → https://music.163.com。',
-    '找到名为 MUSIC_U 的一项，复制它的值（只复制值即可）。',
-    '回到这里，打开「登录 → Cookie 登录」粘贴并保存。',
-    '如果列表里没有 MUSIC_U，先退出账号再重新登录。'
-  ];
-  const node = el('div', { class: 'mc-guide' }, [
-    el('div', { class: 'mc-warn', text: '注意：公共接口目前不校验个人 Cookie，保存后不会解锁 VIP / 私密歌单。想让 VIP 歌曲一定能播，暂时只能用「上传音频」放本地文件。' }),
-    el('div', { class: 'mc-note', text: '二维码或浏览器直连网易云被拦截时，这是最稳妥的保存方式。' }),
-    ...steps.map((t, i) => el('div', { class: 'mc-step' }, [
-      el('span', { class: 'mc-step-n', text: String(i + 1) }),
-      el('div', { class: 'mc-step-t', text: t })
-    ])),
-    el('div', { class: 'mc-warn', text: 'Cookie 等同于账号凭证，只保存在本机，不要截图或分享。部分 VIP / 无版权歌曲仍可能无法播放。' })
-  ]);
-  sheet({
-    title: '一起听 · 网易云登录指引',
-    node,
-    actions: [{ label: '知道了', icon: 'IC-MIO-021' }]
-  });
 }
