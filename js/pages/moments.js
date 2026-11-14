@@ -11,7 +11,7 @@ import { all, put, del, kvGet, kvSet } from '../store.js';
 import { saveMedia, mediaURL, probeDuration } from '../media.js';
 import { sheet, actionSheet, confirmBox, toast } from '../ui.js';
 import { openMomentsManage } from '../momentManage.js';
-import { resolveSongUrl, setNeteaseCookie } from '../musicapi.js';
+import { resolveSongUrl } from '../musicapi.js';
 import { maybePickInspiration } from '../inspiration.js';
 import {
   normalizeMoment, scheduleReactions, scheduleReplyBack, scheduleLikeBack,
@@ -529,8 +529,6 @@ function neteasePill(song) {
   let playing = false;
   pill.onclick = async () => {
     if (!url) {
-      const cookie = await kvGet('neteaseCookie', '');
-      setNeteaseCookie(cookie);
       try { url = await resolveSongUrl(song); } catch { url = ''; }
       if (!url) return toast('这首暂时播不了');
       audio.src = url;
