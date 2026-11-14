@@ -129,3 +129,90 @@ export async function resolveSongUrl(song) {
   // Meting 的 url 是 302 重定向到音频文件，<audio> 可以直接播
   return `${METING}?server=netease&type=url&id=${encodeURIComponent(id)}`;
 }
+
+/* ---------- 网易云真登录（NeteaseCloudMusicApi 实例客户端） ----------
+   浏览器无法直连 music.163.com（跨域），登录必须经由一个
+   NeteaseCloudMusicApi 实例（开源项目，可免费部署到 Vercel）。
+   base = 实例根地址（页面内可填写，如 https://your-app.vercel.app）。
+   登录成功后实例把 Cookie 作为 JSON 返回（非 Set-Cookie），前端可保存使用：
+   显示昵称 / 拉取私密歌单 / 用自己账号解析 VIP 歌曲。 */
+
+export async function ncmFetch(base, path, params = {}, cookie = '') {
+  const root = String(base || '').trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//.test(root)) throw new Error('接口地址要以 http(s):// 开头');
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
+  });
+  if (cookie) qs.set('cookie', cookie);
+  const data = await getJSON(`${root}${path}${qs.toString() ? '?' + qs : ''}`, 15000);
+  if (data && typeof data.code === 'number' && data.code !== 200 && data.code !== 301) {
+    throw new Error(data.message || data.msg || `接口返回 code ${data.code}`);
+  }
+  return data;
+}
+
+/** 发送短信验证码（注意：会真的发短信） */
+export async function ncmCaptchaSent(base, phone, ctcode = '86') {
+  await ncmFetch(base, '/captcha/sent', { phone, ctcode, timestamp: Date.now() });
+}
+
+/** 手机号 + 验证码登录，返回 {cookie, profile} */
+export async function ncmLoginCellphone(base, phone, captcha, ctcode = '86') {
+  const d = await ncmFetch(base, '/login/cellphone', { phone, captcha, countrycode: ctcode, timestamp: Date.now() });
+  if (!d.cookie) throw new Error('登录成功但没有拿到凭据');
+  return { cookie: d.cookie, profile: d.profile || null };
+}
+
+export async function ncmQrKey(base) {
+  const d = await ncmFetch(base, '/login/qr/key', { timestamp: Date.now() });
+  return d.data && d.data.unikey;
+}
+
+export async function ncmQrCreate(base, key) {
+  const d = await ncmFetch(base, '/login/qr/create', { key, qrimg: true, timestamp: Date.now() });
+  return d.data || {};
+}
+
+/** 轮询扫码状态：800 过期 / 801 等待 / 802 已扫待确认 / 803 成功（带 cookie） */
+export async function ncmQrCheck(base, key) {
+  const d = await ncmFetch(base, '/login/qr/check', { key, timestamp: Date.now() });
+  return { code: d.code, cookie: d.cookie || '' };
+}
+
+/** 校验 Cookie 有效性，返回 profile 或 null */
+export async function ncmAccount(base, cookie) {
+  const d = await ncmFetch(base, '/user/account', { timestamp: Date.now() }, cookie);
+  return d.profile || null;
+}
+
+/** 账号的歌单列表（含私密歌单） */
+export async function ncmUserPlaylists(base, cookie, uid) {
+  const d = await ncmFetch(base, '/user/playlist', { uid, limit: 30, timestamp: Date.now() }, cookie);
+  return (d.playlist || []).map((p) => ({
+    id: p.id, name: p.name, trackCount: p.trackCount,
+    cover: p.coverImgUrl || '', userId: p.userId
+  }));
+}
+
+/** 歌单内歌曲（登录后可读私密歌单） */
+export async function ncmPlaylistTracks(base, cookie, id) {
+  const d = await ncmFetch(base, '/playlist/track/all', { id, limit: 300, timestamp: Date.now() }, cookie);
+  return (d.songs || []).map((t) => ({
+    neteaseId: String(t.id || ''),
+    title: t.name || '未命名',
+    artist: artists((t.ar || []).map((a) => a.name)),
+    album: (t.al && t.al.name) || '',
+    cover: (t.al && t.al.picUrl) || '',
+    duration: Math.round((t.dt || 0) / 1000),
+    source: 'netease',
+    vip: t.fee === 1
+  })).filter((t) => t.neteaseId);
+}
+
+/** 用登录账号解析播放地址（VIP 歌曲可用账号权益），失败/无版权返回 '' */
+export async function ncmSongUrl(base, cookie, id, level = 'standard') {
+  const d = await ncmFetch(base, '/song/url/v1', { id, level, realIP: '116.25.146.177', timestamp: Date.now() }, cookie);
+  const item = (d.data || [])[0];
+  return (item && item.url) || '';
+}

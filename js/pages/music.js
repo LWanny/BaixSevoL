@@ -15,7 +15,9 @@ import { saveMedia, mediaURL, delMedia } from '../media.js';
 import { actionSheet, confirmBox, sheet, toast, topBanner } from '../ui.js';
 import { eligible, drawCards, joinFragments } from '../engine.js';
 import {
-  searchNetease, fetchPlaylist, resolveSongUrl, parsePlaylistId
+  searchNetease, fetchPlaylist, resolveSongUrl, parsePlaylistId,
+  ncmCaptchaSent, ncmLoginCellphone, ncmQrKey, ncmQrCreate, ncmQrCheck,
+  ncmAccount, ncmUserPlaylists, ncmPlaylistTracks, ncmSongUrl
 } from '../musicapi.js';
 
 let view = null;
@@ -41,6 +43,9 @@ let togetherTimer = null;
 let taBusy = false;
 let alive = false;           // 页面存活标志：离开后丢弃所有未完成的异步渲染
 let recentPlays = [];        // 近期播放 [{id, ts}]，最新在前，上限 50
+let ncmBase = '';            // 网易云 API 实例地址（自部署或公共）
+let ncmCookie = '';          // 登录凭据（实例返回的完整 cookie 串）
+let ncmProfile = null;       // 登录账号资料 {nickname, avatarUrl, userId...}
 let cleanups = [];
 
 export default async function pageMusic(v) {
@@ -73,6 +78,9 @@ export default async function pageMusic(v) {
   await reload();
   together = !!(await kvGet('musicTogether', false));
   recentPlays = (await kvGet('recentPlays')) || [];
+  ncmBase = (await kvGet('ncmBase', '')) || '';
+  ncmCookie = (await kvGet('ncmCookie', '')) || '';
+  ncmProfile = (await kvGet('ncmProfile', null)) || null;
   if (!alive) return;                          // 等待期间已离开页面：别把 DOM 画回去
   paint();
   if (together) startTogetherLoop();
@@ -143,8 +151,148 @@ function cloudCard() {
       el('button', { class: 'mc-act', onclick: () => openSearch() }, [iconImg('IC-CRD-010'), '搜索歌曲']),
       el('button', { class: 'mc-act', onclick: () => openPlaylistImport() }, [iconImg('IC-MIO-022'), '导入歌单']),
       el('button', { class: 'mc-act', onclick: addByFile }, [iconImg('IC-MIO-010'), '上传音频'])
-    ])
+    ]),
+    loginRow()
   ]);
+}
+
+/* 登录状态行：未登录引导，已登录显示昵称 */
+function loginRow() {
+  if (ncmCookie && ncmProfile) {
+    return el('div', { class: 'mc-cloud-foot' }, [
+      el('span', { text: `网易云已登录：${ncmProfile.nickname || '账号'} · VIP 歌曲用你的账号解析` }),
+      el('button', { class: 'mc-link', onclick: logoutNcm }, ['退出'])
+    ]);
+  }
+  return el('div', { class: 'mc-cloud-foot' }, [
+    el('span', { text: '登录网易云后可用自己的账号解 VIP、导私密歌单' }),
+    el('button', { class: 'mc-link', onclick: openLoginSheet }, ['登录'])
+  ]);
+}
+
+async function logoutNcm() {
+  ncmCookie = '';
+  ncmProfile = null;
+  await kvSet('ncmCookie', '');
+  await kvSet('ncmProfile', null);
+  toast('已退出网易云登录');
+  paint();
+}
+
+/* ---------------- 网易云登录（手机验证码 / 扫码） ---------------- */
+const NCM_PRESETS = [
+  { label: '公共实例 A（vercel）', url: 'https://neteasecloudmusicapi-main-api.vercel.app' },
+  { label: '公共实例 B（vercel）', url: 'https://netease-cloud-music-api-beryl.vercel.app' }
+];
+
+function openLoginSheet() {
+  const status = el('div', { class: 'mc-note', text: ncmBase ? '接口地址已配置，可以直接登录。' : '先填接口地址：这是登录的中转服务，需要自己免费部署一份（约 5 分钟），或试试内置公共地址。' });
+
+  const baseInput = el('input', { class: 'input', placeholder: 'https://你的实例.vercel.app', value: ncmBase });
+  const saveBaseBtn = el('button', { class: 'btn sm', onclick: async () => {
+    const v = baseInput.value.trim().replace(/\/+$/, '');
+    if (!/^https?:\/\//.test(v)) { toast('地址要以 http(s):// 开头'); return; }
+    ncmBase = v;
+    await kvSet('ncmBase', v);
+    status.textContent = '接口地址已保存，可以登录了。';
+    toast('接口地址已保存');
+  } }, ['保存地址']);
+  const presetRow = el('div', { class: 'seg-row' });
+  NCM_PRESETS.forEach((p) => {
+    presetRow.appendChild(el('button', { class: 'chip', type: 'button', onclick: () => { baseInput.value = p.url; } }, [p.label]));
+  });
+
+  /* 手机验证码登录 */
+  const phoneInput = el('input', { class: 'input', inputmode: 'numeric', maxLength: 11, placeholder: '网易云绑定的手机号' });
+  const captchaInput = el('input', { class: 'input', inputmode: 'numeric', maxLength: 6, placeholder: '短信验证码' });
+  const sendBtn = el('button', { class: 'btn sm', onclick: async () => {
+    const phone = phoneInput.value.trim();
+    if (!/^1\d{10}$/.test(phone)) { toast('手机号格式不对'); return; }
+    if (!ncmBase) { toast('先保存接口地址'); return; }
+    sendBtn.disabled = true; sendBtn.textContent = '发送中…';
+    try {
+      await ncmCaptchaSent(ncmBase, phone);
+      toast('验证码已发送，注意查收短信');
+    } catch (err) {
+      toast('发送失败：' + (err.message || '实例连不上'));
+    } finally {
+      sendBtn.disabled = false; sendBtn.textContent = '发验证码';
+    }
+  } }, ['发验证码']);
+  const loginBtn = el('button', { class: 'btn sm primary', onclick: async () => {
+    const phone = phoneInput.value.trim();
+    const captcha = captchaInput.value.trim();
+    if (!ncmBase) { toast('先保存接口地址'); return; }
+    if (!/^1\d{10}$/.test(phone) || !captcha) { toast('填好手机号和验证码'); return; }
+    loginBtn.disabled = true; loginBtn.textContent = '登录中…';
+    try {
+      const { cookie, profile } = await ncmLoginCellphone(ncmBase, phone, captcha);
+      ncmCookie = cookie;
+      ncmProfile = profile || (await ncmAccount(ncmBase, cookie));
+      await kvSet('ncmCookie', cookie);
+      await kvSet('ncmProfile', ncmProfile);
+      toast(`登录成功：${(ncmProfile && ncmProfile.nickname) || '账号'}`);
+      s.close();
+      paint();
+    } catch (err) {
+      toast('登录失败：' + (err.message || '实例连不上'));
+      loginBtn.disabled = false; loginBtn.textContent = '登录';
+    }
+  } }, ['登录']);
+
+  /* 扫码登录（电脑上用更方便） */
+  const qrBox = el('div', { class: 'mc-qr' });
+  const qrBtn = el('button', { class: 'btn sm block', onclick: async () => {
+    if (!ncmBase) { toast('先保存接口地址'); return; }
+    qrBtn.disabled = true;
+    qrBox.innerHTML = '';
+    qrBox.appendChild(el('div', { class: 'mc-note', text: '正在生成二维码…' }));
+    try {
+      const key = await ncmQrKey(ncmBase);
+      const { qrimg } = await ncmQrCreate(ncmBase, key);
+      qrBox.innerHTML = '';
+      if (!qrimg) throw new Error('实例没有返回二维码');
+      qrBox.appendChild(el('img', { class: 'mc-qr-img', src: qrimg, alt: '网易云登录二维码' }));
+      const tip = el('div', { class: 'mc-note', text: '用网易云音乐 App 扫码并确认' });
+      qrBox.appendChild(tip);
+      const poll = setInterval(async () => {
+        if (!alive || !ncmBase || !key) { clearInterval(poll); return; }
+        try {
+          const r = await ncmQrCheck(ncmBase, key);
+          if (r.code === 802) tip.textContent = '已扫码，请在手机上确认';
+          if (r.code === 800) { clearInterval(poll); tip.textContent = '二维码过期了，重新点「扫码登录」'; qrBtn.disabled = false; }
+          if (r.code === 803 && r.cookie) {
+            clearInterval(poll);
+            ncmCookie = r.cookie;
+            ncmProfile = await ncmAccount(ncmBase, r.cookie);
+            await kvSet('ncmCookie', r.cookie);
+            await kvSet('ncmProfile', ncmProfile);
+            toast(`登录成功：${(ncmProfile && ncmProfile.nickname) || '账号'}`);
+            s.close();
+            paint();
+          }
+        } catch { /* 网络抖动，继续轮询 */ }
+      }, 3000);
+      cleanups.push(() => clearInterval(poll));
+    } catch (err) {
+      qrBox.innerHTML = '';
+      qrBox.appendChild(el('div', { class: 'mc-note', text: '生成失败：' + (err.message || '实例连不上') }));
+      qrBtn.disabled = false;
+    }
+  } }, ['扫码登录']);
+
+  const body = el('div', {}, [
+    el('div', { class: 'field' }, [el('div', { class: 'field-l', text: '网易云接口地址' }), baseInput, el('div', { class: 'tiny muted', style: { marginTop: '6px' }, text: '部署方法：GitHub 搜索 NeteaseCloudMusicApi 的存活 fork → Vercel 免费部署 → 把地址填到这里。实例只做中转，Cookie 保存在本机。' }), presetRow]),
+    saveBaseBtn,
+    el('div', { class: 'sec-sub', text: '手机验证码登录' }),
+    el('div', { class: 'row' }, [phoneInput, sendBtn]),
+    el('div', { class: 'field', style: { marginTop: '8px' } }, [captchaInput]),
+    loginBtn,
+    el('div', { class: 'sec-sub', text: '扫码登录' }),
+    qrBtn, qrBox, status
+  ]);
+
+  const s = sheet({ title: '登录网易云', node: body });
 }
 
 function taBar() {
@@ -368,6 +516,10 @@ function playerBar() {
 async function play(s) {
   let src = '';
   if (s.mediaId) src = await mediaURL(s.mediaId);
+  /* 已登录网易云 → 优先用自己的账号解析（能解出 VIP 歌） */
+  if (!src && ncmCookie && ncmBase && s.neteaseId) {
+    try { src = await ncmSongUrl(ncmBase, ncmCookie, s.neteaseId, 'standard'); } catch { src = ''; }
+  }
   if (!src) src = await resolveSongUrl(s);
   if (!src) {
     toast(s.source === 'netease' ? `「${s.title || '这首歌'}」暂时没有音源（无版权或接口未收录）` : '这首歌没有可用的播放地址');
@@ -809,11 +961,12 @@ function openPlaylistImport(prefill = '') {
   const status = el('div', { class: 'mc-note', text: '支持网易云歌单链接或直接粘贴歌单 ID。' });
   const preview = el('div', { class: 'mc-import-preview' });
   const btn = el('button', { class: 'btn sm primary block', onclick: load }, ['读取歌单']);
+  const mineBox = el('div', { class: 'mc-mine' });
 
   const s = sheet({ title: '导入网易云歌单', node: el('div', {}, [
     el('div', { class: 'field' }, [el('div', { class: 'field-l', text: '歌单链接' }), input]),
     el('div', { class: 'field' }, [el('div', { class: 'field-l', text: '放进' }), ownerRow]),
-    btn, status, preview
+    btn, status, preview, mineBox
   ]) });
 
   function paintOwner() {
@@ -827,6 +980,54 @@ function openPlaylistImport(prefill = '') {
   }
   paintOwner();
 
+  function showPreview(pl) {
+    status.textContent = `《${pl.name}》· ${pl.tracks.length} 首`;
+    const list = el('div', { class: 'mc-import-list' });
+    pl.tracks.slice(0, 6).forEach((t, i) => {
+      list.appendChild(el('div', { class: 'mc-import-line', text: `${i + 1}. ${t.title}${t.artist ? ' · ' + t.artist : ''}` }));
+    });
+    if (pl.tracks.length > 6) list.appendChild(el('div', { class: 'mc-note', text: `…还有 ${pl.tracks.length - 6} 首` }));
+    preview.innerHTML = '';
+    preview.appendChild(list);
+    preview.appendChild(el('button', { class: 'btn sm primary block', onclick: async () => {
+      await importPlaylist(pl, owner.v);
+      s.close();
+    } }, [`导入到${owner.v === 'ta' ? ' TA 的' : '我的'}歌单`]));
+  }
+
+  /* 已登录 → 列出「我的网易云歌单」，点一下整单读取 */
+  if (ncmCookie && ncmBase && ncmProfile) {
+    mineBox.appendChild(el('div', { class: 'field-l', text: '我的网易云歌单' }));
+    const listBox = el('div', { class: 'mc-import-list' }, [el('div', { class: 'mc-note', text: '正在读取…' })]);
+    mineBox.appendChild(listBox);
+    ncmUserPlaylists(ncmBase, ncmCookie, ncmProfile.userId).then((list) => {
+      if (!alive) return;
+      listBox.innerHTML = '';
+      if (!list.length) { listBox.appendChild(el('div', { class: 'mc-note', text: '账号下还没有歌单' })); return; }
+      list.forEach((p) => {
+        listBox.appendChild(el('button', {
+          class: 'mc-import-line as-btn', type: 'button', onclick: () => loadMine(p)
+        }, [`${p.name} · ${p.trackCount} 首`]));
+      });
+    }).catch((err) => {
+      if (!alive) return;
+      listBox.innerHTML = '';
+      listBox.appendChild(el('div', { class: 'mc-note', text: '我的歌单读取失败：' + (err.message || '实例连不上') }));
+    });
+  }
+
+  async function loadMine(p) {
+    status.textContent = `正在读取《${p.name}》…`;
+    preview.innerHTML = '';
+    try {
+      const tracks = await ncmPlaylistTracks(ncmBase, ncmCookie, p.id);
+      if (!tracks.length) { status.textContent = `《${p.name}》里没有歌`; return; }
+      showPreview({ name: p.name, tracks });
+    } catch (err) {
+      status.textContent = '读取失败：' + (err.message || '实例连不上');
+    }
+  }
+
   async function load() {
     const id = parsePlaylistId(input.value);
     if (!id) { toast('没有识别到歌单 ID'); return; }
@@ -835,17 +1036,7 @@ function openPlaylistImport(prefill = '') {
     preview.innerHTML = '';
     try {
       const pl = await fetchPlaylist(id);
-      status.textContent = `《${pl.name}》· ${pl.tracks.length} 首`;
-      const list = el('div', { class: 'mc-import-list' });
-      pl.tracks.slice(0, 6).forEach((t, i) => {
-        list.appendChild(el('div', { class: 'mc-import-line', text: `${i + 1}. ${t.title}${t.artist ? ' · ' + t.artist : ''}` }));
-      });
-      if (pl.tracks.length > 6) list.appendChild(el('div', { class: 'mc-note', text: `…还有 ${pl.tracks.length - 6} 首` }));
-      preview.appendChild(list);
-      preview.appendChild(el('button', { class: 'btn sm primary block', onclick: async () => {
-        await importPlaylist(pl, owner.v);
-        s.close();
-      } }, [`导入到${owner.v === 'ta' ? ' TA 的' : '我的'}歌单`]));
+      showPreview(pl);
     } catch (err) {
       status.textContent = '读取失败：' + (err.message || '接口连不上');
       preview.appendChild(el('div', { class: 'mc-fail' }, [
