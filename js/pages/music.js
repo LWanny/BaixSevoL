@@ -134,8 +134,8 @@ function cloudCard() {
     el('div', { class: 'mc-cloud-h' }, [
       el('div', { class: 'mc-cloud-ic' }, [iconImg('IC-MIO-016')]),
       el('div', { class: 'mc-cloud-main' }, [
-        el('div', { class: 'mc-cloud-t', text: logged ? '网易云 · 已保存登录信息' : '网易云 · 匿名可用' }),
-        el('div', { class: 'mc-cloud-s', text: logged ? maskCookie(cookie) : '可搜索、导入公开歌单；VIP 歌曲可能无法播放' })
+        el('div', { class: 'mc-cloud-t', text: '网易云 · 在线曲库' }),
+        el('div', { class: 'mc-cloud-s', text: logged ? maskCookie(cookie) + '（仅本地备用，接口暂不校验登录态）' : '搜索、导入歌单、试听不受登录影响；部分 VIP / 无版权歌曲没有音源' })
       ]),
       el('button', { class: 'btn sm' + (logged ? '' : ' primary'), onclick: openLogin }, [logged ? '账号' : '登录'])
     ]),
@@ -358,13 +358,24 @@ async function play(s) {
   if (s.mediaId) src = await mediaURL(s.mediaId);
   if (!src) src = await resolveSongUrl(s);
   if (!src) {
-    toast(s.source === 'netease' ? '这首歌暂时没有可播放地址，可能需要 VIP 或已下架' : '这首歌没有可用的播放地址');
+    toast(s.source === 'netease' ? `「${s.title || '这首歌'}」暂时没有音源（无版权或接口未收录）` : '这首歌没有可用的播放地址');
     return;
   }
   cur = s;
   if (!audio) audio = new Audio();
+  audio.onerror = () => {
+    if (cur !== s) return;                       // 已经切到别的歌，不重复报错
+    toast(`「${s.title || '这首歌'}」加载失败了，地址可能过期或网络不稳，试试别的歌`);
+    refreshPlayer();
+  };
   audio.src = src;
-  try { await audio.play(); } catch { toast('浏览器拦住了自动播放，点一下播放键'); }
+  try {
+    await audio.play();
+  } catch (err) {
+    toast(err && err.name === 'NotAllowedError'
+      ? '浏览器拦住了自动播放，点一下播放键'
+      : `「${s.title || '这首歌'}」没能播出来，可能没有音源`);
+  }
   renderList(view.querySelector('.music-list'));
   refreshPlayer();
 }
@@ -1129,7 +1140,7 @@ function openLogin() {
 
   function renderCookie() {
     const saved = neteaseCookie;
-    body.appendChild(el('div', { class: 'mc-note', text: '在电脑浏览器登录网易云后，从开发者工具里复制 MUSIC_U。Cookie 只保存在本机，请不要发给别人。' }));
+    body.appendChild(el('div', { class: 'mc-note', text: '先说实话：当前走的是公共音乐接口，实测不认个人 Cookie——保存后不会显示账号、也不会解锁 VIP 或私密歌单，VIP 歌曲能否播放取决于接口自己的音源池。Cookie 仅作本地备用保存。' }));
     if (saved) {
       body.appendChild(el('div', { class: 'mc-cookie-on' }, [
         el('span', { text: maskCookie(saved) }),
@@ -1151,7 +1162,7 @@ function openLogin() {
       await kvSet('neteaseCookie', cookie);
       neteaseCookie = cookie;
       setNeteaseCookie(cookie);
-      toast('登录信息已保存在本地');
+      toast('已保存在本地（接口暂不校验，不解锁 VIP）');
       render();
       paint();
     } }, ['保存登录信息']));
@@ -1183,7 +1194,8 @@ function openCookieGuide() {
     '如果列表里没有 MUSIC_U，先退出账号再重新登录。'
   ];
   const node = el('div', { class: 'mc-guide' }, [
-    el('div', { class: 'mc-note', text: '二维码或浏览器直连网易云被拦截时，这是最稳妥的登录方式。' }),
+    el('div', { class: 'mc-warn', text: '注意：公共接口目前不校验个人 Cookie，保存后不会解锁 VIP / 私密歌单。想让 VIP 歌曲一定能播，暂时只能用「上传音频」放本地文件。' }),
+    el('div', { class: 'mc-note', text: '二维码或浏览器直连网易云被拦截时，这是最稳妥的保存方式。' }),
     ...steps.map((t, i) => el('div', { class: 'mc-step' }, [
       el('span', { class: 'mc-step-n', text: String(i + 1) }),
       el('div', { class: 'mc-step-t', text: t })

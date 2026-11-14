@@ -7,7 +7,9 @@
 const GD = 'https://music-api.gdstudio.xyz/api.php';
 const METING = 'https://api.injahow.cn/meting/';
 
-/* 登录 Cookie 由页面在读取 IndexedDB 后注入，公共接口会带上它尝试读取登录态歌曲 */
+/* 登录 Cookie 由页面在读取 IndexedDB 后注入，公共接口会带上它尝试读取登录态歌曲。
+   ⚠ 实测（2026-11）GD 接口不校验 cookie 参数——真/假 cookie 返回完全一致，
+   登录态因此只是本地保存，不会解锁 VIP / 私密歌单。参数保留以兼容未来接口。 */
 let _cookie = '';
 export function setNeteaseCookie(v) { _cookie = String(v || ''); }
 const withCookie = (url) => (_cookie ? url + '&cookie=' + encodeURIComponent(_cookie) : url);
@@ -111,7 +113,7 @@ export async function fetchPlaylist(id) {
   return { id: pid, name: '网易云歌单 ' + pid, cover: '', trackCount: tracks.length, tracks };
 }
 
-/** 解析播放地址：部分 VIP / 无版权歌曲会返回空 */
+/** 解析播放地址：GD 128k → GD 320k → Meting 兜底；无版权 / 接口未收录的歌可能全部落空 */
 export async function resolveSongUrl(song) {
   if (!song) return '';
   if (song.url) return song.url;
@@ -121,9 +123,14 @@ export async function resolveSongUrl(song) {
   try {
     const data = await getJSON(withCookie(`${GD}?types=url&source=netease&id=${encodeURIComponent(id)}&br=128`));
     if (data && data.url) return data.url;
-  } catch { /* 继续用 Meting 兜底 */ }
+  } catch { /* 换 320k 再试 */ }
 
-  // Meting 的 url 本身就是可播放的重定向地址
+  try {
+    const data = await getJSON(withCookie(`${GD}?types=url&source=netease&id=${encodeURIComponent(id)}&br=320`));
+    if (data && data.url) return data.url;
+  } catch { /* 用 Meting 兜底 */ }
+
+  // Meting 的 url 是 302 重定向到音频文件，<audio> 可以直接播
   return `${METING}?server=netease&type=url&id=${encodeURIComponent(id)}`;
 }
 
