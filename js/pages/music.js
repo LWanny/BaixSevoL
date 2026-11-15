@@ -22,7 +22,7 @@ import {
 } from '../musicapi.js';
 
 /* 版本标记：出问题时把下面的 toast 截图，就能确认跑的是不是最新版 */
-const BUILD = '20261115d';
+const BUILD = '20261115e';
 
 let view = null;
 let songs = [];
@@ -50,6 +50,9 @@ let recentPlays = [];        // 近期播放 [{id, ts}]，最新在前，上限 
 let ncmBase = '';            // 网易云 API 实例地址（自部署或公共）
 let ncmCookie = '';          // 登录凭据（实例返回的完整 cookie 串）
 let ncmProfile = null;       // 登录账号资料 {nickname, avatarUrl, userId...}
+let srcQueue = [];           // 当前歌曲的候选音源（播放器级自动换源）
+let srcIdx = -1;
+let srcGuard = null;
 let cleanups = [];
 
 export default async function pageMusic(v) {
@@ -72,6 +75,7 @@ export default async function pageMusic(v) {
   audio.addEventListener('ended', () => next());
   audio.addEventListener('play', paintControls);
   audio.addEventListener('pause', paintControls);
+  audio.addEventListener('playing', clearSrcGuard);
 
   await reload();
   together = !!(await kvGet('musicTogether', false));
@@ -92,6 +96,9 @@ async function reload() {
 
 function cleanup() {
   alive = false;
+  clearSrcGuard();
+  srcQueue = [];
+  srcIdx = -1;
   cleanups.forEach((f) => { try { f(); } catch { /* ignore */ } });
   cleanups = [];
   if (togetherTimer) { clearInterval(togetherTimer); togetherTimer = null; }
@@ -613,13 +620,12 @@ function probeDetail(url, ms = 7000) {
   });
 }
 
-function probeAudio(url, ms = 7000) {
-  return probeDetail(url, ms).then((r) => r.ok);
-}
+/* 最近一次播放失败的音源清单，诊断弹层里会展示 */
+let lastFail = '';
 
 /** 播放诊断：给手机上排查用（扬声器 / 音源 / 环境） */
 function openPlayDiag() {
-  const out = el('pre', { class: 'mc-diag-out', text: '准备中…' });
+  const out = el('pre', { class: 'mc-diag-out', text: lastFail ? lastFail + '\n\n' : '准备中…' });
   const log = (line) => { out.textContent += '\n' + line; };
   const body = el('div', {}, [
     el('div', { class: 'mc-note', text: '先点「测扬声器」听有没有短促的嘀声；再点「测音源」看每个地址的真实结果。截图发我即可。' }),
@@ -693,27 +699,24 @@ async function play(s) {
 }
 
 async function playInner(s) {
-  let src = '';
-  if (s.mediaId) src = await mediaURL(s.mediaId);
-  /* 在线歌：实例/公共接口给出多个候选，逐个探测，能出音频帧的才播
-     （http 地址在 https 页面会被浏览器拦成「播放中但没声音」） */
-  if (!src && s.neteaseId) {
-    const deadline = Date.now() + 12000;         // 探测总时长上限，别让用户干等
-    let first = '';
+  /* 收集候选地址：本地音频 → 实例 → 网易外链 → 公共接口
+     不再逐条"预探测"（探测通过不等于能播），直接交给播放器，失败自动换下一个 */
+  let list = [];
+  if (s.mediaId) {
+    const u = await mediaURL(s.mediaId);
+    if (u) list = [u];
+  } else if (s.neteaseId) {
+    const deadline = Date.now() + 12000;
     for await (const u of songSources(s, { base: ncmBase, cookie: ncmCookie })) {
-      if (!alive) return;
-      if (!first) first = u;
-      if (await probeAudio(u)) { src = u; break; }
-      if (Date.now() > deadline) break;
+      list.push(u);
+      if (Date.now() > deadline || list.length >= 6) break;
     }
-    /* 少数手机不触发 canplay（只在实际播放时才拉流），探测全败也交给播放器试一次 */
-    if (!src) src = first;
   }
-  if (!src) {
+  if (!alive) return;
+  if (!list.length) {
     toast(s.source === 'netease' ? `「${s.title || '这首歌'}」暂时没有音源（可能需要 VIP 或已下架）· ${BUILD}` : '这首歌没有可用的播放地址 · ' + BUILD);
     return;
   }
-  if (!alive) return;                            // 探测期间已离开页面：别在后台起播
   cur = s;
   /* 近期播放：仅记录歌单里的歌（搜索草稿没有本地 id） */
   if (s.id) {
@@ -721,21 +724,54 @@ async function playInner(s) {
     kvSet('recentPlays', recentPlays).catch(() => {});
   }
   if (!audio) audio = new Audio();
-  audio.onerror = () => {
-    if (cur !== s) return;                       // 已经切到别的歌，不重复报错
-    toast(`「${s.title || '这首歌'}」加载失败了，地址可能过期或网络不稳，试试别的歌`);
-    refreshPlayer();
-  };
-  audio.src = src;
-  try {
-    await audio.play();
-  } catch (err) {
-    toast(err && err.name === 'NotAllowedError'
-      ? '浏览器拦住了自动播放，点一下播放键'
-      : `「${s.title || '这首歌'}」没能播出来，可能没有音源`);
-  }
+  audio.preload = 'auto';
+  srcQueue = list;
+  srcIdx = -1;
+  trySource(0);
   renderList(view.querySelector('.music-list'));
   refreshPlayer();
+}
+
+/* 播放器级自动换源：当前地址报错或迟迟没有可播数据，就换下一个候选 */
+function trySource(i) {
+  if (!audio) return;
+  clearSrcGuard();
+  if (i >= srcQueue.length) {
+    lastFail = '上次播放尝试（全部失败）：\n' + srcQueue.map((u, n) => {
+      let h = u;
+      try { h = new URL(u).host + new URL(u).pathname.slice(0, 24); } catch { /* ignore */ }
+      return `#${n + 1} ${h}`;
+    }).join('\n');
+    toast(`这首歌暂时放不出来（已试 ${srcQueue.length} 个音源），可点「播放诊断」查看详情 · ${BUILD}`);
+    refreshPlayer();
+    return;
+  }
+  srcIdx = i;
+  const u = srcQueue[i];
+  audio.onerror = () => { if (i === srcIdx) trySource(i + 1); };
+  audio.src = u;
+  const p = audio.play();
+  if (p && p.catch) {
+    p.catch((err) => {
+      if (i !== srcIdx) return;
+      if (err && err.name === 'NotAllowedError') {
+        toast('浏览器拦住了自动播放，点一下播放键 · ' + BUILD);
+        refreshPlayer();
+        return;
+      }
+      trySource(i + 1);
+    });
+  }
+  /* 看门狗：8 秒内既没有可播数据也没走进度，就认为这个地址不通 */
+  srcGuard = setTimeout(() => {
+    if (i !== srcIdx || cur === null) return;
+    if (audio.readyState >= 2 || audio.currentTime > 0.3) return;
+    trySource(i + 1);
+  }, 8000);
+}
+
+function clearSrcGuard() {
+  if (srcGuard) { clearTimeout(srcGuard); srcGuard = null; }
 }
 
 function togglePlay() {
