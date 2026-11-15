@@ -26,6 +26,9 @@ const todayMood = () => {
   return MOODS[seed % MOODS.length];
 };
 
+/* 上次停留的主屏页码：进应用再返回时回到这一页，而不是跳回第一页 */
+let homePageIdx = 0;
+
 /* 应用入口：每个都是一个可单独移动的「软件图标」小组件 */
 const APPS = [
   { path: '/chat',    label: '消息',     icon: 'IC-NAV-002', badge: 'unread' },
@@ -297,7 +300,9 @@ export default async function pageHome(view) {
 
     const pager = makePager(area, pageEls, {
       indicator: false,
+      initialIndex: homePageIdx,
       onIndexChange: (idx) => {
+        homePageIdx = idx;
         dots.querySelectorAll('.dot').forEach((d, k) => d.classList.toggle('on', k === idx));
         const wm = (pages[idx] && pages[idx].wm) || null;
         if (curWm && curWm !== wm && curWm.isEditing()) curWm.setEditing(false);
