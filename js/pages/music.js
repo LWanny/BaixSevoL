@@ -15,9 +15,9 @@ import { saveMedia, mediaURL, delMedia } from '../media.js';
 import { actionSheet, confirmBox, sheet, toast, topBanner } from '../ui.js';
 import { eligible, drawCards, joinFragments } from '../engine.js';
 import {
-  searchNetease, fetchPlaylist, resolveSongUrl, parsePlaylistId,
+  searchNetease, fetchPlaylist, songSources, parsePlaylistId,
   ncmCaptchaSent, ncmLoginCellphone, ncmQrKey, ncmQrCreate, ncmQrCheck,
-  ncmAccount, ncmUserPlaylists, ncmPlaylistTracks, ncmSongUrl,
+  ncmAccount, ncmUserPlaylists, ncmPlaylistTracks,
   ncmSearch, ncmPlaylist
 } from '../musicapi.js';
 
@@ -69,12 +69,6 @@ export default async function pageMusic(v) {
   audio.addEventListener('ended', () => next());
   audio.addEventListener('play', paintControls);
   audio.addEventListener('pause', paintControls);
-  audio.addEventListener('error', () => {
-    if (!cur) return;
-    toast(cur.source === 'netease'
-      ? '这首歌暂时无法播放，可能需要 VIP 或已下架'
-      : '这段音频无法播放，文件可能已损坏');
-  });
 
   await reload();
   together = !!(await kvGet('musicTogether', false));
@@ -591,18 +585,45 @@ function playerBar() {
   ]);
 }
 
+/* 真·可播探测：能出可播帧（canplay）才算成功。
+   音源地址常常是 200 HTML、403、或 http 混合内容，直接塞给 <audio> 会「显示在播但没声音」 */
+function probeAudio(url, ms = 7000) {
+  return new Promise((resolve) => {
+    const a = new Audio();
+    let settled = false;
+    const done = (ok) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      a.oncanplay = null;
+      a.onerror = null;
+      try { a.src = ''; } catch { /* ignore */ }
+      resolve(ok);
+    };
+    const timer = setTimeout(() => done(false), ms);
+    a.preload = 'auto';
+    a.oncanplay = () => done(true);
+    a.onerror = () => done(false);
+    a.src = url;
+    try { a.load(); } catch { done(false); }
+  });
+}
+
 async function play(s) {
   let src = '';
   if (s.mediaId) src = await mediaURL(s.mediaId);
-  /* 已登录网易云 → 优先用自己的账号解析（能解出 VIP 歌） */
-  if (!src && ncmCookie && ncmBase && s.neteaseId) {
-    try { src = await ncmSongUrl(ncmBase, ncmCookie, s.neteaseId, 'standard'); } catch { src = ''; }
+  /* 在线歌：实例/公共接口给出多个候选，逐个探测，能出音频帧的才播
+     （http 地址在 https 页面会被浏览器拦成「播放中但没声音」） */
+  if (!src && s.neteaseId) {
+    for await (const u of songSources(s, { base: ncmBase, cookie: ncmCookie })) {
+      if (await probeAudio(u)) { src = u; break; }
+    }
   }
-  if (!src) src = await resolveSongUrl(s);
   if (!src) {
-    toast(s.source === 'netease' ? `「${s.title || '这首歌'}」暂时没有音源（无版权或接口未收录）` : '这首歌没有可用的播放地址');
+    toast(s.source === 'netease' ? `「${s.title || '这首歌'}」暂时没有音源（可能需要 VIP 或已下架）` : '这首歌没有可用的播放地址');
     return;
   }
+  if (!alive) return;                            // 探测期间已离开页面：别在后台起播
   cur = s;
   /* 近期播放：仅记录歌单里的歌（搜索草稿没有本地 id） */
   if (s.id) {

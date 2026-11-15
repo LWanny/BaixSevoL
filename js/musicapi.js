@@ -108,26 +108,48 @@ export async function fetchPlaylist(id) {
   return { id: pid, name: '在线歌单 ' + pid, cover: '', trackCount: tracks.length, tracks };
 }
 
-/** 解析播放地址：GD 128k → GD 320k → Meting 兜底。
-    VIP / 无版权的歌可能三级全空（GD 返回 url:""）→ 返回 '' 由页面提示无音源。 */
-export async function resolveSongUrl(song) {
-  if (!song) return '';
-  if (song.url) return song.url;
+/** 音频地址统一升级成 https：线上页面是 https，http 音频会被浏览器当混合内容拦掉
+   （表现就是「点了播放、进度不动、没声音」） */
+export const toHttps = (u) => String(u || '').replace(/^http:\/\//i, 'https://');
+
+/** 依次产出音源候选：本地 url → 自建实例 → GD → Meting。
+    用生成器逐个给，页面探测到一个能播的就立刻停，不用等全部解析完。 */
+export async function* songSources(song, { base = '', cookie = '' } = {}) {
+  const seen = new Set();
+  const emit = (u) => {
+    const v = toHttps(u);
+    if (!v || seen.has(v)) return null;
+    seen.add(v);
+    return v;
+  };
+  if (!song) return;
+  let u = emit(song.url);
+  if (u) yield u;
   const id = song.neteaseId;
-  if (!id) return '';
+  if (!id) return;
 
-  try {
-    const data = await getJSON(`${GD}?types=url&source=netease&id=${encodeURIComponent(id)}&br=128`);
-    if (data && data.url) return data.url;
-  } catch { /* 换 320k 再试 */ }
+  /* 自建实例不需要登录也能解大部分非 VIP 歌，且不受公共接口被墙影响 */
+  if (base) {
+    try {
+      u = emit(await ncmSongUrl(base, cookie, id, cookie ? 'exhigh' : 'standard'));
+      if (u) yield u;
+    } catch { /* 实例不通就跳过 */ }
+  }
+  for (const br of [320, 128]) {
+    try {
+      const d = await getJSON(`${GD}?types=url&source=netease&id=${encodeURIComponent(id)}&br=${br}`);
+      u = emit(d && d.url);
+      if (u) yield u;
+    } catch { /* 换下一档 */ }
+  }
+  u = emit(`${METING}?server=netease&type=url&id=${encodeURIComponent(id)}`);
+  if (u) yield u;
+}
 
-  try {
-    const data = await getJSON(`${GD}?types=url&source=netease&id=${encodeURIComponent(id)}&br=320`);
-    if (data && data.url) return data.url;
-  } catch { /* 用 Meting 兜底 */ }
-
-  // Meting 的 url 是 302 重定向到音频文件，<audio> 可以直接播
-  return `${METING}?server=netease&type=url&id=${encodeURIComponent(id)}`;
+/** 解析播放地址：取第一个候选（兼容旧调用） */
+export async function resolveSongUrl(song) {
+  for await (const u of songSources(song)) return u;
+  return '';
 }
 
 /* ---------- 网易云真登录（NeteaseCloudMusicApi 实例客户端） ----------
