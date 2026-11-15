@@ -585,28 +585,97 @@ function playerBar() {
   ]);
 }
 
-/* 真·可播探测：能出可播帧（canplay）才算成功。
-   音源地址常常是 200 HTML、403、或 http 混合内容，直接塞给 <audio> 会「显示在播但没声音」 */
-function probeAudio(url, ms = 7000) {
+/* 真·可播探测：汇报 canplay / error / 超时，附带耗时，诊断用 */
+function probeDetail(url, ms = 7000) {
   return new Promise((resolve) => {
     const a = new Audio();
+    const t0 = Date.now();
     let settled = false;
-    const done = (ok) => {
+    const done = (ok, why) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       a.oncanplay = null;
       a.onerror = null;
       try { a.src = ''; } catch { /* ignore */ }
-      resolve(ok);
+      resolve({ ok, why, ms: Date.now() - t0 });
     };
-    const timer = setTimeout(() => done(false), ms);
+    const timer = setTimeout(() => done(false, '超时'), ms);
     a.preload = 'auto';
-    a.oncanplay = () => done(true);
-    a.onerror = () => done(false);
+    a.oncanplay = () => done(true, '可播');
+    a.onerror = () => done(false, '报错 code=' + (a.error ? a.error.code : '?'));
     a.src = url;
-    try { a.load(); } catch { done(false); }
+    try { a.load(); } catch { done(false, '加载异常'); }
   });
+}
+
+function probeAudio(url, ms = 7000) {
+  return probeDetail(url, ms).then((r) => r.ok);
+}
+
+/** 播放诊断：给手机上排查用（扬声器 / 音源 / 环境） */
+function openPlayDiag() {
+  const out = el('pre', { class: 'mc-diag-out', text: '准备中…' });
+  const log = (line) => { out.textContent += '\n' + line; };
+  const body = el('div', {}, [
+    el('div', { class: 'mc-note', text: '先点「测扬声器」听有没有短促的嘀声；再点「测音源」看每个地址的真实结果。截图发我即可。' }),
+    el('div', { class: 'mc-cloud-acts' }, [
+      el('button', { class: 'mc-act', onclick: async (e) => {
+        try {
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          if (!Ctx) { toast('这个浏览器不支持音频测试'); return; }
+          const ctx = new Ctx();
+          if (ctx.state === 'suspended') await ctx.resume();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = 660;
+          gain.gain.value = 0.25;
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.7);
+          osc.onended = () => { try { ctx.close(); } catch { /* ignore */ } };
+          e.target.textContent = '嘀过了，听到了吗？';
+        } catch (err) {
+          toast('发声失败：' + (err.message || '未知'));
+        }
+      } }, ['测扬声器']),
+      el('button', { class: 'mc-act', onclick: async () => {
+        out.textContent = '环境：';
+        log('UA = ' + navigator.userAgent);
+        log('协议 = ' + location.protocol + ' / 可见 = ' + document.visibilityState);
+        const css = document.querySelector('link[rel=stylesheet]');
+        log('样式版本 = ' + (css ? css.getAttribute('href') : '?'));
+        log('实例 = ' + (ncmBase || '（未填）'));
+        log('登录 = ' + (ncmCookie ? '是' : '否'));
+        const probeSong = (songs || []).find((x) => x && x.neteaseId) || { neteaseId: 347230, title: '测试' };
+        log('测歌 = ' + (probeSong.title || '') + '（id ' + probeSong.neteaseId + '）');
+        log('—— 逐个探测 ——');
+        let i = 0;
+        for await (const u of songSources(probeSong, { base: ncmBase, cookie: ncmCookie })) {
+          i += 1;
+          if (i > 5) break;
+          let host = '';
+          try { host = new URL(u).host; } catch { host = '非法地址'; }
+          log(`#${i} ${host}`);
+          const r = await probeDetail(u, 6000);
+          log(`   ${r.ok ? '✓ 可播' : '✗ ' + r.why} · ${r.ms}ms`);
+          if (r.ok) break;
+        }
+        if (!i) log('没有产生任何候选地址');
+        const ctrl = navigator.serviceWorker && navigator.serviceWorker.controller;
+        log('SW = ' + (ctrl ? ctrl.scriptURL.split('/').pop() : '未控制'));
+      } }, ['测音源']),
+      el('button', { class: 'mc-act', onclick: async () => {
+        try {
+          await navigator.clipboard.writeText(out.textContent);
+          toast('诊断信息已复制');
+        } catch { toast('复制失败，直接截图吧'); }
+      } }, ['复制诊断'])
+    ]),
+    out
+  ]);
+  sheet({ title: '播放诊断', body, size: 'md' });
 }
 
 async function play(s) {
@@ -615,9 +684,16 @@ async function play(s) {
   /* 在线歌：实例/公共接口给出多个候选，逐个探测，能出音频帧的才播
      （http 地址在 https 页面会被浏览器拦成「播放中但没声音」） */
   if (!src && s.neteaseId) {
+    const deadline = Date.now() + 12000;         // 探测总时长上限，别让用户干等
+    let first = '';
     for await (const u of songSources(s, { base: ncmBase, cookie: ncmCookie })) {
+      if (!alive) return;
+      if (!first) first = u;
       if (await probeAudio(u)) { src = u; break; }
+      if (Date.now() > deadline) break;
     }
+    /* 少数手机不触发 canplay（只在实际播放时才拉流），探测全败也交给播放器试一次 */
+    if (!src) src = first;
   }
   if (!src) {
     toast(s.source === 'netease' ? `「${s.title || '这首歌'}」暂时没有音源（可能需要 VIP 或已下架）` : '这首歌没有可用的播放地址');
@@ -862,7 +938,8 @@ function addMenu() {
   actionSheet('添加音乐', [
     { label: '搜索歌曲', sub: '按歌名、歌手或关键词搜索', icon: 'IC-CRD-010', onSelect: () => openSearch() },
     { label: '导入在线歌单', sub: '粘贴歌单链接，整单收藏', icon: 'IC-MIO-022', onSelect: () => openPlaylistImport() },
-    { label: '上传本地音频', sub: 'mp3 / wav / m4a 等，可离线播放', icon: 'IC-MIO-010', onSelect: addByFile }
+    { label: '上传本地音频', sub: 'mp3 / wav / m4a 等，可离线播放', icon: 'IC-MIO-010', onSelect: addByFile },
+    { label: '播放诊断', sub: '没声音时用：测扬声器、测音源', icon: 'IC-MIO-016', onSelect: openPlayDiag }
   ]);
 }
 
