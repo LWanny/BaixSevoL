@@ -240,6 +240,31 @@ function openLoginSheet() {
     }
   } }, ['登录']);
 
+  /* Cookie 粘贴登录：网易封杀第三方登录接口（验证码被机房风控、扫码被 App 拦截）后的保底路，
+     从官方网页版拿 MUSIC_U，实例只拿它查数据，不碰登录接口 */
+  const ckInput = el('input', { class: 'input', placeholder: '粘贴 MUSIC_U 的值或含它的整段 Cookie' });
+  const ckBtn = el('button', { class: 'btn sm primary', onclick: async () => {
+    if (!ncmBase) { toast('先保存接口地址'); return; }
+    const m = String(ckInput.value || '').match(/MUSIC_U\s*=\s*([0-9A-Za-z]+)/);
+    const v = m ? m[1] : String(ckInput.value || '').trim();
+    if (!/^[0-9A-Za-z]{32,}$/.test(v)) { toast('没认出 MUSIC_U，重新复制一下'); return; }
+    ckBtn.disabled = true; ckBtn.textContent = '验证中…';
+    try {
+      const cookie = 'MUSIC_U=' + v;
+      ncmProfile = await ncmAccount(ncmBase, cookie);
+      if (!ncmProfile || !ncmProfile.userId) throw new Error('无效');
+      ncmCookie = cookie;
+      await kvSet('ncmCookie', cookie);
+      await kvSet('ncmProfile', ncmProfile);
+      toast(`登录成功：${ncmProfile.nickname || '账号'}`);
+      s.close();
+      paint();
+    } catch {
+      toast('Cookie 无效或已过期');
+      ckBtn.disabled = false; ckBtn.textContent = '粘贴登录';
+    }
+  } }, ['粘贴登录']);
+
   /* 扫码登录（手机上也可用：截图二维码后从相册扫；比验证码更稳） */
   const qrBox = el('div', { class: 'mc-qr' });
   const qrBtn = el('button', { class: 'btn sm block', onclick: async () => {
@@ -285,11 +310,15 @@ function openLoginSheet() {
   const body = el('div', {}, [
     el('div', { class: 'field' }, [el('div', { class: 'field-l', text: '网易云接口地址' }), baseInput, el('div', { class: 'tiny muted', style: { marginTop: '6px' }, text: '部署方法：GitHub 搜索 NeteaseCloudMusicApi 的存活 fork → Vercel 免费部署 → 把地址填到这里。实例只做中转，Cookie 保存在本机。' }), presetRow]),
     saveBaseBtn,
-    el('div', { class: 'sec-sub', text: '手机验证码登录' }),
+    el('div', { class: 'sec-sub', text: 'Cookie 登录（推荐，最稳）' }),
+    el('div', { class: 'tiny muted', style: { marginTop: '0', marginBottom: '8px' }, text: '① 用带 Cookie 查看的手机浏览器（如 Via）打开 music.163.com 并登录官方网页版 ② 菜单 → 工具 → Cookies ③ 找到并复制 MUSIC_U 的值，粘贴到这里' }),
+    ckInput,
+    ckBtn,
+    el('div', { class: 'sec-sub', text: '手机验证码登录（常被网易风控）' }),
     el('div', { class: 'row' }, [phoneInput, sendBtn]),
     el('div', { class: 'field', style: { marginTop: '8px' } }, [captchaInput]),
     loginBtn,
-    el('div', { class: 'sec-sub', text: '扫码登录' }),
+    el('div', { class: 'sec-sub', text: '扫码登录（常被网易 App 拦截）' }),
     qrBtn, qrBox, status
   ]);
 
