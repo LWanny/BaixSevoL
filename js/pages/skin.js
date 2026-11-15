@@ -7,7 +7,7 @@ import { state, saveSkin, applySkin, pageBgFor } from '../state.js';
 import { saveMedia, mediaURL, delMedia } from '../media.js';
 import { toast, confirmBox, sheet } from '../ui.js';
 
-const BG_PRESETS = ['#f7f7f6', '#ffffff', '#f2f2f1', '#ececea', '#e6e6e4', '#dcdcda', '#1a1c20'];
+const BG_PRESETS = ['#ffffff', '#f7f7f6', '#f2f2f1', '#ececea', '#e6e6e4', '#dcdcda', '#1a1c20'];
 
 let curView = null;
 
@@ -31,7 +31,7 @@ function build(view) {
         el('span', { class: 'chip' + (s.globalBgColor === c ? ' on' : ''), style: { background: c, width: '30px', height: '22px' }, title: c, dataset: { val: c }, onclick: async (e) => {
           s.globalBgColor = c; await saveSkin(); await applySkin(); refreshChips(e.target.parentElement, c);
         } }))),
-      el('input', { class: 'input', type: 'color', value: s.globalBgColor || '#f7f7f6', oninput: async (e) => { s.globalBgColor = e.target.value; await saveSkin(); await applySkin(); } })
+      el('input', { class: 'input', type: 'color', value: s.globalBgColor || '#ffffff', oninput: async (e) => { s.globalBgColor = e.target.value; await saveSkin(); await applySkin(); } })
     ]),
     imagePicker('全局背景图', '全局背景图片会铺满整个应用。', s.globalBgImageId, async (id) => { s.globalBgImageId = id; await saveSkin(); await applySkin(); }, 'bg'),
     bgAdjust('globalBgX', 'globalBgY', 'globalBgZoom', s.globalBgImageId, 'globalBgImgOp')
@@ -77,7 +77,7 @@ function build(view) {
       if (!yes) return;
       const keepMe = s.avatarMeId;
       Object.assign(s, {
-        globalBgColor: '#f7f7f6', globalBgImageId: null, chatWallpaperId: null,
+        globalBgColor: '#ffffff', globalBgImageId: null, chatWallpaperId: null,
         bubbleMe: 'linear-gradient(135deg,#1c1e22,#3c4048)', bubbleMeTxt: '#ffffff',
         bubbleTa: '#ffffff', bubbleTaTxt: '#16181c', bubbleRadius: 15,
         avatarShape: 'rounded', bubbleCss: '', avatarMeId: keepMe,
@@ -306,7 +306,7 @@ function openPageBg(path, label) {
   paint();
 
   /* 颜色 */
-  const colorInput = el('input', { class: 'input', type: 'color', value: draft.color || '#f7f7f6', oninput: async (e) => { draft.color = e.target.value; await commit(); } });
+  const colorInput = el('input', { class: 'input', type: 'color', value: draft.color || '#ffffff', oninput: async (e) => { draft.color = e.target.value; await commit(); } });
   const chips = el('div', { class: 'row wrap', style: { gap: '8px', marginBottom: '8px' } }, BG_PRESETS.map((c) =>
     el('span', {
       class: 'chip' + ((draft.color || '') === c ? ' on' : ''), style: { background: c, width: '30px', height: '22px' }, title: c, dataset: { val: c },

@@ -4,10 +4,10 @@
    默认主题：浅色系 · 高级简约黑白灰
    ============================================================ */
 :root{
-  --bg:#f7f7f6;
+  --bg:#ffffff;
   --bg-elev:#ffffff;
-  --bg-elev2:#f2f2f1;
-  --bg-sunken:#ececea;
+  --bg-elev2:#fafafa;
+  --bg-sunken:#f4f4f5;
   --line:#e3e3e1;
   --line-soft:#eeeeec;
   --txt:#111214;
@@ -42,7 +42,7 @@
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%}
 body{
-  margin:0;background:var(--bg-sunken);color:var(--txt);font-size:15px;line-height:1.6;
+  margin:0;background:var(--bg);color:var(--txt);font-size:15px;line-height:1.6;
   font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Segoe UI",Roboto,sans-serif;
   overflow:hidden;
 }

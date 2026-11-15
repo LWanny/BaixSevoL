@@ -217,7 +217,7 @@ export const DEFAULT_SETTINGS = {
 };
 
 export const DEFAULT_SKIN = {
-  globalBgColor: '#f7f7f6',
+  globalBgColor: '#ffffff',
   globalBgImageId: null,
   chatWallpaperId: null,
   bubbleMe: 'linear-gradient(135deg,#1c1e22,#3c4048)',
@@ -331,6 +331,15 @@ export async function loadState() {
   }
   state.settings = Object.assign({}, DEFAULT_SETTINGS, await kvGet('settings', {}));
   state.skin = Object.assign({}, DEFAULT_SKIN, await kvGet('skin', {}));
+  /* 旧版默认底色是暖灰 #f7f7f6，统一迁到纯白（含各页面单独底色） */
+  const WHITE = '#ffffff';
+  const OLD_BG = '#f7f7f6';
+  if (state.skin.globalBgColor === OLD_BG) state.skin.globalBgColor = WHITE;
+  if (state.skin.pageBgs && typeof state.skin.pageBgs === 'object') {
+    Object.values(state.skin.pageBgs).forEach((p) => {
+      if (p && p.color === OLD_BG) p.color = WHITE;
+    });
+  }
   state.widgets = JSON.parse(JSON.stringify(DEFAULT_WIDGETS));
   const saved = await kvGet('widgets', {});
   for (const k of Object.keys(DEFAULT_WIDGETS)) {
@@ -397,7 +406,7 @@ export function pageBgFor(path) {
   if (!p) {
     return {
       imgId: s.globalBgImageId || null,
-      color: s.globalBgColor || '#f7f7f6',
+      color: s.globalBgColor || '#ffffff',
       op: num(s.globalBgImgOp, 100), zoom: num(s.globalBgZoom, 100),
       x: num(s.globalBgX, 50), y: num(s.globalBgY, 50)
     };
@@ -407,7 +416,7 @@ export function pageBgFor(path) {
   const own = !!p.imgId;
   return {
     imgId: own ? p.imgId : (s.globalBgImageId || null),
-    color: p.color || s.globalBgColor || '#f7f7f6',
+    color: p.color || s.globalBgColor || '#ffffff',
     op: num(own ? p.op : s.globalBgImgOp, 100),
     zoom: num(own ? p.zoom : s.globalBgZoom, 100),
     x: num(own ? p.x : s.globalBgX, 50),
