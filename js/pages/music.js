@@ -212,7 +212,7 @@ function openLoginSheet() {
     sendBtn.disabled = true; sendBtn.textContent = '发送中…';
     try {
       await ncmCaptchaSent(ncmBase, phone);
-      toast('验证码已发送，注意查收短信');
+      toast('验证码已发送（约 1 分钟内到达，收不到就重发一条）');
     } catch (err) {
       toast('发送失败：' + (err.message || '实例连不上'));
     } finally {
@@ -240,7 +240,7 @@ function openLoginSheet() {
     }
   } }, ['登录']);
 
-  /* 扫码登录（电脑上用更方便） */
+  /* 扫码登录（手机上也可用：截图二维码后从相册扫；比验证码更稳） */
   const qrBox = el('div', { class: 'mc-qr' });
   const qrBtn = el('button', { class: 'btn sm block', onclick: async () => {
     if (!ncmBase) { toast('先保存接口地址'); return; }
@@ -253,7 +253,7 @@ function openLoginSheet() {
       qrBox.innerHTML = '';
       if (!qrimg) throw new Error('实例没有返回二维码');
       qrBox.appendChild(el('img', { class: 'mc-qr-img', src: qrimg, alt: '网易云登录二维码' }));
-      const tip = el('div', { class: 'mc-note', text: '用网易云音乐 App 扫码并确认' });
+      const tip = el('div', { class: 'mc-note', text: '网易云音乐 App → 扫一扫 → 右上角相册，选这张二维码图并确认' });
       qrBox.appendChild(tip);
       const poll = setInterval(async () => {
         if (!alive || !ncmBase || !key) { clearInterval(poll); return; }
@@ -279,7 +279,7 @@ function openLoginSheet() {
       qrBox.appendChild(el('div', { class: 'mc-note', text: '生成失败：' + (err.message || '实例连不上') }));
       qrBtn.disabled = false;
     }
-  } }, ['扫码登录']);
+  } }, ['扫码登录（推荐，更稳）']);
 
   const body = el('div', {}, [
     el('div', { class: 'field' }, [el('div', { class: 'field-l', text: '网易云接口地址' }), baseInput, el('div', { class: 'tiny muted', style: { marginTop: '6px' }, text: '部署方法：GitHub 搜索 NeteaseCloudMusicApi 的存活 fork → Vercel 免费部署 → 把地址填到这里。实例只做中转，Cookie 保存在本机。' }), presetRow]),

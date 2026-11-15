@@ -137,17 +137,29 @@ export async function resolveSongUrl(song) {
    登录成功后实例把 Cookie 作为 JSON 返回（非 Set-Cookie），前端可保存使用：
    显示昵称 / 拉取私密歌单 / 用自己账号解析 VIP 歌曲。 */
 
+/* realIP：网易对机房 IP 有风控，报一个国内常见出口 IP 能显著降低被拒概率 */
+const NCM_REALIP = '116.25.146.177';
+
+function ncmErrMsg(code, raw) {
+  if (raw) return raw;
+  if (code === 400) return '验证码不对或已过期，重新发一条再试；多次失败请改用扫码登录';
+  if (code === -460 || code === -462) return '实例 IP 被网易风控了，过几分钟再试';
+  if (code === 301) return '需要登录';
+  return `接口返回 code ${code}`;
+}
+
 export async function ncmFetch(base, path, params = {}, cookie = '') {
   const root = String(base || '').trim().replace(/\/+$/, '');
   if (!/^https?:\/\//.test(root)) throw new Error('接口地址要以 http(s):// 开头');
   const qs = new URLSearchParams();
-  Object.entries(params).forEach(([k, v]) => {
+  const all = Object.assign({ realIP: NCM_REALIP }, params);
+  Object.entries(all).forEach(([k, v]) => {
     if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
   });
   if (cookie) qs.set('cookie', cookie);
   const data = await getJSON(`${root}${path}${qs.toString() ? '?' + qs : ''}`, 15000);
   if (data && typeof data.code === 'number' && data.code !== 200 && data.code !== 301) {
-    throw new Error(data.message || data.msg || `接口返回 code ${data.code}`);
+    throw new Error(ncmErrMsg(data.code, data.message || data.msg));
   }
   return data;
 }
