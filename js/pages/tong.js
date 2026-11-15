@@ -45,7 +45,7 @@ async function loadLib() {
 }
 
 function libPool() {
-  return libCards.map((c) => ({ src: 'lib', name: c.content, sub: '字卡', groupId: c.groupId }));
+  return libCards.map((c) => ({ src: 'lib', name: c.content, sub: '', groupId: c.groupId }));
 }
 function poolFor(src) {
   const parts = [];
@@ -124,20 +124,16 @@ export default async function pageTong(v) {
     if (taTimer) { clearTimeout(taTimer); taTimer = null; }
   }, { once: true });
 
-  fullPage({ back: true, title: '通牌', sub: '只以字卡交流' });
+  fullPage({
+    back: true, title: '通牌', sub: '只以字卡交流',
+    actions: [{ icon: 'IC-MIO-012', label: '设置', onclick: openSettings }]
+  });
 
   await loadCfg();
   await loadLib();
   groups = (await all('groups')) || [];
 
   view.appendChild(el('div', { class: 'page tong' }, [
-    el('div', { class: 'tg-head' }, [
-      el('button', { class: 'tg-gear', onclick: openSettings }, [iconImg('IC-MIO-012')]),
-      el('div', { class: 'tg-head-t' }, [
-        el('div', { class: 'tg-head-name', text: '通牌' }),
-        el('div', { class: 'tg-head-sub', id: 'tg-head-sub', text: '回牌：' + modeText() + ' · 来源：' + srcText() })
-      ])
-    ]),
     el('div', { class: 'tg-stream-wrap' }, [el('div', { class: 'tg-stream' })]),
     el('div', { class: 'tg-drawer' })
   ]));
@@ -154,20 +150,6 @@ export default async function pageTong(v) {
   await paintStream();
   redeal();
   paintDrawer();
-}
-
-function modeText() {
-  return cfg.mode === 'one' ? '一人一句' : `随机 1~${Math.min(10, Number(cfg.randN) || 5)} 张`;
-}
-function srcText() {
-  const s = [];
-  if (cfg.srcLib) s.push('字卡库');
-  if (cfg.srcDeck) s.push('牌面图鉴');
-  return s.length ? s.join(' + ') : '无';
-}
-function refreshHeadSub() {
-  const node = view.querySelector('#tg-head-sub');
-  if (node) node.textContent = '回牌：' + modeText() + ' · 来源：' + srcText();
 }
 
 /* ---------------- 聊天流 ---------------- */
@@ -225,8 +207,11 @@ function cardNode(item, faceUp, onClick, meta) {
         if (img && img.parentNode) { img.parentNode.classList.remove('face'); img.remove(); }
       }
     }) : null,
-    el('div', { class: 'tg-card-nm', text: back ? '' : (item.name || '') }),
-    el('div', { class: 'tg-card-sub', text: back ? '' : (item.sub || '') })
+    /* 内容单独包一层：在卡片里垂直居中，时间信息钉在底部 */
+    el('div', { class: 'tg-card-body' }, [
+      el('div', { class: 'tg-card-nm', text: back ? '' : (item.name || '') }),
+      (back || !item.sub) ? null : el('div', { class: 'tg-card-sub', text: item.sub })
+    ])
   ];
   if (meta) kids.push(el('div', { class: 'tg-card-meta' }, [
     el('span', { text: meta.who }),
@@ -490,7 +475,7 @@ function openPicker() {
 /* 选择器要展示所有来源（未开启的标灰），与 poolFor 不同 */
 function poolForAll() {
   return [
-    ...libCards.map((c) => ({ src: 'lib', name: c.content, sub: '字卡', groupId: c.groupId })),
+    ...libCards.map((c) => ({ src: 'lib', name: c.content, sub: '', groupId: c.groupId })),
     ...TAROT,
     ...LENORMAND
   ];
@@ -547,7 +532,6 @@ function openSettings() {
     swLib.textContent = cfg.srcLib ? '开' : '关';
     swDeck.textContent = cfg.srcDeck ? '开' : '关';
     renderSub();
-    refreshHeadSub();
     redeal();
     paintDrawer();
   }

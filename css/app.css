@@ -2933,11 +2933,6 @@ button.mc-import-line.as-btn:active{background:var(--accent-soft);color:var(--ac
 
 /* ===== 通牌 ===== */
 .tong{display:flex;flex-direction:column;padding-bottom:0!important}
-.tg-head{display:flex;align-items:center;gap:10px;padding:2px 4px 10px}
-.tg-gear{width:36px;height:36px;border-radius:10px;border:none;background:var(--bg-elev);display:flex;align-items:center;justify-content:center;color:var(--txt-dim)}
-.tg-gear svg{width:19px;height:19px}
-.tg-head-name{font-size:16px;font-weight:700}
-.tg-head-sub{font-size:11px;color:var(--txt-dim);margin-top:2px}
 .tg-stream-wrap{flex:1 1 auto;min-height:0;overflow-y:auto;margin:0 -16px;padding:0 16px 14px}
 .tg-stream{display:flex;flex-direction:column}
 .tg-empty{padding:46px 0 26px;text-align:center}
@@ -2950,10 +2945,12 @@ button.mc-import-line.as-btn:active{background:var(--accent-soft);color:var(--ac
 .tg-round-tag{font-size:10px;color:var(--txt-dim);margin:0 4px 5px}
 .tg-row{display:flex;flex-wrap:wrap;gap:7px;max-width:82%}
 .tg-round.me .tg-row{justify-content:flex-end}
-.tg-card{min-width:62px;max-width:160px;border-radius:11px;padding:9px 8px;background:var(--bg-elev);border:1px solid var(--line);text-align:center;transition:transform .15s}
+.tg-card{min-width:62px;max-width:160px;border-radius:0;padding:9px 8px;background:var(--bg-elev);border:1px solid var(--line);text-align:center;transition:transform .15s;display:flex;flex-direction:column}
 .tg-stream .tg-card{width:160px;flex:0 0 auto}   /* 聊天流各类卡等宽，高度随内容（字卡矮、牌面长） */
 .tg-card.tap{cursor:pointer}
 .tg-card.tap:active{transform:scale(.94)}
+/* 内容在卡片中垂直居中，时间信息钉在底部 */
+.tg-card-body{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;min-height:0}
 .tg-card-nm{font-size:12.5px;font-weight:600;line-height:1.25;word-break:break-all}
 .tg-card-sub{font-size:10px;color:var(--txt-dim);margin-top:3px}
 .tg-card.back{background:linear-gradient(140deg,#46356b,#241b3d);border-color:transparent;position:relative;min-height:52px}
@@ -2963,6 +2960,7 @@ button.mc-import-line.as-btn:active{background:var(--accent-soft);color:var(--ac
 .tg-card.disabled .tg-card-sub{color:var(--danger)}
 /* 塔罗牌面：图上零遮挡、牌名放图下；对方未翻时显示牌背图 */
 .tg-card.face{padding:0;overflow:hidden}
+.tg-card.face .tg-card-body{flex:0 0 auto}   /* 牌面卡：名字紧跟牌面，不做垂直居中 */
 .tg-card.face .tg-card-img{width:100%;display:block;aspect-ratio:296/500;object-fit:cover;background:var(--bg-elev2)}
 .tg-card.face .tg-card-nm{padding:5px 6px 0;font-size:11.5px}
 .tg-card.face .tg-card-sub{padding:0 6px 6px;margin-top:1px}
