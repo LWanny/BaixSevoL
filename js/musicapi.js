@@ -135,6 +135,9 @@ export async function* songSources(song, { base = '', cookie = '' } = {}) {
       if (u) yield u;
     } catch { /* 实例不通就跳过 */ }
   }
+  /* 网易外链：完全不需要接口，直接 302 到 CDN，非 VIP 歌在国内网络最稳 */
+  u = emit(`https://music.163.com/song/media/outer/url?id=${encodeURIComponent(id)}.mp3`);
+  if (u) yield u;
   for (const br of [320, 128]) {
     try {
       const d = await getJSON(`${GD}?types=url&source=netease&id=${encodeURIComponent(id)}&br=${br}`);

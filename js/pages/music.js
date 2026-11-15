@@ -21,6 +21,9 @@ import {
   ncmSearch, ncmPlaylist
 } from '../musicapi.js';
 
+/* 版本标记：出问题时把下面的 toast 截图，就能确认跑的是不是最新版 */
+const BUILD = '20261115d';
+
 let view = null;
 let songs = [];
 /* 歌词页状态：面板开着时随播放进度逐行高亮 */
@@ -145,7 +148,8 @@ function cloudCard() {
       el('button', { class: 'mc-act', onclick: openGuess }, [iconImg('IC-MIO-029'), '猜你喜欢']),
       el('button', { class: 'mc-act', onclick: () => openSearch() }, [iconImg('IC-CRD-010'), '搜索歌曲']),
       el('button', { class: 'mc-act', onclick: () => openPlaylistImport() }, [iconImg('IC-MIO-022'), '导入歌单']),
-      el('button', { class: 'mc-act', onclick: addByFile }, [iconImg('IC-MIO-010'), '上传音频'])
+      el('button', { class: 'mc-act', onclick: addByFile }, [iconImg('IC-MIO-010'), '上传音频']),
+      el('button', { class: 'mc-act', onclick: openPlayDiag }, [iconImg('IC-MIO-016'), '播放诊断'])
     ]),
     loginRow()
   ]);
@@ -642,6 +646,7 @@ function openPlayDiag() {
       } }, ['测扬声器']),
       el('button', { class: 'mc-act', onclick: async () => {
         out.textContent = '环境：';
+        log('版本 = ' + BUILD);
         log('UA = ' + navigator.userAgent);
         log('协议 = ' + location.protocol + ' / 可见 = ' + document.visibilityState);
         const css = document.querySelector('link[rel=stylesheet]');
@@ -679,6 +684,15 @@ function openPlayDiag() {
 }
 
 async function play(s) {
+  try {
+    await playInner(s);
+  } catch (err) {
+    /* 任何未预料的异常都别静默：把原因和版本号摊到脸上 */
+    toast('播放出错：' + (err && err.message ? err.message : '未知') + ' · ' + BUILD);
+  }
+}
+
+async function playInner(s) {
   let src = '';
   if (s.mediaId) src = await mediaURL(s.mediaId);
   /* 在线歌：实例/公共接口给出多个候选，逐个探测，能出音频帧的才播
@@ -696,7 +710,7 @@ async function play(s) {
     if (!src) src = first;
   }
   if (!src) {
-    toast(s.source === 'netease' ? `「${s.title || '这首歌'}」暂时没有音源（可能需要 VIP 或已下架）` : '这首歌没有可用的播放地址');
+    toast(s.source === 'netease' ? `「${s.title || '这首歌'}」暂时没有音源（可能需要 VIP 或已下架）· ${BUILD}` : '这首歌没有可用的播放地址 · ' + BUILD);
     return;
   }
   if (!alive) return;                            // 探测期间已离开页面：别在后台起播
