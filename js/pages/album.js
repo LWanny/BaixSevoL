@@ -6,15 +6,15 @@ import {
   el, uid, openFile, compressImage, fmtDateTime, downloadBlob
 } from '../util.js';
 import { iconImg } from '../icons.js';
-import { state } from '../state.js';
 import { fullPage } from '../shell.js';
 import { all, put, del } from '../store.js';
 import { saveMedia, mediaURL, getMedia, delMedia } from '../media.js';
-import { actionSheet, confirmBox, sheet, toast, topBanner } from '../ui.js';
+import { confirmBox, sheet, toast, topBanner } from '../ui.js';
 
 let view = null;
 let rows = [];
-let src = 'all';        // all | ta | me
+let src = 'ta';         // ta | me（去掉「全部」，只看某一方）
+let kind = 'photo';     // photo | video | live
 let viewerList = [];    // 大图查看器的左右滑动列表（paint 时更新）
 
 const IMG_RE = /\.(jpe?g|png|webp|gif|bmp|avif|heic|heif|tiff?|jfif)$/i;
@@ -29,18 +29,28 @@ const isVideoRow = async (p) => {
   return !!m && (m.type === 'video' || (m.mime || '').startsWith('video'));
 };
 
+/* 相册条目分三类：实况（照片+同名视频）> 视频 > 普通照片 */
+const kindOf = (p) => (p.videoId ? 'live' : (p._video ? 'video' : 'photo'));
+const labelOf = (k) => (k === 'video' ? '视频' : k === 'live' ? '实况' : '照片');
+
 export default async function pageAlbum(v, params = {}) {
   view = v;
-  src = params.from === 'ta' ? 'ta' : 'all';
+  src = params.from === 'me' ? 'me' : 'ta';
+  kind = params.kind === 'video' || params.kind === 'live' ? params.kind : 'photo';
   fullPage({
-    back: true, title: '相册', sub: '他的保存 · 他的截图 · 我导入的 · 视频/实况',
-    actions: [{ label: '导入', onclick: chooseImport }]
+    back: true, title: '相册', sub: '他的 · 我的 · 照片/视频/实况',
+    actions: [{ label: '导入', onclick: () => importImages(src) }]
   });
   await load();
 }
 
 async function load() {
   rows = (await all('photos')).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  /* 逐条确认媒体类型，供「照片 / 视频 / 实况」分类用 */
+  for (const r of rows) {
+    const m = r.mediaId ? await getMedia(r.mediaId) : null;
+    r._video = !!(r.isVideo || (m && (m.type === 'video' || (m.mime || '').startsWith('video'))));
+  }
   paint();
 }
 
@@ -51,15 +61,14 @@ function paint() {
   const taRows = rows.filter((r) => r.owner !== 'me');
   const meRows = rows.filter((r) => r.owner === 'me');
 
-  page.appendChild(el('div', { class: 'card al-hero' }, [
+  page.appendChild(el('div', { class: 'card al-hero al-hero-2' }, [
     stat(taRows.length, '他的相册'),
-    stat(meRows.length, '我的相册'),
-    stat(rows.length, '全部图片')
+    stat(meRows.length, '我的相册')
   ]));
 
+  /* 第一栏：只看他的 / 只看我的 */
   const chips = el('div', { class: 'wt-chips' });
   [
-    { key: 'all', label: '全部', n: rows.length },
     { key: 'ta', label: '他的', n: taRows.length },
     { key: 'me', label: '我的', n: meRows.length }
   ].forEach((c) => {
@@ -70,10 +79,24 @@ function paint() {
   });
   page.appendChild(chips);
 
-  const list = src === 'all' ? rows : rows.filter((r) => r.owner === src);
+  /* 第二栏：照片 / 视频 / 实况 */
+  const mine = src === 'me' ? meRows : taRows;
+  const kinds = ['photo', 'video', 'live'].map((k) => ({
+    key: k, label: labelOf(k), n: mine.filter((r) => kindOf(r) === k).length
+  }));
+  const kindBar = el('div', { class: 'wt-chips al-kinds' });
+  kinds.forEach((c) => {
+    kindBar.appendChild(el('button', {
+      class: 'chip' + (kind === c.key ? ' on' : ''), type: 'button',
+      onclick: () => { kind = c.key; paint(); }
+    }, [`${c.label} ${c.n}`]));
+  });
+  page.appendChild(kindBar);
+
+  const list = mine.filter((r) => kindOf(r) === kind);
   viewerList = list;      // 供大图查看器左右/滑动切换
   const grid = el('div', { class: 'al-grid' });
-  grid.appendChild(el('button', { class: 'al-add', type: 'button', onclick: chooseImport }, [
+  grid.appendChild(el('button', { class: 'al-add', type: 'button', onclick: () => importImages(src) }, [
     iconImg('IC-MIO-022'),
     el('span', { text: '导入' })
   ]));
@@ -82,8 +105,8 @@ function paint() {
   if (!list.length) {
     page.appendChild(el('div', { class: 'empty' }, [
       iconImg('IC-MIO-015'),
-      el('div', { class: 'e-h', text: rows.length ? '这一栏还没有图片' : '相册还是空的' }),
-      el('div', { class: 'e-p', text: '把对方保存的图片、截图，或你手边的照片放进来' })
+      el('div', { class: 'e-h', text: mine.length ? `这一栏还没有${labelOf(kind)}` : (src === 'me' ? '我的相册还是空的' : '他的相册还是空的') }),
+      el('div', { class: 'e-p', text: src === 'me' ? '点「导入」，照片和视频只会放进我的相册' : '点「导入」，对方保存的图片、截图只会放进他的相册' })
     ]));
     page.appendChild(grid);
   } else {
@@ -107,7 +130,7 @@ function tile(p) {
   img.onerror = () => cell.classList.add('al-miss');
   mediaURL(p.mediaId).then(async (u) => {
     if (!u) { cell.classList.add('al-miss'); return; }
-    if (await isVideoRow(p)) {
+    if (p._video) {
       /* 视频缩略图：首帧 + 角标 */
       const v = el('video', { class: 'al-thumb', src: u, muted: true, preload: 'metadata', playsinline: true });
       v.onerror = () => cell.classList.add('al-miss');
@@ -125,14 +148,6 @@ function tile(p) {
 }
 
 /* ---------------- 导入 ---------------- */
-function chooseImport() {
-  const name = state.role.name || '他';
-  actionSheet('导入（图片 / 视频 / 实况图）', [
-    { label: `放进「他的相册」`, sub: `${name} 保存的图片、截图、视频（同名图片+视频会配成实况）`, icon: 'IC-MIO-015', onSelect: () => importImages('ta') },
-    { label: '放进「我的相册」', sub: '我导入或保存的图片、视频', icon: 'IC-MIO-014', onSelect: () => importImages('me') }
-  ]);
-}
-
 async function importImages(owner) {
   const files = await openFile({ accept: 'image/*,video/*', multiple: true });
   if (!files || !files.length) return;
@@ -181,9 +196,11 @@ async function importImages(owner) {
   }
 
   src = owner;
+  /* 导完自动切到能看见结果的分类，避免"导了却看不到" */
+  kind = !imgs.length && vidN ? 'video' : (liveN ? 'live' : 'photo');
   await load();
   tip.close();
-  toast(`已导入 ${ok} 项${liveN ? `（含 ${liveN} 张实况）` : ''}${vidN ? `（${vidN} 个视频）` : ''}`);
+  toast(`已导入到${owner === 'me' ? '我的相册' : '他的相册'} ${ok} 项${liveN ? `（含 ${liveN} 张实况）` : ''}${vidN ? `（${vidN} 个视频）` : ''}`);
 }
 
 /* ---------------- 大图：左右按钮 + 触摸滑动 + 键盘 ←→ 切换 ---------------- */

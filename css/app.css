@@ -2104,6 +2104,8 @@ button.mc-import-line.as-btn:active{background:var(--accent-soft);color:var(--ac
 
 /* ---------- 相册 ---------- */
 .al-hero{display:grid;grid-template-columns:repeat(3,1fr);text-align:center;padding:15px 8px}
+.al-hero-2{grid-template-columns:repeat(2,1fr)}
+.al-kinds{margin-top:-4px}
 .al-stat + .al-stat{border-left:1px solid var(--line-soft)}
 .al-stat-v{font-size:22px;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums}
 .al-stat-l{font-size:11px;color:var(--txt-mute);margin-top:3px}
