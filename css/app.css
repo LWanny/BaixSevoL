@@ -1312,7 +1312,7 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 
 /* ---------- 桌面适配 ---------- */
 @media(min-width:720px){
-  body{background:radial-gradient(1200px 600px at 50% -10%,#ffffff,#eaeae8)}
+  body{background:#ffffff}
   #app{border-left:1px solid #e3e3e1;border-right:1px solid #e3e3e1;box-shadow:0 0 60px rgba(20,20,25,.14)}
 }
 @media(min-width:1024px){
