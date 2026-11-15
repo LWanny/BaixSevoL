@@ -274,7 +274,16 @@ export function stopProactive() {
   document.removeEventListener('visibilitychange', tickAll);
 }
 
-function tickAll() { tickProactive(); tickTaAsk(); tickMemoDue(); tickShop().catch(() => {}); }
+function tickAll() { tickProactive(); tickTaAsk(); tickMemoDue(); tickAnniv(); tickShop().catch(() => {}); }
+
+/** 纪念日：到了设定的日子，按概率让 TA 在聊天里提一句 */
+async function tickAnniv() {
+  try {
+    const { maybeMentionAnniversary } = await import('./annivdata.js');
+    const hit = await maybeMentionAnniversary();
+    if (hit) await addMessage({ role: 'ta', type: 'text', text: hit.text });
+  } catch { /* 下一轮再试 */ }
+}
 
 /** 主动发送间隔的毫秒范围 [最短, 最长]：
     配置区间 = [最短秒, 最长分钟]；老参数（分钟对）保持分钟语义 */

@@ -2265,6 +2265,19 @@ button.mc-import-line.as-btn:active{background:var(--accent-soft);color:var(--ac
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
 .an-meta{font-size:10.5px;color:var(--txt-mute);margin-top:4px}
+/* 置顶 / 提醒标签 */
+.an-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.an-tag{font-size:9.5px;line-height:1;color:var(--txt-mute);background:var(--bg-sunken);padding:4px 6px;border-radius:4px}
+.an-tag.pin{color:var(--accent-2);background:var(--accent-soft)}
+/* 编辑弹层 */
+.an-check{display:flex;align-items:center;gap:8px;margin:12px 0 0;font-size:13px;cursor:pointer}
+.an-check input{width:17px;height:17px;accent-color:var(--accent)}
+.an-sub-h{font-size:12px;font-weight:600;color:var(--txt-dim);margin:16px 0 2px}
+.an-grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.an-grid2 .field{margin:0}
+.an-hint{font-size:10.5px;color:var(--txt-mute);line-height:1.6;margin-top:6px}
+.an-name-chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;background:var(--bg-sunken);padding:6px 8px;border-radius:5px}
+.an-name-x{border:none;background:none;padding:0;font-size:14px;line-height:1;color:var(--txt-mute);cursor:pointer}
 
 /* ---------- 小粉书 ---------- */
 .bub .content.xhs-msg{padding:8px;min-width:190px;max-width:240px;border-radius:12px}

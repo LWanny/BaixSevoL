@@ -1,12 +1,16 @@
 /* 纪念日 · 自己的日子 + TA 想加的日子
-   记录存在 anniversaries 表；TA 提的先是 pending，要点「同意」才会变成 approved。 */
+   记录存在 anniversaries 表；TA 提的先是 pending，要点「同意」才会变成 approved。
+   每个纪念日可以设置「在某些日子里按概率在聊天中提起」，以及置顶。 */
 
 import { el, uid } from '../util.js';
 import { iconImg } from '../icons.js';
 import { fullPage } from '../shell.js';
-import { all, put, del } from '../store.js';
+import { all, put, del, kvSet } from '../store.js';
 import { actionSheet, confirmBox, sheet, toast } from '../ui.js';
-import { maybeProposeAnniversary, occurrence, ymd, parseYMD } from '../annivdata.js';
+import {
+  maybeProposeAnniversary, occurrence, daysPassed, ymd, parseYMD,
+  taProposePct, proposalTitles, DEFAULT_PROPOSAL_TITLES
+} from '../annivdata.js';
 
 const WD = ['日', '一', '二', '三', '四', '五', '六'];
 
@@ -17,7 +21,10 @@ export default async function pageAnniversary(v) {
   view = v;
   fullPage({
     back: true, title: '纪念日', sub: '记下值得反复想起的日子',
-    actions: [{ label: '添加', onclick: () => openEditor(null) }]
+    actions: [
+      { label: '设置', onclick: () => openSettings() },
+      { label: '添加', onclick: () => openEditor(null) }
+    ]
   });
   await maybeProposeAnniversary();
   await load();
@@ -37,9 +44,10 @@ function paint() {
   const sorted = approved
     .map((r) => ({ r, occ: occurrence(r.date) }))
     .filter((x) => x.occ)
-    .sort((a, b) => a.occ.days - b.occ.days);
+    .sort((a, b) => Number(!!b.r.pinned) - Number(!!a.r.pinned) || a.occ.days - b.occ.days);
+  const nearest = sorted.slice().sort((a, b) => a.occ.days - b.occ.days);
 
-  page.appendChild(hero(sorted[0]));
+  page.appendChild(hero(nearest[0]));
 
   if (pending.length) {
     page.appendChild(el('div', { class: 'an-sec-h' }, [
@@ -77,6 +85,7 @@ function hero(top) {
   }
   const { r, occ } = top;
   const d = parseYMD(r.date);
+  const passed = daysPassed(r.date);
   return el('div', { class: 'card an-hero' }, [
     el('div', { class: 'an-hero-num' }, [
       occ.days === 0
@@ -86,7 +95,7 @@ function hero(top) {
     ]),
     el('div', { class: 'an-hero-main' }, [
       el('div', { class: 'an-hero-t', text: occ.days === 0 ? `今天 · ${r.title}` : `还有 ${occ.days} 天 · ${r.title}` }),
-      el('div', { class: 'an-hero-s', text: `${d.getMonth() + 1} 月 ${d.getDate()} 日${occ.years > 0 ? ` · ${occ.years} 周年` : ''}` })
+      el('div', { class: 'an-hero-s', text: `${d.getMonth() + 1} 月 ${d.getDate()} 日 · 已经 ${passed} 天${occ.years > 0 ? ` · ${occ.years} 周年` : ''}` })
     ])
   ]);
 }
@@ -134,6 +143,13 @@ async function decide(r, ok) {
 
 function itemCard(r, occ) {
   const d = parseYMD(r.date);
+  const passed = daysPassed(r.date);
+  const tags = [];
+  if (r.pinned) tags.push({ t: '置顶', cls: 'pin' });
+  if (r.remindEnabled && Number(r.remindPct) > 0) {
+    const win = r.remindFrom ? `${r.remindFrom}~${r.remindTo || r.remindFrom}` : '当天';
+    tags.push({ t: `提醒 ${r.remindPct}% · ${win} · ${Number(r.remindedCount || 0)}/${Number(r.remindMax || 0)}`, cls: '' });
+  }
   return el('div', { class: 'card an-item', onclick: () => openMenu(r) }, [
     el('div', { class: 'an-date' }, [
       el('div', { class: 'an-m', text: `${d.getMonth() + 1}月` }),
@@ -145,15 +161,17 @@ function itemCard(r, occ) {
         r.owner === 'ta' ? el('span', { class: 'an-owner', text: 'TA 添加' }) : null
       ]),
       r.note ? el('div', { class: 'an-note', text: r.note }) : null,
-      el('div', { class: 'an-meta', text: metaText(occ) })
+      el('div', { class: 'an-meta', text: metaText(occ, passed) }),
+      tags.length ? el('div', { class: 'an-tags' }, tags.map((x) =>
+        el('span', { class: 'an-tag' + (x.cls ? ' ' + x.cls : ''), text: x.t }))) : null
     ])
   ]);
 }
 
-function metaText(occ) {
+function metaText(occ, passed) {
   const when = occ.days === 0 ? '就是今天' : `还有 ${occ.days} 天`;
   const years = occ.years > 0 ? ` · ${occ.years} 周年` : '';
-  return when + years;
+  return `${when} · 已经 ${passed} 天${years}`;
 }
 
 function fmtDate(s) {
@@ -164,6 +182,12 @@ function fmtDate(s) {
 
 function openMenu(r) {
   actionSheet(r.title || '纪念日', [
+    { label: r.pinned ? '取消置顶' : '置顶', onSelect: async () => {
+      r.pinned = !r.pinned;
+      await put('anniversaries', r);
+      await load();
+      toast(r.pinned ? '已置顶' : '已取消置顶');
+    } },
     { label: '编辑', icon: 'IC-CRD-006', onSelect: () => openEditor(r) },
     { label: '删除', icon: 'IC-CRD-007', danger: true, onSelect: async () => {
       const yes = await confirmBox({
@@ -179,6 +203,11 @@ function openMenu(r) {
   ]);
 }
 
+/* ---------------- 编辑 / 添加 ---------------- */
+/** MM-DD ↔ <input type="date"> 的值 */
+const toDateVal = (mmdd) => (mmdd ? `${new Date().getFullYear()}-${mmdd}` : '');
+const mdOf = (v) => (v ? String(v).slice(5, 10) : '');
+
 function openEditor(rec) {
   const title = el('input', {
     class: 'input', placeholder: '纪念日的名字',
@@ -188,8 +217,19 @@ function openEditor(rec) {
     class: 'input', type: 'date',
     value: rec ? rec.date : ymd()
   });
-  const note = el('textarea', { class: 'input', rows: 3, placeholder: '想写点什么（可选）' });
+  const note = el('textarea', { class: 'input', rows: 2, placeholder: '想写点什么（可选）' });
   note.value = rec ? (rec.note || '') : '';
+
+  const pin = el('input', { type: 'checkbox' });
+  pin.checked = !!(rec && rec.pinned);
+
+  /* 提醒：默认关闭；概率 0~100；区间用 MM-DD（跨年如 12-20 ~ 01-01）；最多提起几次 */
+  const remindOn = el('input', { type: 'checkbox' });
+  remindOn.checked = !!(rec && rec.remindEnabled);
+  const pct = el('input', { class: 'input', type: 'number', inputmode: 'numeric', min: 0, max: 100, value: rec ? Number(rec.remindPct || 0) : 50 });
+  const from = el('input', { class: 'input', type: 'date', value: toDateVal(rec && rec.remindFrom) });
+  const to = el('input', { class: 'input', type: 'date', value: toDateVal(rec && rec.remindTo) });
+  const maxN = el('input', { class: 'input', type: 'number', inputmode: 'numeric', min: 1, max: 99, value: rec ? Number(rec.remindMax || 3) : 3 });
 
   const s = sheet({
     title: rec ? '编辑纪念日' : '添加纪念日',
@@ -197,6 +237,18 @@ function openEditor(rec) {
       el('div', { class: 'field' }, [el('label', { text: '名字' }), title]),
       el('div', { class: 'field' }, [el('label', { text: '日期' }), date]),
       el('div', { class: 'field' }, [el('label', { text: '备注' }), note]),
+      el('label', { class: 'an-check' }, [pin, el('span', { text: '置顶（排在列表最前面）' })]),
+      el('div', { class: 'an-sub-h', text: '聊天中提起' }),
+      el('label', { class: 'an-check' }, [remindOn, el('span', { text: '在这些日子按概率提起这件事' })]),
+      el('div', { class: 'an-grid2' }, [
+        el('div', { class: 'field' }, [el('label', { text: '概率 %' }), pct]),
+        el('div', { class: 'field' }, [el('label', { text: '最多提起几次' }), maxN])
+      ]),
+      el('div', { class: 'an-grid2' }, [
+        el('div', { class: 'field' }, [el('label', { text: '从' }), from]),
+        el('div', { class: 'field' }, [el('label', { text: '到' }), to])
+      ]),
+      el('div', { class: 'an-hint', text: '起止只算月-日，可以跨年（如 12-20 到 01-01）。不填起止就只在纪念日当天提醒。' }),
       el('div', { class: 'row', style: { marginTop: '14px' } }, [
         el('button', { class: 'btn primary', type: 'button', style: { width: '100%' }, onclick: save }, ['保存'])
       ])
@@ -209,14 +261,21 @@ function openEditor(rec) {
     const data = {
       title: t,
       date: date.value,
-      note: note.value.trim()
+      note: note.value.trim(),
+      pinned: pin.checked,
+      remindEnabled: remindOn.checked,
+      remindPct: Math.max(0, Math.min(100, Number(pct.value) || 0)),
+      remindFrom: mdOf(from.value),
+      remindTo: mdOf(to.value) || mdOf(from.value),
+      remindMax: Math.max(1, Math.min(99, Number(maxN.value) || 3))
     };
     if (rec) {
       Object.assign(rec, data);
       await put('anniversaries', rec);
     } else {
       await put('anniversaries', {
-        id: uid(), ts: Date.now(), owner: 'me', status: 'approved', ...data
+        id: uid(), ts: Date.now(), owner: 'me', status: 'approved',
+        remindedCount: 0, ...data
       });
     }
     s.close();
@@ -225,4 +284,69 @@ function openEditor(rec) {
   }
 
   setTimeout(() => title.focus(), 260);
+}
+
+/* ---------------- 设置：TA 提议概率 + 可选名字 ---------------- */
+async function openSettings() {
+  const pctVal = await taProposePct();
+  let titles = await proposalTitles();
+
+  const pct = el('input', { class: 'input', type: 'number', inputmode: 'numeric', min: 0, max: 100, value: pctVal });
+  const chips = el('div', { class: 'row wrap', style: { gap: '8px', marginBottom: '8px' } });
+  const addInput = el('input', { class: 'input', placeholder: '再加一个名字（如：第一次旅行）' });
+
+  function renderChips() {
+    chips.innerHTML = '';
+    titles.forEach((t, i) => {
+      chips.appendChild(el('span', { class: 'an-name-chip' }, [
+        el('span', { text: t }),
+        el('button', {
+          class: 'an-name-x', type: 'button',
+          onclick: () => { titles.splice(i, 1); renderChips(); }
+        }, ['×'])
+      ]));
+    });
+    if (!titles.length) chips.appendChild(el('div', { class: 'an-hint', text: '至少留一个名字' }));
+  }
+  renderChips();
+
+  const addBtn = el('button', {
+    class: 'btn sm', type: 'button',
+    onclick: () => {
+      const v = addInput.value.trim();
+      if (!v) return;
+      titles.push(v);
+      addInput.value = '';
+      renderChips();
+    }
+  }, ['加入']);
+
+  const s = sheet({
+    title: '纪念日设置',
+    node: el('div', {}, [
+      el('div', { class: 'field' }, [
+        el('label', { text: 'TA 主动提议纪念日的概率 %（0~100，默认 5）' }),
+        pct,
+        el('div', { class: 'an-hint', text: '每天最多掷一次；已有待同意的提议时不再提。' })
+      ]),
+      el('div', { class: 'field' }, [
+        el('label', { text: 'TA 可以选的纪念日名字' }),
+        chips,
+        el('div', { class: 'row', style: { gap: '8px' } }, [addInput, addBtn]),
+        el('div', { class: 'an-hint', text: 'TA 提议时会从这些名字里挑一个；你不同意就不会加进来。' })
+      ]),
+      el('div', { class: 'row', style: { marginTop: '14px' } }, [
+        el('button', {
+          class: 'btn primary', type: 'button', style: { width: '100%' },
+          onclick: async () => {
+            const v = Math.max(0, Math.min(100, Number(pct.value) || 0));
+            await kvSet('annivTaPct', v);
+            await kvSet('annivProposalTitles', titles.length ? titles : DEFAULT_PROPOSAL_TITLES.slice());
+            s.close();
+            toast('设置已保存');
+          }
+        }, ['保存'])
+      ])
+    ])
+  });
 }
