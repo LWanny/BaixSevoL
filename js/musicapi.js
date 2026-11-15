@@ -148,7 +148,7 @@ function ncmErrMsg(code, raw) {
   return `接口返回 code ${code}`;
 }
 
-export async function ncmFetch(base, path, params = {}, cookie = '') {
+export async function ncmFetch(base, path, params = {}, cookie = '', opts = {}) {
   const root = String(base || '').trim().replace(/\/+$/, '');
   if (!/^https?:\/\//.test(root)) throw new Error('接口地址要以 http(s):// 开头');
   const qs = new URLSearchParams();
@@ -158,7 +158,8 @@ export async function ncmFetch(base, path, params = {}, cookie = '') {
   });
   if (cookie) qs.set('cookie', cookie);
   const data = await getJSON(`${root}${path}${qs.toString() ? '?' + qs : ''}`, 15000);
-  if (data && typeof data.code === 'number' && data.code !== 200 && data.code !== 301) {
+  if (!opts.rawCode && data && typeof data.code === 'number'
+    && data.code !== 200 && data.code !== 301) {
     throw new Error(ncmErrMsg(data.code, data.message || data.msg));
   }
   return data;
@@ -186,9 +187,10 @@ export async function ncmQrCreate(base, key) {
   return d.data || {};
 }
 
-/** 轮询扫码状态：800 过期 / 801 等待 / 802 已扫待确认 / 803 成功（带 cookie） */
+/** 轮询扫码状态：800 过期 / 801 等待 / 802 已扫待确认 / 803 成功（带 cookie）
+    注意：这几个状态码都是正常业务码，必须 rawCode 模式取回，不能当错误抛 */
 export async function ncmQrCheck(base, key) {
-  const d = await ncmFetch(base, '/login/qr/check', { key, timestamp: Date.now() });
+  const d = await ncmFetch(base, '/login/qr/check', { key, timestamp: Date.now() }, '', { rawCode: true });
   return { code: d.code, cookie: d.cookie || '' };
 }
 

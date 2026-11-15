@@ -264,10 +264,11 @@ function openLoginSheet() {
           if (r.code === 803 && r.cookie) {
             clearInterval(poll);
             ncmCookie = r.cookie;
-            ncmProfile = await ncmAccount(ncmBase, r.cookie);
+            try { ncmProfile = await ncmAccount(ncmBase, r.cookie); } catch { ncmProfile = null; }
+            if (!ncmProfile) ncmProfile = { nickname: '网易云账号' };
             await kvSet('ncmCookie', r.cookie);
             await kvSet('ncmProfile', ncmProfile);
-            toast(`登录成功：${(ncmProfile && ncmProfile.nickname) || '账号'}`);
+            toast(`登录成功：${ncmProfile.nickname || '账号'}`);
             s.close();
             paint();
           }
