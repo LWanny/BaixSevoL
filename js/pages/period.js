@@ -32,7 +32,7 @@ export default async function pagePeriod(v) {
   view = v;
   fullPage({
     back: true, title: '经期记录', sub: '纯本地计算 · 只存在这台设备',
-    actions: [{ label: '记录', onclick: quickMenu }, { label: '设置', onclick: openConfig }]
+    actions: [{ label: '记录', onclick: quickMenu }, { label: '设置', onclick: openConfig }, { label: '清空', onclick: clearAll }]
   });
   cycleLen = Number(await kvGet('periodCycle', 28)) || 28;
   periodLen = Number(await kvGet('periodDays', 5)) || 5;
@@ -199,6 +199,7 @@ function openDayForm(date) {
     actions: [{ label: '保存', icon: 'IC-MIO-021', onSelect: async () => {
       const pad = (n) => String(n).padStart(2, '0');
       const newDate = `${ySel.value}-${pad(Number(mSel.value))}-${pad(Number(dSel.value))}`;
+      if (newDate > ymd(today())) { toast('不能记录未来的日期'); return; }
       const has = st.flow || st.body.length || st.mood.length || st.energy || st.ovu || note.value.trim();
       if (!has) {
         if (logOf(date)) {
@@ -444,7 +445,28 @@ async function reload() {
   items = (await all('periods')).sort((a, b) => String(b.start).localeCompare(String(a.start)));
   logs = (await kvGet('periodLogs', [])) || [];
   await closeStaleOpens();     // 自动补上过期未结束记录的结束日
+  /* 记录满 2 条以上 → 用实测值重算周期 / 经期天数并写回，预测经期随之更新 */
+  if (items.length >= 2) {
+    const ac = avgCycle(), ap = avgPeriodLen();
+    if (ac !== cycleLen) { cycleLen = ac; await kvSet('periodCycle', cycleLen); }
+    if (ap !== periodLen) { periodLen = ap; await kvSet('periodDays', periodLen); }
+  }
   paint();
+}
+
+/** 清空所有经期记录与当天详情，周期重置为默认值 */
+async function clearAll() {
+  if (!items.length) { toast('还没有记录'); return; }
+  const yes = await confirmBox({ title: '清空记录', text: '将删除全部经期记录与当天详情，且无法恢复。确定吗？', okText: '清空', danger: true });
+  if (!yes) return;
+  for (const r of items) await del('periods', r.id);
+  logs = [];
+  await kvSet('periodLogs', logs);
+  cycleLen = 28; periodLen = 5;
+  await kvSet('periodCycle', 28);
+  await kvSet('periodDays', 5);
+  await reload();
+  toast('已清空');
 }
 
 function quickMenu() {
@@ -496,6 +518,7 @@ function dayMenu(key) {
     } });
   }
   acts.push({ label: `从 ${key} 开始`, icon: 'IC-MIO-033', onSelect: async () => {
+    if (key > ymd(today())) { toast('不能从未来日期开始'); return; }
     /* 覆盖检查：这天已在某条记录范围内 → 拒绝重复建记录（否则两条 open 互相打架） */
     const covered = items.some((r) => {
       const s = parseYMD(r.start), e = recordEnd(r);
@@ -508,6 +531,7 @@ function dayMenu(key) {
   } });
   if (rec) {
     acts.push({ label: '把这一天记为结束', icon: 'IC-MIO-003', onSelect: async () => {
+      if (key > ymd(today())) { toast('不能把未来日期记为结束'); return; }
       if (parseYMD(key) < parseYMD(rec.start)) { toast('结束日不能早于开始日'); return; }
       rec.end = key;
       await put('periods', rec);
