@@ -224,6 +224,42 @@ export async function ncmPlaylistTracks(base, cookie, id) {
   })).filter((t) => t.neteaseId);
 }
 
+/** 用登录账号搜索（cloudsearch，账号权益生效；返回与 searchNetease 相同的草稿结构） */
+export async function ncmSearch(base, cookie, keyword, limit = 20) {
+  const q = String(keyword || '').trim();
+  if (!q) throw new Error('先输入要搜索的关键词');
+  const d = await ncmFetch(base, '/cloudsearch', {
+    keywords: q, type: 1, limit, timestamp: Date.now()
+  }, cookie);
+  const arr = (d.result && d.result.songs) || [];
+  return arr.map((t) => ({
+    neteaseId: String(t.id || ''),
+    title: t.name || '未命名',
+    artist: artists((t.ar || []).map((a) => a.name)),
+    album: (t.al && t.al.name) || '',
+    cover: (t.al && t.al.picUrl) || '',
+    duration: Math.round((t.dt || 0) / 1000),
+    source: 'netease',
+    vip: t.fee === 1
+  })).filter((t) => t.neteaseId);
+}
+
+/** 用登录账号读取歌单详情（可读私密歌单） */
+export async function ncmPlaylist(base, cookie, id) {
+  const pid = parsePlaylistId(id);
+  if (!pid) throw new Error('没有识别到歌单 ID');
+  const d = await ncmFetch(base, '/playlist/detail', { id: pid, timestamp: Date.now() }, cookie);
+  const pl = (d && d.playlist) || {};
+  const tracks = await ncmPlaylistTracks(base, cookie, pid);
+  return {
+    id: pid,
+    name: pl.name || ('在线歌单 ' + pid),
+    cover: pl.coverImgUrl || '',
+    trackCount: pl.trackCount || tracks.length,
+    tracks
+  };
+}
+
 /** 用登录账号解析播放地址（VIP 歌曲可用账号权益），失败/无版权返回 '' */
 export async function ncmSongUrl(base, cookie, id, level = 'standard') {
   const d = await ncmFetch(base, '/song/url/v1', { id, level, realIP: '116.25.146.177', timestamp: Date.now() }, cookie);

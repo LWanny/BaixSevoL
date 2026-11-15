@@ -17,7 +17,8 @@ import { eligible, drawCards, joinFragments } from '../engine.js';
 import {
   searchNetease, fetchPlaylist, resolveSongUrl, parsePlaylistId,
   ncmCaptchaSent, ncmLoginCellphone, ncmQrKey, ncmQrCreate, ncmQrCheck,
-  ncmAccount, ncmUserPlaylists, ncmPlaylistTracks, ncmSongUrl
+  ncmAccount, ncmUserPlaylists, ncmPlaylistTracks, ncmSongUrl,
+  ncmSearch, ncmPlaylist
 } from '../musicapi.js';
 
 let view = null;
@@ -156,18 +157,39 @@ function cloudCard() {
   ]);
 }
 
-/* 登录状态行：未登录引导，已登录显示昵称 */
+/* 登录状态行：未登录引导，已登录显示昵称 + 账号设置 */
 function loginRow() {
   if (ncmCookie && ncmProfile) {
     return el('div', { class: 'mc-cloud-foot' }, [
-      el('span', { text: `网易云已登录：${ncmProfile.nickname || '账号'} · VIP 歌曲用你的账号解析` }),
-      el('button', { class: 'mc-link', onclick: logoutNcm }, ['退出'])
+      el('span', { text: `网易云已登录：${ncmProfile.nickname || '账号'} · 搜索/歌单/VIP 解析都走你的账号` }),
+      el('button', { class: 'mc-link', onclick: openLoginSheet }, ['账号设置'])
     ]);
   }
   return el('div', { class: 'mc-cloud-foot' }, [
     el('span', { text: '登录网易云后可用自己的账号解 VIP、导私密歌单' }),
     el('button', { class: 'mc-link', onclick: openLoginSheet }, ['登录'])
   ]);
+}
+
+/* 登录后所有在线请求都带上 Cookie（作为 cookie 查询参数交给中转实例） */
+function ncmReady() {
+  return !!(ncmCookie && ncmBase);
+}
+
+/** 搜索：登录时走自己的账号，失败再退回公共接口 */
+async function searchSongs(q, limit = 20) {
+  if (ncmReady()) {
+    try { return await ncmSearch(ncmBase, ncmCookie, q, limit); } catch { /* 回退公共接口 */ }
+  }
+  return searchNetease(q, limit);
+}
+
+/** 歌单读取：登录时走自己的账号（含私密歌单），失败再退回公共接口 */
+async function loadPlaylistById(id) {
+  if (ncmReady()) {
+    try { return await ncmPlaylist(ncmBase, ncmCookie, id); } catch { /* 回退公共接口 */ }
+  }
+  return fetchPlaylist(id);
 }
 
 async function logoutNcm() {
@@ -307,11 +329,37 @@ function openLoginSheet() {
     }
   } }, ['扫码登录（推荐，更稳）']);
 
+  const head = ncmCookie && ncmProfile
+    ? el('div', { class: 'mc-cookie-on' }, [
+      el('span', { text: `当前已登录：${ncmProfile.nickname || '账号'}` }),
+      el('button', { class: 'mc-link', onclick: async () => { await logoutNcm(); s.close(); } }, ['退出登录'])
+    ])
+    : el('div', { class: 'mc-note', text: ncmBase ? '还没登录。按下面的步骤拿 MUSIC_U 粘贴进来即可。' : '还没配置接口地址：先完成第①步。' });
+
   const body = el('div', {}, [
-    el('div', { class: 'field' }, [el('div', { class: 'field-l', text: '网易云接口地址' }), baseInput, el('div', { class: 'tiny muted', style: { marginTop: '6px' }, text: '部署方法：GitHub 搜索 NeteaseCloudMusicApi 的存活 fork → Vercel 免费部署 → 把地址填到这里。实例只做中转，Cookie 保存在本机。' }), presetRow]),
+    head,
+    el('div', { class: 'sec-sub', text: '① 接口地址（中转实例）' }),
+    el('div', { class: 'field' }, [
+      baseInput,
+      el('div', { class: 'tiny muted', style: { marginTop: '6px' }, text: 'GitHub 搜索 NeteaseCloudMusicApi 的存活 fork → Vercel 免费部署 → 把地址填到这里。实例只做中转，Cookie 只存本机。' }),
+      presetRow
+    ]),
     saveBaseBtn,
-    el('div', { class: 'sec-sub', text: 'Cookie 登录（推荐，最稳）' }),
-    el('div', { class: 'tiny muted', style: { marginTop: '0', marginBottom: '8px' }, text: '① 用带 Cookie 查看的手机浏览器（如 Via）打开 music.163.com 并登录官方网页版 ② 菜单 → 工具 → Cookies ③ 找到并复制 MUSIC_U 的值，粘贴到这里' }),
+    el('div', { class: 'sec-sub', text: '② Cookie 登录（推荐，最稳）' }),
+    el('div', { class: 'mc-guide' }, [
+      el('div', { class: 'mc-step' }, [
+        el('div', { class: 'mc-step-n', text: '1' }),
+        el('div', { class: 'small', text: '电脑浏览器打开 music.163.com，用手机号或微信登录官方网页版' })
+      ]),
+      el('div', { class: 'mc-step' }, [
+        el('div', { class: 'mc-step-n', text: '2' }),
+        el('div', { class: 'small', text: '按 F12 → Application（应用）→ Cookies → https://music.163.com，找到 MUSIC_U，复制它的值' })
+      ]),
+      el('div', { class: 'mc-step' }, [
+        el('div', { class: 'mc-step-n', text: '3' }),
+        el('div', { class: 'small', text: '把值发到手机（微信文件传输助手），粘贴到下面，点「粘贴登录」' })
+      ])
+    ]),
     ckInput,
     ckBtn,
     el('div', { class: 'sec-sub', text: '手机验证码登录（常被网易风控）' }),
@@ -322,7 +370,7 @@ function openLoginSheet() {
     qrBtn, qrBox, status
   ]);
 
-  const s = sheet({ title: '登录网易云', node: body });
+  const s = sheet({ title: ncmCookie && ncmProfile ? '网易云账号设置' : '登录网易云', node: body });
 }
 
 function taBar() {
@@ -863,7 +911,7 @@ function openSearch(prefill = '') {
     status.textContent = '正在搜索…';
     results.innerHTML = '';
     try {
-      const list = await searchNetease(q, 20);
+      const list = await searchSongs(q, 20);
       status.textContent = list.length ? `找到 ${list.length} 首，点「收藏」放进${tab === 'ta' ? ' TA 的' : '我的'}歌单` : '没有搜到，换个关键词试试';
       list.forEach((t) => results.appendChild(resultRow(t, s)));
     } catch (err) {
@@ -945,7 +993,7 @@ function openGuess() {
     results.innerHTML = '';
     try {
       const seed = GUESS_SEEDS[rndInt(0, GUESS_SEEDS.length - 1)];
-      const list = await searchNetease(seed, 30);
+      const list = await searchSongs(seed, 30);
       const have = new Set(songs.filter((x) => x.source === 'netease').map((x) => x.neteaseId));
       const fresh = list.filter((t) => !have.has(t.neteaseId));
       batch = pickN(fresh.length >= 4 ? fresh : list, 8);
@@ -1065,7 +1113,7 @@ function openPlaylistImport(prefill = '') {
     status.textContent = '正在读取歌单…';
     preview.innerHTML = '';
     try {
-      const pl = await fetchPlaylist(id);
+      const pl = await loadPlaylistById(id);
       showPreview(pl);
     } catch (err) {
       status.textContent = '读取失败：' + (err.message || '接口连不上');
@@ -1301,7 +1349,7 @@ async function doTaSearchAndCollect(silent) {
     for (const kw of attempts) {
       if (picked.length) break;
       try {
-        const list = await searchNetease(kw, 12);
+        const list = await searchSongs(kw, 12);
         const got = pickN(list, Math.min(2, list.length));
         got.forEach((t) => picked.push(t));
       } catch { /* 换下一个关键词 */ }
