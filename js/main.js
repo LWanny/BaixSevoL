@@ -47,6 +47,7 @@ import pageFavorites from './pages/favorites.js';
 import pageAlbum from './pages/album.js';
 import pageXhs from './pages/xhs.js';
 import pageShop from './pages/shop.js';
+import pageApproval from './pages/approval.js';
 import pageStore from './pages/store.js';
 import pagePdd from './pages/pdd.js';
 import pageTong from './pages/tong.js';
@@ -104,6 +105,7 @@ async function boot() {
     '/album': pageAlbum,
     '/xhs': pageXhs,
     '/shop': pageShop,
+    '/approval': pageApproval,
     '/store': pageStore,
     '/pdd': pagePdd,
     '/games': pageGames,

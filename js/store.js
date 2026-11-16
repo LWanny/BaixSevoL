@@ -34,6 +34,7 @@ const STORES = {
   nicknamePool:  { keyPath: 'id', indexes: { role: 'role', ts: 'ts' } },       // TA/我的昵称库
   avatarPool:    { keyPath: 'id', indexes: { role: 'role', ts: 'ts' } },       // TA/我的头像库
   orders:        { keyPath: 'id', indexes: { ts: 'ts' } },                      // 商城订单
+  approvals:     { keyPath: 'id', indexes: { ts: 'ts', status: 'status', from: 'from' } },  // 审批
   games:         { keyPath: 'id', indexes: { ts: 'ts' } },                       // 游戏战绩
   echoDecks:     { keyPath: 'id', indexes: { ts: 'ts' } },                       // 回声 · 卡组
   echoCards:     { keyPath: 'id', indexes: { deckId: 'deckId', ts: 'ts' } }      // 回声 · 组内卡
