@@ -3,7 +3,7 @@
    当天详情（经量 / 身体状况 / 情绪等，除日期外全部可选）存 kv periodLogs：[{ date, flow, body, mood, energy, ovu, note }]
    周期 / 经期天数存在 kv，纯本地计算，不联网。 */
 
-import { el, uid } from '../util.js';
+import { el, uid, pick, chance } from '../util.js';
 import { iconImg } from '../icons.js';
 import { fullPage } from '../shell.js';
 import { all, put, del, kvGet, kvSet } from '../store.js';
@@ -127,6 +127,91 @@ function avgPeriodLen() {
 
 /** 某天的详情（经量 / 身体状况…，可选） */
 function logOf(date) { return logs.find((l) => l.date === date) || null; }
+
+/* ---------------- 经期提醒（scheduler 定时调用） ----------------
+   开关 periodRemindOn；预测开始日前 3 天内倒数提醒，预测当天单独一句；
+   预测日开始 ≥1 天后仍没记录经期 → 每天按 periodLatePct（默认 30%）概率提醒一次，
+   直到记录了新的经期开始（预测随之重算，迟到状态自动结束）。
+   每天最多提醒 periodRemindMax 次（默认 1），三种阶段共用这个次数。 */
+export const DEFAULT_PRE_REMIND_LINES = [
+  '「那几天」要到了，预计 {date} 开始，倒数 {days} 天，提前准备好哦。',
+  '算了一下，你的经期预计 {date} 来，还有 {days} 天，记得留意一下。',
+  '倒数 {days} 天，经期预计 {date} 开始，这两天别太累呀。'
+];
+export const DEFAULT_DAY_REMIND_LINES = [
+  '按预测，经期今天开始，来了记得记一下哦。',
+  '预计今天就是经期第一天了，记得留意身体呀。'
+];
+export const DEFAULT_LATE_REMIND_LINES = [
+  '预计 {date} 的经期还没记到，已经过了 {late} 天，是来了忘了记吗？',
+  '经期比预计晚了 {late} 天了，注意休息，来了记得记一下哦。',
+  '还没看到你记经期，比预计晚了 {late} 天，别太担心，先观察一下。'
+];
+
+function fillRemindTpl(tpl, next, days, late) {
+  return String(tpl)
+    .replace(/\{date\}/g, `${next.getMonth() + 1} 月 ${next.getDate()} 日`)
+    .replace(/\{days\}/g, String(days))
+    .replace(/\{late\}/g, String(late));
+}
+
+export async function maybeRemindPeriod() {
+  if (!(await kvGet('periodRemindOn', false))) return null;
+  const rows = (await all('periods')).sort((a, b) => String(b.start).localeCompare(String(a.start)));
+  if (!rows.length) return null;
+
+  /* 每天最多几次：提前 / 当天 / 迟到共用计数 */
+  const day = ymd(today());
+  const st = (await kvGet('periodRemindState', null)) || { day: '', count: 0 };
+  if (st.day !== day) { st.day = day; st.count = 0; }
+  const max = Math.max(1, Math.min(10, Number(await kvGet('periodRemindMax', 1)) || 1));
+  if (st.count >= max) return null;
+
+  /* 实测平均周期（与页面同一套算法） */
+  let cycle = Number(await kvGet('periodCycle', 30)) || 30;
+  if (rows.length >= 2) {
+    let sum = 0, n = 0;
+    for (let i = 0; i < rows.length - 1; i++) {
+      const d = diffDays(parseYMD(rows[i + 1].start), parseYMD(rows[i].start));
+      if (d > 10 && d < 90) { sum += d; n++; }
+    }
+    if (n) cycle = Math.round(sum / n);
+  }
+  const periodGuess = Number(await kvGet('periodDays', 7)) || 7;
+
+  const t = today();
+  const latest = rows[0];
+  const guessEnd = (r) => r.end ? parseYMD(r.end) : new Date(parseYMD(r.start).getTime() + (periodGuess - 1) * DAY);
+  if (!latest.end && t >= parseYMD(latest.start)) return null;   // 经期进行中：不打扰
+  if (rows.some((r) => t >= parseYMD(r.start) && t <= guessEnd(r))) return null;   // 今天确实在经期里
+
+  const predicted = new Date(parseYMD(latest.start).getTime() + cycle * DAY);
+  const dl = diffDays(predicted, t);   // <0 还没到；≥0 已到/已过
+
+  /* 语录：可改可删可加，删空回落默认 */
+  const norm = (v, def) => {
+    const l = Array.isArray(v) ? v.map((s) => String(s).trim()).filter(Boolean) : [];
+    return l.length ? l : def.slice();
+  };
+  let text = null;
+  if (dl >= -3 && dl <= -1) {
+    const pre = norm(await kvGet('periodRemindLinesPre', null), DEFAULT_PRE_REMIND_LINES);
+    text = fillRemindTpl(pick(pre), predicted, -dl, 0);
+  } else if (dl === 0) {
+    const dayLines = norm(await kvGet('periodRemindLinesDay', null), DEFAULT_DAY_REMIND_LINES);
+    text = fillRemindTpl(pick(dayLines), predicted, 0, 0);
+  } else if (dl >= 1) {
+    const latePct = Math.max(0, Math.min(100, Number(await kvGet('periodLatePct', 30))));
+    if (chance(latePct)) {
+      const late = norm(await kvGet('periodRemindLinesLate', null), DEFAULT_LATE_REMIND_LINES);
+      text = fillRemindTpl(pick(late), predicted, 0, dl);
+    }
+  }
+  if (!text) return null;
+  st.count += 1;
+  await kvSet('periodRemindState', st);
+  return text;
+}
 
 /* ---------------- 当天详情表单（除日期外全部可选） ---------------- */
 const FLOW = ['无', '少', '中', '多'];
@@ -605,20 +690,83 @@ function editNote(rec) {
   setTimeout(() => input.focus(), 260);
 }
 
-function openConfig() {
+/** 语录编辑器：每条一个输入框（改 / 删 ×），＋ 添加一条；values() 收集非空行 */
+function lineEditor(list) {
+  const box = el('div');
+  const addRow = (val) => {
+    const input = el('input', { class: 'input', placeholder: '写一句 TA 会说的话…', value: val || '' });
+    const row = el('div', { class: 'row', style: { gap: '8px', marginBottom: '8px', alignItems: 'center' } }, [
+      input,
+      el('button', { class: 'btn sm', type: 'button', title: '删除这条', onclick: () => row.remove() }, ['×'])
+    ]);
+    box.appendChild(row);
+  };
+  list.forEach(addRow);
+  return {
+    node: el('div', {}, [
+      box,
+      el('button', { class: 'btn sm', type: 'button', onclick: () => addRow('') }, ['＋ 添加一条'])
+    ]),
+    values: () => Array.from(box.querySelectorAll('input')).map((i) => i.value.trim()).filter(Boolean)
+  };
+}
+
+const normLines = (v, def) => {
+  const l = Array.isArray(v) ? v.map((s) => String(s).trim()).filter(Boolean) : [];
+  return l.length ? l : def.slice();
+};
+
+async function openConfig() {
   const c = el('input', { class: 'input', type: 'number', min: '15', max: '60', value: String(cycleLen) });
   const p = el('input', { class: 'input', type: 'number', min: '1', max: '15', value: String(periodLen) });
+
+  /* 经期提醒：开关 + 每天最多几次 + 迟到提醒概率 + 三组语录 */
+  const remindOn = el('input', { type: 'checkbox' });
+  remindOn.checked = !!(await kvGet('periodRemindOn', false));
+  const maxN = el('input', { class: 'input', type: 'number', inputmode: 'numeric', min: 1, max: 10, value: String(Number(await kvGet('periodRemindMax', 1)) || 1) });
+  const latePct = el('input', { class: 'input', type: 'number', inputmode: 'numeric', min: 0, max: 100, value: String(Number(await kvGet('periodLatePct', 30)) || 0) });
+  const preEd = lineEditor(normLines(await kvGet('periodRemindLinesPre', null), DEFAULT_PRE_REMIND_LINES));
+  const dayEd = lineEditor(normLines(await kvGet('periodRemindLinesDay', null), DEFAULT_DAY_REMIND_LINES));
+  const lateEd = lineEditor(normLines(await kvGet('periodRemindLinesLate', null), DEFAULT_LATE_REMIND_LINES));
+
   sheet({
     title: '周期设置',
     node: el('div', {}, [
       el('div', { class: 'field' }, [el('label', { text: '平均周期（天）' }), c, el('div', { class: 'hint', text: '两次经期第一天之间的天数，常见 21–35 天' })]),
-      el('div', { class: 'field' }, [el('label', { text: '经期天数' }), p, el('div', { class: 'hint', text: '每次持续几天，用来推算结束日' })])
+      el('div', { class: 'field' }, [el('label', { text: '经期天数' }), p, el('div', { class: 'hint', text: '每次持续几天，用来推算结束日' })]),
+      el('div', { class: 'an-sub-h', text: '经期提醒' }),
+      el('label', { class: 'an-check' }, [remindOn, el('span', { text: '开启经期提醒（在聊天里提醒我）' })]),
+      el('div', { class: 'an-grid2' }, [
+        el('div', { class: 'field' }, [el('label', { text: '每天最多提醒几次' }), maxN]),
+        el('div', { class: 'field' }, [el('label', { text: '没来时每天提醒概率 %' }), latePct])
+      ]),
+      el('div', { class: 'an-hint', text: '预测开始日前 3 天到当天倒数提醒；预测日开始还没记录经期，就每天按概率提醒一次，直到记下新的经期开始。' }),
+      el('div', { class: 'field' }, [
+        el('label', { text: 'TA 提前 3 天内的提醒语录（{date} 预计日期、{days} 倒数天数）' }),
+        preEd.node
+      ]),
+      el('div', { class: 'field' }, [
+        el('label', { text: 'TA 在预测当天的提醒语录' }),
+        dayEd.node
+      ]),
+      el('div', { class: 'field' }, [
+        el('label', { text: 'TA 在经期没来时的提醒语录（{late} 已过天数）' }),
+        lateEd.node,
+        el('div', { class: 'an-hint', text: '语录可修改、添加、删除；全部删空会恢复默认。' })
+      ])
     ]),
     actions: [{ label: '保存', icon: 'IC-MIO-021', onSelect: async () => {
       cycleLen = clampInt(c.value, 15, 60, 30);
       periodLen = clampInt(p.value, 1, 15, 7);
       await kvSet('periodCycle', cycleLen);
       await kvSet('periodDays', periodLen);
+      await kvSet('periodRemindOn', remindOn.checked);
+      await kvSet('periodRemindMax', clampInt(maxN.value, 1, 10, 1));
+      await kvSet('periodLatePct', clampInt(latePct.value, 0, 100, 30));
+      const pre = preEd.values(), dayL = dayEd.values(), late = lateEd.values();
+      await kvSet('periodRemindLinesPre', pre.length ? pre : DEFAULT_PRE_REMIND_LINES.slice());
+      await kvSet('periodRemindLinesDay', dayL.length ? dayL : DEFAULT_DAY_REMIND_LINES.slice());
+      await kvSet('periodRemindLinesLate', late.length ? late : DEFAULT_LATE_REMIND_LINES.slice());
       await reload();
       toast('已保存');
     } }]

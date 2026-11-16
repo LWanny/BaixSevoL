@@ -274,7 +274,7 @@ export function stopProactive() {
   document.removeEventListener('visibilitychange', tickAll);
 }
 
-function tickAll() { tickProactive(); tickTaAsk(); tickMemoDue(); tickAnniv(); tickShop().catch(() => {}); }
+function tickAll() { tickProactive(); tickTaAsk(); tickMemoDue(); tickAnniv(); tickPeriodRemind(); tickShop().catch(() => {}); }
 
 /** 纪念日：到了设定的日子，按概率让 TA 在聊天里提一句 */
 async function tickAnniv() {
@@ -282,6 +282,15 @@ async function tickAnniv() {
     const { maybeMentionAnniversary } = await import('./annivdata.js');
     const hit = await maybeMentionAnniversary();
     if (hit) await addMessage({ role: 'ta', type: 'text', text: hit.text });
+  } catch { /* 下一轮再试 */ }
+}
+
+/** 经期提醒：预测开始日前 3 天到当天倒数；没来则每天按概率提醒，开关与语录在经期设置里 */
+async function tickPeriodRemind() {
+  try {
+    const { maybeRemindPeriod } = await import('./pages/period.js');
+    const text = await maybeRemindPeriod();
+    if (text) await addMessage({ role: 'ta', type: 'text', text });
   } catch { /* 下一轮再试 */ }
 }
 
