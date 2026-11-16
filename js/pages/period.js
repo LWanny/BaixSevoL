@@ -187,7 +187,7 @@ function openDayForm(date) {
   sheet({
     title: logOf(date) ? '编辑记录' : '添加记录',
     node: el('div', {}, [
-      el('div', { class: 'hint', text: '补记过去的经期，或添加今天 · 除日期外都可以不填' }),
+      el('div', { class: 'hint', text: '补记过去的经期，或添加今天 · 填了经量会自动算进日历上的经期' }),
       el('div', { class: 'field' }, [el('label', { text: '日期' }), dateRow]),
       el('div', { class: 'field' }, [el('label', { text: '经量' }), flowBox]),
       el('div', { class: 'field' }, [el('label', { text: '身体情况' }), bodyBox]),
@@ -215,10 +215,26 @@ function openDayForm(date) {
       const i = logs.findIndex((l) => l.date === newDate);
       if (i >= 0) logs[i] = row; else logs.push(row);
       await kvSet('periodLogs', logs);
+      if (st.flow) await ensurePeriodFor(newDate);   // 填了经量 → 日历上的经期要覆盖这一天
       await reload();
       toast('已保存');
     } }]
   });
+}
+
+/** 某天记了经量 → 保证日历上的「经期」覆盖到这一天：
+    已在记录范围内就不动；紧挨上一条（间隔 ≤2 天）就把它延伸到此日；否则新建一条从这天开始的记录 */
+async function ensurePeriodFor(key) {
+  const k = parseYMD(key);
+  const covered = items.some((r) => k >= parseYMD(r.start) && k <= recordEnd(r));
+  if (covered) return;
+  const prev = items.find((r) => parseYMD(r.start) <= k);   // items 按 start 降序，第一条即最近的更早记录
+  if (prev && diffDays(recordEnd(prev), k) <= 2) {
+    prev.end = key;
+    await put('periods', prev);
+    return;
+  }
+  await put('periods', { id: uid(), start: key, end: null, note: '', ts: Date.now() });
 }
 
 /** 周期阶段提示卡（按当前所处阶段给一句身体提示，每天稳定一条） */
