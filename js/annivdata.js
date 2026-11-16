@@ -17,6 +17,37 @@ export const DEFAULT_PROPOSAL_TITLES = [
   '周年纪念日', '情人节', '总之就是要呆在一起的纪念日'
 ];
 
+/* 提醒语录：可以在设置里改 / 加 / 删；{name} 名字、{days} 倒数天数、{passed} 已经过天数 */
+export const DEFAULT_TODAY_LINES = [
+  '今天就是「{name}」呀，{passed} 天了。',
+  '差点忘了，今天「{name}」。我们已经一起走过 {passed} 天啦。'
+];
+
+export const DEFAULT_UPCOMING_LINES = [
+  '「{name}」倒数 {days} 天就到了，记得留给我。',
+  '「{name}」倒数 {days} 天就到了，已经一起 {passed} 天了呢。',
+  '数了一下，「{name}」倒数 {days} 天。'
+];
+
+/** 读取提醒语录；空列表回落到默认，保证永远有话说 */
+export async function remindLines() {
+  const norm = (v, def) => {
+    const list = Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean) : [];
+    return list.length ? list : def.slice();
+  };
+  return {
+    today: norm(await kvGet('annivLinesToday', null), DEFAULT_TODAY_LINES),
+    upcoming: norm(await kvGet('annivLinesUpcoming', null), DEFAULT_UPCOMING_LINES)
+  };
+}
+
+function fillLine(tpl, name, days, passed) {
+  return String(tpl)
+    .replace(/\{name\}/g, name)
+    .replace(/\{days\}/g, String(days))
+    .replace(/\{passed\}/g, String(passed));
+}
+
 const NOTES = ['想把这个日子记下来。', '这个日子对我有点重要。', '以后每年都过一下吧。', '怕忘了，先记着。'];
 
 export const ymd = (d = new Date()) =>
@@ -158,17 +189,9 @@ export async function maybeMentionAnniversary(now = Date.now()) {
     const occ = occurrence(a.date, d);
     const passed = daysPassed(a.date, d);
     const name = a.title || '纪念日';
-    const text = occ.days === 0
-      ? pick([
-        `今天就是「${name}」呀，${passed} 天了。`,
-        `差点忘了，今天「${name}」。我们已经一起走过 ${passed} 天啦。`
-      ])
-      : pick([
-        `「${name}」还有 ${occ.days} 天就到了，记得留给我。`,
-        `还有 ${occ.days} 天就是「${name}」了，已经一起 ${passed} 天了呢。`,
-        `数了一下，「${name}」还有 ${occ.days} 天。`
-      ]);
-    return { row: a, text };
+    const lines = await remindLines();
+    const tpl = pick(occ.days === 0 ? lines.today : lines.upcoming);
+    return { row: a, text: fillLine(tpl, name, occ.days, passed) };
   }
   return null;
 }

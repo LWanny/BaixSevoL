@@ -9,7 +9,8 @@ import { all, put, del, kvSet } from '../store.js';
 import { actionSheet, confirmBox, sheet, toast } from '../ui.js';
 import {
   maybeProposeAnniversary, occurrence, daysPassed, ymd, parseYMD,
-  taProposePct, proposalTitles, DEFAULT_PROPOSAL_TITLES
+  taProposePct, proposalTitles, DEFAULT_PROPOSAL_TITLES,
+  remindLines, DEFAULT_TODAY_LINES, DEFAULT_UPCOMING_LINES
 } from '../annivdata.js';
 
 const WD = ['日', '一', '二', '三', '四', '五', '六'];
@@ -290,10 +291,34 @@ function openEditor(rec) {
 async function openSettings() {
   const pctVal = await taProposePct();
   let titles = await proposalTitles();
+  const lines = await remindLines();
 
   const pct = el('input', { class: 'input', type: 'number', inputmode: 'numeric', min: 0, max: 100, value: pctVal });
   const chips = el('div', { class: 'row wrap', style: { gap: '8px', marginBottom: '8px' } });
   const addInput = el('input', { class: 'input', placeholder: '再加一个名字（如：第一次旅行）' });
+
+  /* 提醒语录编辑器：每条一个输入框，可改可删可加 */
+  const lineEditor = (list) => {
+    const box = el('div');
+    const addRow = (val) => {
+      const input = el('input', { class: 'input', placeholder: '写一句 TA 会说的话…', value: val || '' });
+      const row = el('div', { class: 'row', style: { gap: '8px', marginBottom: '8px', alignItems: 'center' } }, [
+        input,
+        el('button', { class: 'btn sm', type: 'button', title: '删除这条', onclick: () => row.remove() }, ['×'])
+      ]);
+      box.appendChild(row);
+    };
+    list.forEach(addRow);
+    return {
+      node: el('div', {}, [
+        box,
+        el('button', { class: 'btn sm', type: 'button', style: { alignSelf: 'flex-start' }, onclick: () => addRow('') }, ['＋ 添加一条'])
+      ]),
+      values: () => Array.from(box.querySelectorAll('input')).map((i) => i.value.trim()).filter(Boolean)
+    };
+  };
+  const todayEd = lineEditor(lines.today);
+  const upEd = lineEditor(lines.upcoming);
 
   function renderChips() {
     chips.innerHTML = '';
@@ -335,6 +360,15 @@ async function openSettings() {
         el('div', { class: 'row', style: { gap: '8px' } }, [addInput, addBtn]),
         el('div', { class: 'an-hint', text: 'TA 提议时会从这些名字里挑一个；你不同意就不会加进来。' })
       ]),
+      el('div', { class: 'field' }, [
+        el('label', { text: 'TA 在纪念日当天说的话' }),
+        todayEd.node,
+        el('div', { class: 'an-hint', text: '可用占位符：{name} 名字、{days} 倒数天数、{passed} 已经过的天数。全部删空会恢复默认。' })
+      ]),
+      el('div', { class: 'field' }, [
+        el('label', { text: 'TA 提前提醒时说的话' }),
+        upEd.node
+      ]),
       el('div', { class: 'row', style: { marginTop: '14px' } }, [
         el('button', {
           class: 'btn primary', type: 'button', style: { width: '100%' },
@@ -342,6 +376,10 @@ async function openSettings() {
             const v = Math.max(0, Math.min(100, Number(pct.value) || 0));
             await kvSet('annivTaPct', v);
             await kvSet('annivProposalTitles', titles.length ? titles : DEFAULT_PROPOSAL_TITLES.slice());
+            const tLines = todayEd.values();
+            const uLines = upEd.values();
+            await kvSet('annivLinesToday', tLines.length ? tLines : DEFAULT_TODAY_LINES.slice());
+            await kvSet('annivLinesUpcoming', uLines.length ? uLines : DEFAULT_UPCOMING_LINES.slice());
             s.close();
             toast('设置已保存');
           }
