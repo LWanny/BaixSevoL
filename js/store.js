@@ -2,7 +2,7 @@
    结构化数据与媒体文件全部落在这里，不使用 localStorage（避开 5MB 上限）。 */
 
 const DB_NAME = 'zikachuanxin';
-const DB_VER = 14;
+const DB_VER = 15;   // 15：新增 approvals（审批小钱包）表
 
 const STORES = {
   kv:         { keyPath: 'k' },
