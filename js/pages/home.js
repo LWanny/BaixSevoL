@@ -47,6 +47,7 @@ const APPS = [
   { path: '/album',   label: '相册',     icon: 'IC-MIO-015' },
   { path: '/xhs',     label: '小粉书',   icon: 'IC-MOM-005' },
   { path: '/shop',    label: '商城',     icon: 'IC-MIO-039' },
+  { path: '/approval', label: '审批钱包', icon: 'IC-MIO-021' },
   { path: '/pdd',     label: '拼夕夕',   icon: 'IC-MIO-041' },
   { path: '/tong',    label: '通牌',     icon: 'IC-MIO-042' },
   { path: '/echo',    label: '回声',     icon: 'IC-MIO-043' },
