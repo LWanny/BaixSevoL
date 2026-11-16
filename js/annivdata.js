@@ -97,14 +97,16 @@ async function propose() {
   const cards = eligible(await all('cards'));
   const title = pick(await proposalTitles());
 
-  /* 优先围绕「认识的那天」挑日子，否则在过去或近期里随机 */
-  let date;
-  const met = Number(state.role.metAt) || 0;
-  if (met && chance(55)) {
-    date = new Date(met + rndInt(-20, 20) * DAY);
-  } else {
-    const offset = chance(50) ? rndInt(-400, -5) : rndInt(0, 45);
-    date = new Date(Date.now() + offset * DAY);
+  /* TA 自己定日子：1–12 月里随机挑一个月、该月内随机挑一天；
+     若落到今天之后就取去年的那一天，避免「已经 0 天」 */
+  const now = new Date();
+  const t = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const month = rndInt(1, 12);
+  const day = rndInt(1, new Date(now.getFullYear(), month, 0).getDate());
+  let date = new Date(now.getFullYear(), month - 1, day);
+  if (date > t) {
+    const prevLast = new Date(now.getFullYear() - 1, month, 0).getDate();
+    date = new Date(now.getFullYear() - 1, month - 1, Math.min(day, prevLast));
   }
 
   let note;
