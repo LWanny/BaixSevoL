@@ -15,8 +15,8 @@ const WD = ['日', '一', '二', '三', '四', '五', '六'];
 let view = null;
 let items = [];
 let logs = [];          // 当天详情 [{date, flow, body, mood, energy, ovu, note}]
-let cycleLen = 28;
-let periodLen = 5;
+let cycleLen = 30;
+let periodLen = 7;
 let cursor = null;          // 当前显示的月份（Date，取每月 1 号）
 
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -34,8 +34,8 @@ export default async function pagePeriod(v) {
     back: true, title: '经期记录', sub: '纯本地计算 · 只存在这台设备',
     actions: [{ label: '记录', onclick: quickMenu }, { label: '设置', onclick: openConfig }, { label: '清空', onclick: clearAll }]
   });
-  cycleLen = Number(await kvGet('periodCycle', 28)) || 28;
-  periodLen = Number(await kvGet('periodDays', 5)) || 5;
+  cycleLen = Number(await kvGet('periodCycle', 30)) || 30;
+  periodLen = Number(await kvGet('periodDays', 7)) || 7;
   items = (await all('periods')).sort((a, b) => String(b.start).localeCompare(String(a.start)));
   logs = (await kvGet('periodLogs', [])) || [];
   await closeStaleOpens();     // 进页面就补过期未关记录，别让首屏还显示「进行中」
@@ -129,8 +129,9 @@ function avgPeriodLen() {
 function logOf(date) { return logs.find((l) => l.date === date) || null; }
 
 /* ---------------- 当天详情表单（除日期外全部可选） ---------------- */
-const FLOW = ['少', '中', '多'];
-const BODY = ['痛经', '腰酸', '头痛', '乳房胀痛', '疲劳', '长痘', '失眠', '食欲变化'];
+const FLOW = ['无', '少', '中', '多'];
+const COLOR = ['鲜红', '暗红', '深红', '粉红', '棕色', '紫黑'];
+const BODY = ['正常', '痛经', '腰酸', '头痛', '乳房胀痛', '疲劳', '长痘', '失眠', '食欲变化'];
 const MOOD = ['开心', '平静', '焦虑', '烦躁', '低落', '易怒'];
 const ENERGY = ['精力好', '一般', '疲惫', '嗜睡'];
 
@@ -138,7 +139,7 @@ function openDayForm(date) {
   const init = logOf(date) || { date, flow: '', body: [], mood: [], energy: '', ovu: false, note: '' };
   const [iy, im, id0] = date.split('-').map(Number);
   const now = new Date();
-  const st = { flow: init.flow || '', body: [...(init.body || [])], mood: [...(init.mood || [])], energy: init.energy || '', ovu: !!init.ovu };
+  const st = { flow: init.flow || '', color: init.color || '', body: [...(init.body || [])], mood: [...(init.mood || [])], energy: init.energy || '', ovu: !!init.ovu };
 
   const mkSel = (nums, val, suffix) => {
     const s = el('select', { class: 'input' });
@@ -177,6 +178,7 @@ function openDayForm(date) {
   };
   const toggle = (arr, o) => { const i = arr.indexOf(o); if (i >= 0) arr.splice(i, 1); else arr.push(o); };
   const flowBox = chipGroup(FLOW, (o) => st.flow === o, (o) => { st.flow = st.flow === o ? '' : o; });
+  const colorBox = chipGroup(COLOR, (o) => st.color === o, (o) => { st.color = st.color === o ? '' : o; });
   const bodyBox = chipGroup(BODY, (o) => st.body.includes(o), (o) => toggle(st.body, o));
   const moodBox = chipGroup(MOOD, (o) => st.mood.includes(o), (o) => toggle(st.mood, o));
   const energyBox = chipGroup(ENERGY, (o) => st.energy === o, (o) => { st.energy = st.energy === o ? '' : o; });
@@ -190,6 +192,7 @@ function openDayForm(date) {
       el('div', { class: 'hint', text: '补记过去的经期，或添加今天 · 填了经量会自动算进日历上的经期' }),
       el('div', { class: 'field' }, [el('label', { text: '日期' }), dateRow]),
       el('div', { class: 'field' }, [el('label', { text: '经量' }), flowBox]),
+      el('div', { class: 'field' }, [el('label', { text: '月经颜色' }), colorBox]),
       el('div', { class: 'field' }, [el('label', { text: '身体情况' }), bodyBox]),
       el('div', { class: 'field' }, [el('label', { text: '情绪' }), moodBox]),
       el('div', { class: 'field' }, [el('label', { text: '睡眠 / 精力' }), energyBox]),
@@ -200,7 +203,7 @@ function openDayForm(date) {
       const pad = (n) => String(n).padStart(2, '0');
       const newDate = `${ySel.value}-${pad(Number(mSel.value))}-${pad(Number(dSel.value))}`;
       if (newDate > ymd(today())) { toast('不能记录未来的日期'); return; }
-      const has = st.flow || st.body.length || st.mood.length || st.energy || st.ovu || note.value.trim();
+      const has = st.flow || st.color || st.body.length || st.mood.length || st.energy || st.ovu || note.value.trim();
       if (!has) {
         if (logOf(date)) {
           logs = logs.filter((l) => l.date !== date);
@@ -210,12 +213,12 @@ function openDayForm(date) {
         } else toast('没有填写内容');
         return;
       }
-      const row = { date: newDate, flow: st.flow, body: st.body, mood: st.mood, energy: st.energy, ovu: st.ovu, note: note.value.trim() };
+      const row = { date: newDate, flow: st.flow, color: st.color, body: st.body, mood: st.mood, energy: st.energy, ovu: st.ovu, note: note.value.trim() };
       if (newDate !== date) logs = logs.filter((l) => l.date !== date && l.date !== newDate);
       const i = logs.findIndex((l) => l.date === newDate);
       if (i >= 0) logs[i] = row; else logs.push(row);
       await kvSet('periodLogs', logs);
-      if (st.flow) await ensurePeriodFor(newDate);   // 填了经量 → 日历上的经期要覆盖这一天
+      if (st.flow && st.flow !== '无') await ensurePeriodFor(newDate);   // 有出血量的经量 → 经期覆盖这一天；「无」只是备注当天没出血
       await reload();
       toast('已保存');
     } }]
@@ -390,6 +393,7 @@ function paint() {
       const bits = [`持续 ${len} 天`];
       if (lg) {
         if (lg.flow) bits.push('量' + lg.flow);
+        if (lg.color) bits.push(lg.color);
         if (lg.body && lg.body.length) bits.push(lg.body.slice(0, 2).join('、') + (lg.body.length > 2 ? ` 等 ${lg.body.length} 项` : ''));
         else if (lg.note) bits.push(lg.note);
       } else if (rec.note) bits.push(rec.note);
@@ -478,9 +482,9 @@ async function clearAll() {
   for (const r of items) await del('periods', r.id);
   logs = [];
   await kvSet('periodLogs', logs);
-  cycleLen = 28; periodLen = 5;
-  await kvSet('periodCycle', 28);
-  await kvSet('periodDays', 5);
+  cycleLen = 30; periodLen = 7;
+  await kvSet('periodCycle', 30);
+  await kvSet('periodDays', 7);
   await reload();
   toast('已清空');
 }
@@ -611,8 +615,8 @@ function openConfig() {
       el('div', { class: 'field' }, [el('label', { text: '经期天数' }), p, el('div', { class: 'hint', text: '每次持续几天，用来推算结束日' })])
     ]),
     actions: [{ label: '保存', icon: 'IC-MIO-021', onSelect: async () => {
-      cycleLen = clampInt(c.value, 15, 60, 28);
-      periodLen = clampInt(p.value, 1, 15, 5);
+      cycleLen = clampInt(c.value, 15, 60, 30);
+      periodLen = clampInt(p.value, 1, 15, 7);
       await kvSet('periodCycle', cycleLen);
       await kvSet('periodDays', periodLen);
       await reload();
