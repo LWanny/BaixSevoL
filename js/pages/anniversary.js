@@ -94,8 +94,8 @@ function hero(top) {
       occ.days === 0 ? null : el('div', { class: 'an-hero-unit', text: '天' })
     ]),
     el('div', { class: 'an-hero-main' }, [
-      el('div', { class: 'an-hero-t', text: occ.days === 0 ? `今天 · ${r.title}` : `还有 ${occ.days} 天 · ${r.title}` }),
-      el('div', { class: 'an-hero-s', text: `${d.getMonth() + 1} 月 ${d.getDate()} 日 · 已经 ${passed} 天${occ.years > 0 ? ` · ${occ.years} 周年` : ''}` })
+      el('div', { class: 'an-hero-t', text: occ.days === 0 ? `今天 · ${r.title}` : `倒数 ${occ.days} 天 · ${r.title}` }),
+      el('div', { class: 'an-hero-s', text: `${d.getMonth() + 1} 月 ${d.getDate()} 日 · 距今 ${passed} 天${occ.years > 0 ? ` · ${occ.years} 周年` : ''}` })
     ])
   ]);
 }
@@ -169,9 +169,9 @@ function itemCard(r, occ) {
 }
 
 function metaText(occ, passed) {
-  const when = occ.days === 0 ? '就是今天' : `还有 ${occ.days} 天`;
+  const when = occ.days === 0 ? '就是今天' : `倒数 ${occ.days} 天`;
   const years = occ.years > 0 ? ` · ${occ.years} 周年` : '';
-  return `${when} · 已经 ${passed} 天${years}`;
+  return `${when} · 距今 ${passed} 天${years}`;
 }
 
 function fmtDate(s) {
