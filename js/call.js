@@ -16,6 +16,8 @@ import * as sched from './scheduler.js';
 import { notifySupported, requestNotifyPermission, playSound, beep } from './notify.js';
 
 const MAX_SEC = 360000;   // 时长上限（秒）
+const HANGUP_PROTECT_SEC = 5 * 60;    // 接通后 5 分钟保护期，期间 TA 不提前挂断
+const HANGUP_CHECK_SEC = 15 * 60;     // 保护期过后每 15 分钟判定一次
 const SESSION_KEY = 'callSession';   // 通话进行态持久化：刷新/重进后原地恢复
 
 /* 通话请求全局监听：TA 在聊天里发起通话时弹出来电屏。
@@ -196,9 +198,10 @@ function tick() {
     if (session.sec >= MAX_SEC) { endCall('ended'); toast('已达时长上限'); return; }
     paintTimer();
 
-    // TA 按概率提前挂断
+    // TA 按概率提前挂断：满 5 分钟保护期后，每 15 分钟才判定一次
     const hangupPct = Number(state.role.params.callHangupPct) || 0;
-    if (session.sec > 8 && session.sec % 10 === 0 && chance(hangupPct)) {
+    const sinceProtect = session.sec - HANGUP_PROTECT_SEC;
+    if (hangupPct > 0 && sinceProtect >= 0 && sinceProtect % HANGUP_CHECK_SEC === 0 && chance(hangupPct)) {
       toast((state.role.name || 'TA') + ' 挂断了电话');
       endCall('ended');
     }

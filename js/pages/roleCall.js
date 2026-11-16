@@ -24,7 +24,7 @@ export default async function pageRoleCall(view) {
   ])));
 
   wrap.appendChild(section('通话中', el('div', { class: 'set-card' }, [
-    rowPct('TA 提前挂断概率', '每秒判定一次', 'callHangupPct', p.callHangupPct)
+    rowPct('TA 提前挂断概率', '接通满 5 分钟保护期后，每 15 分钟判定一次', 'callHangupPct', p.callHangupPct)
   ])));
 
   view.appendChild(wrap);

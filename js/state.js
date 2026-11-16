@@ -49,7 +49,7 @@ export const DEFAULT_PARAMS = {
   patPct: 10,           // 拍一拍触发概率 %
   choicePct: 10,        // 主动发选择题概率 %
   callPct: 35,          // TA 在聊天回复里主动发起通话请求的概率 %
-  callHangupPct: 6,     // 通话中 TA 提前挂断的概率 %（每秒判定）
+  callHangupPct: 6,     // 通话中 TA 提前挂断的概率 %（满 5 分钟后每 15 分钟判定）
   callAnswerPct: 82,    // 我打给 TA 时，TA 接听概率 %
   callBusyPct: 10,      // 我打给 TA 时，TA 显示忙线的概率 %（接听未命中后）
   callRejectPct: 8,     // 我打给 TA 时，TA 显示拒接的概率 %（忙线未命中后）
