@@ -119,10 +119,13 @@ async function openShapeLib() {
         sub: '我画的',
         isOff,
         onToggle: async () => { await setCustomShapeEnabled(s.id, isOff); renderLib(); },
-        onDelete: () => confirmBox({
-          text: `删除「${s.name}」？删除后 TA 不再涂这个图案。`,
-          onYes: async () => { await removeCustomShape(s.id); renderLib(); toast('已删除'); }
-        })
+        onDelete: async () => {
+          const ok = await confirmBox({ text: `删除「${s.name}」？删除后 TA 不再涂这个图案。`, danger: true });
+          if (!ok) return;
+          await removeCustomShape(s.id);
+          renderLib();
+          toast('已删除');
+        }
       }));
     }
   }
