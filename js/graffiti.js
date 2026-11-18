@@ -1,6 +1,7 @@
 /* 涂鸦
    - 我可以自由画（自由画笔、颜色、粗度、擦除、清空、保存）
-   - TA 只能用预定义图形库（43 种）
+   - TA 只能从图案库里挑：内置 37 种（6 种形状分空心/实心、5 种线性、26 个大写字母）
+     + 我画的图案；禁用的不参与；字母大小固定
    Canvas 绘制 → Blob → saveMedia，消息 type:'graffiti' */
 
 import { put, all, kvGet, kvSet } from './store.js';
@@ -13,18 +14,7 @@ export const GRAFITTI_W = 600;
 export const GRAFITTI_H = 600;
 
 /* ---------- TA 可用的 43 种图形 ---------- */
-/* 每个 shape 是 (ctx, x, y, s, color) => void，s 是基准尺寸 */
-function strokeFill(ctx, draw, color, fill) {
-  ctx.save();
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = Math.max(2, Math.round(ctx.lineWidth || 2));
-  if (fill) draw(); ctx.fill();
-  draw(); ctx.stroke();
-  ctx.restore();
-}
-
-const SHAPE_LIB = {
+export const SHAPE_LIB = {
   /* 6 种 × 2（空心/实心）= 12 */
   circle: (c, x, y, s, col, fill) => {
     c.beginPath(); c.arc(x, y, s / 2, 0, Math.PI * 2);
@@ -149,27 +139,60 @@ function drawLetter(ctx, ch, x, y, s, col) {
   ctx.restore();
 }
 
+/* ---------- 图案库管理：内置 43 种 + 自定义（我画的图案） ---------- */
+export const SHAPE_NAMES = {
+  circle: '圆形', ellipse: '椭圆', square: '方形', heart: '心形', star: '星星', triangle: '三角形',
+  line: '直线', wave: '波浪线', dash: '虚线', check: '对勾', cross: '叉叉'
+};
+const CUSTOM_KEY = 'graffitiCustom';
+const DIS_KEY = 'graffitiDisabled';
+
+export async function loadCustomShapes() { return (await kvGet(CUSTOM_KEY, [])) || []; }
+export async function addCustomShape(dataURL, name) {
+  const arr = await loadCustomShapes();
+  const s = { id: uid(), name: (name && name.trim()) || `图案 ${arr.length + 1}`, dataURL, enabled: true, ts: Date.now() };
+  arr.push(s); await kvSet(CUSTOM_KEY, arr);
+  return s;
+}
+export async function removeCustomShape(id) {
+  await kvSet(CUSTOM_KEY, (await loadCustomShapes()).filter((s) => s.id !== id));
+}
+export async function setCustomShapeEnabled(id, on) {
+  const arr = await loadCustomShapes();
+  const s = arr.find((x) => x.id === id);
+  if (s) { s.enabled = !!on; await kvSet(CUSTOM_KEY, arr); }
+}
+export async function loadDisabledShapes() { return (await kvGet(DIS_KEY, [])) || []; }
+export async function setShapeDisabled(key, off) {
+  const set = new Set(await loadDisabledShapes());
+  off ? set.add(key) : set.delete(key);
+  await kvSet(DIS_KEY, [...set]);
+}
+
 /* 这是给 TA 用的：TA 选一个图形时，随机决定画空心还是实心 */
 export const OUTLINES = ['circle', 'ellipse', 'square', 'heart', 'star', 'triangle'];
 
 const TA_COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#a855f7', '#ec4899', '#0ea5e9', '#1f2937'];
 
-export function pickTaShape() {
-  const all = Object.keys(SHAPE_LIB);
+export function pickTaShape(pool) {
+  const all = pool && pool.length ? pool : Object.keys(SHAPE_LIB);
   const k = pick(all);
   const fill = OUTLINES.includes(k) ? chance(50) : false;
   return { key: k, fill };
 }
 
-/* 在 canvas 上画一个 TA 随机图形 */
-export function drawTaShape(ctx, shapeKey, { x, y, size, color, fill }) {
+/* 在 canvas 上画一个 TA 图形（img 传自定义图案的 Image 对象） */
+export function drawTaShape(ctx, shapeKey, { x, y, size, color, fill, img }) {
+  if (img) { ctx.drawImage(img, x - size / 2, y - size / 2, size, size); return; }
   const fn = SHAPE_LIB[shapeKey];
   if (!fn) return;
   fn(ctx, x, y, size, color, !!fill);
 }
 
-/* 生成一张 TA 的涂鸦（一张 canvas 上 3~10 个图形，每次随机） */
-export function renderTaGraffiti() {
+export const TA_LETTER_SIZE = 110;   // TA 涂鸦里大写字母固定大小（不随机）
+
+/* 生成一张 TA 的涂鸦（一张 canvas 上 3~10 个图案，每次随机；只从启用池里挑） */
+export async function renderTaGraffiti() {
   const canvas = document.createElement('canvas');
   canvas.width = GRAFITTI_W;
   canvas.height = GRAFITTI_H;
@@ -177,20 +200,39 @@ export function renderTaGraffiti() {
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  /* 启用池 = 内置（未被禁用）+ 自定义（启用中的） */
+  const off = new Set(await loadDisabledShapes());
+  const builtinKeys = Object.keys(SHAPE_LIB).filter((k) => !off.has(k));
+  const customs = (await loadCustomShapes()).filter((s) => s.enabled !== false);
+  const imgs = await Promise.all(customs.map((s) => new Promise((res) => {
+    const i = new Image();
+    i.onload = () => res({ id: s.id, img: i });
+    i.onerror = () => res(null);
+    i.src = s.dataURL;
+  })));
+  const imgMap = new Map(imgs.filter(Boolean).map((r) => ['c:' + r.id, r.img]));
+
+  const allKeys = [...builtinKeys, ...imgMap.keys()];
+  if (!allKeys.length) allKeys.push('circle');   // 全禁用兜底
+
   const n = rndInt(3, 10);
   for (let i = 0; i < n; i++) {
     const x = rndInt(60, canvas.width - 60);
     const y = rndInt(60, canvas.height - 60);
-    const size = rndInt(50, 130);
     const color = pick(TA_COLORS);
-    const { key, fill } = pickTaShape();
-    drawTaShape(ctx, key, { x, y, size, color, fill });
+    const key = pick(allKeys);
+    if (key.startsWith('c:')) {
+      drawTaShape(ctx, key, { x, y, size: rndInt(90, 150), color, img: imgMap.get(key) });
+    } else {
+      const size = /^[A-Z]$/.test(key) ? TA_LETTER_SIZE : rndInt(50, 130);
+      drawTaShape(ctx, key, { x, y, size, color, fill: OUTLINES.includes(key) ? chance(50) : false });
+    }
   }
   return canvas;
 }
 
 export async function taSendGraffiti() {
-  const canvas = renderTaGraffiti();
+  const canvas = await renderTaGraffiti();
   const blob = await new Promise((r) => canvas.toBlob(r, 'image/png', 0.92));
   const id = await saveMedia(blob, { type: 'image', w: GRAFITTI_W, h: GRAFITTI_H, source: 'ta', name: '涂鸦' });
   return sched.addMessage({ role: 'ta', type: 'graffiti', mediaId: id, proactive: true });

@@ -2579,6 +2579,30 @@ button.mc-import-line.as-btn:active{background:var(--accent-soft);color:var(--ac
 /* ---------- 聊天昵称（TA 给我换的昵称） ---------- */
 .msg .nm.me{color:rgba(255,255,255,.78);text-align:right}
 
+/* ---------- 涂鸦图案库（角色页 · TA 的图案库） ---------- */
+.gf-lib-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:12px;max-height:56vh;overflow-y:auto}
+.gf-lib-item{display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 4px;border-radius:12px;
+  background:var(--bg-elev);border:1px solid var(--line-soft)}
+.gf-lib-item.off{opacity:.55}
+.gf-lib-pv{position:relative}
+.gf-lib-sub{position:absolute;right:-4px;bottom:-4px;font-size:9px;line-height:1;padding:3px 5px;border-radius:999px;
+  background:var(--accent-2);color:#fff}
+.gf-lib-name{font-size:11px;color:var(--txt);text-align:center;max-width:88px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.gf-lib-acts{display:flex;gap:4px}
+.gf-lib-btn{font-size:10px;line-height:1;padding:5px 8px;border-radius:999px;border:1px solid var(--line-soft);
+  background:var(--bg-elev2);color:var(--txt-mute);cursor:pointer}
+.gf-lib-btn.off{color:var(--accent-2);border-color:var(--accent-2);background:var(--bg-elev)}
+.gf-lib-btn.del{color:var(--danger);border-color:rgba(196,60,60,.3)}
+.gf-draw-host{margin:10px 12px 0;border-radius:14px;overflow:hidden;border:1px solid var(--line-soft)}
+.gf-color-row,.gf-size-row{display:flex;gap:8px;margin-top:8px}
+.gf-color{width:26px;height:26px;border-radius:50%;border:2px solid var(--line-soft);cursor:pointer}
+.gf-color.on{border-color:var(--txt);transform:scale(1.12)}
+.gf-size{font-size:11px;padding:6px 12px;border-radius:999px;border:1px solid var(--line-soft);
+  background:var(--bg-elev2);color:var(--txt-mute);cursor:pointer}
+.gf-size.on{color:var(--txt);border-color:var(--txt);font-weight:650}
+.gf-draw-acts{display:flex;gap:8px;padding:10px 12px 0}
+
 /* ---------- 涂鸦画布 sheet ---------- */
 .graffiti-sheet{padding:12px;display:flex;flex-direction:column;gap:10px}
 .graffiti-sheet .g-tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
