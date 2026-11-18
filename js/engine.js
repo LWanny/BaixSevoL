@@ -209,10 +209,11 @@ export async function buildReply({ cards, params, history = [], incomingText = '
   const count = rndInt(lo, hi);
   const steps = [];
   let pinyinUsed = false;
+  const pinyinMasterOn = cfg().enabled;   // 拼音打字总开关：关闭后回复不再敲拼音
 
   for (let i = 0; i < count; i++) {
     // 拼音打字：不翻字卡库，随机敲拼音组一句话（每批最多一条）
-    if (!pinyinUsed && params.pinyinEnabled && chance(Number(params.pinyinPct) || 0)) {
+    if (!pinyinUsed && pinyinMasterOn && params.pinyinEnabled && chance(Number(params.pinyinPct) || 0)) {
       pinyinUsed = true;
       // 上下文锚点：优先取对方刚说的这句的实词，兜底取我方上一条，保证能接上话
       const lastMe = [...history].reverse().find((m) => m.role === 'me' && m.text);
@@ -331,7 +332,7 @@ export async function buildProactive({ cards, params, history = [], medias = [] 
   for (let i = 0; i < count; i++) {
     // 主动拼音打字：受「主动联系」配置约束 —— enableProactive 开关（forceRandom 无视开关）
     const C = cfg();
-    const pyOn = params.pinyinEnabled && chance(Number(params.pinyinPct) || 0)
+    const pyOn = C.enabled && params.pinyinEnabled && chance(Number(params.pinyinPct) || 0)
       && (C.enableProactive || C.forceRandom);
     if (!pinyinUsed && pyOn) {
       pinyinUsed = true;

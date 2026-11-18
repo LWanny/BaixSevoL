@@ -3071,6 +3071,10 @@ button.mc-import-line.as-btn:active{background:var(--accent-soft);color:var(--ac
 .cfg-force{margin:4px 12px 10px;border-radius:12px;background:rgba(26,28,32,.045);border:1px solid var(--line-soft)}
 .cfg-force .set-row{border-bottom:0}
 .cfg-force .set-t{font-weight:650}
+/* 拼音打字总开关：比「全部随机」更醒目；关闭时下方全部淡化 */
+.cfg-master{border-color:var(--accent-2);background:rgba(26,28,32,.05)}
+.cfg-master.cfg-off{opacity:.75}
+.cfg-master.cfg-off .set-t,.cfg-master.cfg-off .set-s{color:var(--txt-mute)}
 .cfg-panels{margin:0 12px 6px;border-top:1px solid var(--line-soft);transition:opacity .2s ease}
 .cfg-panels.cfg-off{opacity:.42;pointer-events:none}
 .cfg-fold{border-bottom:1px solid var(--line-soft)}

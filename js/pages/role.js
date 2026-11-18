@@ -182,6 +182,12 @@ function buildPinyinCfg() {
   const C = () => cfg();
   const root = el('div', { class: 'set-card cfg-root' });
 
+  /* ---- 总开关：关掉后回复与主动联系都不再敲拼音 ---- */
+  const masterHost = el('div', { class: 'cfg-force cfg-master' }, [
+    cfgToggle('拼音打字总开关', '关掉后 TA 不再敲拼音 —— 回复和主动联系都只发普通字卡消息；下面所有设置暂时失效',
+      () => C().enabled, (v) => { saveCfg({ enabled: !!v }); paintOff(); })
+  ]);
+
   /* ---- 最高优先级：全部随机 ---- */
   const forceHost = el('div', { class: 'cfg-force' }, [
     cfgToggle('全部随机', '最高优先级：忽略下面所有概率/区间 —— 字数极端、频繁打错字、秒回或几十分钟不回',
@@ -257,9 +263,14 @@ function buildPinyinCfg() {
     fold('心情设定', '五种心情的权重概率区间与音节数限制', p3),
     fold('主动联系', '主动打字开关 · 秒~分钟发送间隔 · 心情字数', p4)
   ]);
-  function paintOff() { panels.classList.toggle('cfg-off', !!C().forceRandom); }
+  function paintOff() {
+    const noMaster = !C().enabled;
+    panels.classList.toggle('cfg-off', !!C().forceRandom || noMaster);
+    forceHost.classList.toggle('cfg-off', noMaster);
+  }
   paintOff();
 
+  root.appendChild(masterHost);
   root.appendChild(forceHost);
   root.appendChild(buildPreview());
   root.appendChild(panels);

@@ -14,6 +14,9 @@ export const PCFG_KEY = 'zkcx.pinyin.cfg.v1';
 export const MOOD_KEYS = ['lazy', 'normal', 'chatty', 'warm', 'sad'];
 
 export const DEFAULT_PCFG = {
+  /* ---- 0 总开关 ---- */
+  enabled: true,              // 拼音打字总开关（关闭后回复与主动联系都不再敲拼音，只发普通字卡消息）
+
   /* ---- 1 基础概率 ---- */
   wordRatio: [60, 80],        // 抽完整词库拼音的概率区间 %（与单字按比例混合）
   singleRatio: [20, 40],      // 抽单字拼音的概率区间 %
