@@ -7,14 +7,14 @@ import { fullPage } from '../shell.js';
 import { toast } from '../ui.js';
 import { WORD_POOL } from '../data/pinyinwords.js';
 import { WORD_STATS, PINYIN_POOL_SIZE, PINYIN_WORD_SIZE, SLOT_NAMES,
-  loadUserWords, setUserWords, normalizeWord } from '../pinyin.js';
+  loadUserWords, setUserWords, normalizeWord, isWordDisabled, setDisabledWords } from '../pinyin.js';
 import { takePending, parseImportLine } from '../pinyinConfig.js';
 
 const POS_OPTS = [['pn', '代词'], ['tm', '时间'], ['cj', '连接'], ['dv', '程度'],
   ['pt', '语气'], ['vb', '动词'], ['nn', '名词'], ['aj', '形容词']];
 const CATS = [
   ['all', '全部'], ['c1', '单字'], ['c2', '双字'], ['c3', '三字'],
-  ['c4', '四字+'], ['frag', '半截话'], ['user', '自定义']
+  ['c4', '四字+'], ['frag', '半截话'], ['user', '自定义'], ['off', '已停用']
 ];
 const STEP = 80;
 const lenOf = (w) => [...w.text].length;
@@ -162,6 +162,7 @@ export default async function pagePinyinLib(view) {
   function match(w) {
     if (cat === 'user' && !w.u) return false;
     if (cat === 'frag' && !w.frag) return false;
+    if (cat === 'off' && !isWordDisabled(w.text)) return false;
     if (cat === 'c1' && (w.frag || lenOf(w) !== 1)) return false;
     if (cat === 'c2' && (w.frag || lenOf(w) !== 2)) return false;
     if (cat === 'c3' && (w.frag || lenOf(w) !== 3)) return false;
@@ -176,13 +177,13 @@ export default async function pagePinyinLib(view) {
 
   function render() {
     const st = WORD_STATS;
-    stats.textContent = `共 ${PINYIN_WORD_SIZE} 条 · 内置 ${PINYIN_WORD_SIZE - st.user} · 自定义 ${st.user}`
+    stats.textContent = `共 ${PINYIN_WORD_SIZE} 条 · 内置 ${PINYIN_WORD_SIZE - st.user} · 自定义 ${st.user}${st.off ? ` · 已停用 ${st.off}` : ''}`
       + `　|　单字库 ${PINYIN_POOL_SIZE} 个 · 单字词 ${st.one} · 双字 ${st.two} · 三字 ${st.three} · 四字+ ${st.four} · 半截话 ${st.frag}`;
 
     chips.innerHTML = '';
     for (const [k, t] of CATS) {
       const on = cat === k;
-      chips.appendChild(el('div', { class: 'chip' + (on ? ' on' : ''), text: t,
+      chips.appendChild(el('div', { class: 'chip' + (on ? ' on' : ''), text: k === 'off' ? (t + (st.off ? ` ${st.off}` : '')) : t,
         onclick: () => { cat = k; shown = STEP; render(); } }));
     }
 
@@ -190,8 +191,8 @@ export default async function pagePinyinLib(view) {
     list.innerHTML = '';
     if (!rows.length) {
       list.appendChild(el('div', { class: 'empty' }, [
-        el('div', { class: 'e-h', text: '没有匹配的词条' }),
-        el('div', { class: 'e-p', text: '换个分类或搜索词，也可以在上面添加新词条' })
+        el('div', { class: 'e-h', text: cat === 'off' ? '没有停用的词条' : '没有匹配的词条' }),
+        el('div', { class: 'e-p', text: cat === 'off' ? '每条词条右侧的「停用」开关随时可再打开' : '换个分类或搜索词，也可以在上面添加新词条' })
       ]));
     }
     for (const w of rows.slice(0, shown)) {
@@ -200,11 +201,21 @@ export default async function pagePinyinLib(view) {
       ];
       if (w.frag) badges.push(el('span', { class: 'pw-tag frag', text: '半截话' }));
       badges.push(el('span', { class: 'pw-tag' + (w.u ? ' own' : ''), text: w.u ? '自定义' : '内置' }));
-      list.appendChild(el('div', { class: 'pw-row' }, [
+      const off = isWordDisabled(w.text);
+      if (off) badges.push(el('span', { class: 'pw-tag off', text: '停用中' }));
+      const tog = el('button', { class: 'pw-sw' + (off ? ' off' : ''), text: off ? '启用' : '停用',
+        onclick: () => {
+          const cur = WORD_POOL.filter((x) => isWordDisabled(x.text)).map((x) => x.text);
+          setDisabledWords(off ? cur.filter((t) => t !== w.text) : [...cur, w.text]);
+          render();
+          toast(off ? `已启用：${w.text}` : `已停用：${w.text}（打字不再用它）`);
+        } });
+      list.appendChild(el('div', { class: 'pw-row' + (off ? ' is-off' : '') }, [
         el('div', { class: 'pw-main' }, [
           el('div', { class: 'pw-t' }, [el('span', { class: 'pw-txt', text: w.text }), ...badges]),
           el('div', { class: 'pw-p', text: w.py })
         ]),
+        tog,
         w.u ? el('button', { class: 'pw-del', text: '✕', onclick: () => del(w) }) : null
       ]));
     }

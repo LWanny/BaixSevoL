@@ -8,7 +8,7 @@
 import { el, uid, rndInt, pickN } from '../util.js';
 import { iconImg } from '../icons.js';
 import { fullPage } from '../shell.js';
-import { all, put, get, kvGet, kvSet } from '../store.js';
+import { all, put, get, bulkPut, kvGet, kvSet } from '../store.js';
 import { sheet, toast } from '../ui.js';
 import { TAROT, LENORMAND } from '../data/tongdeck.js';
 import { TAROT_BACK_SRC } from '../data/tarotfaces.js';
@@ -431,7 +431,13 @@ function openPicker() {
     searchInput,
     chips,
     grid,
-    el('div', { class: 'tg-pick-foot' }, [clearBtn, countBtn])
+    el('div', { class: 'tg-pick-foot' }, [
+      el('button', {
+        class: 'btn block',
+        onclick: () => openNewCardSheet(() => refresh())
+      }, ['＋ 新建字卡']),
+      clearBtn, countBtn
+    ])
   ]);
   const s = sheet({ title: '字卡库 · 全部牌面', node: body });
 
@@ -479,6 +485,93 @@ function poolForAll() {
     ...TAROT,
     ...LENORMAND
   ];
+}
+
+/* ---------------- 通牌内新建字卡（直接写入字卡库，存好立即能当牌发） ---------------- */
+function openNewCardSheet(after) {
+  const ta = el('textarea', {
+    class: 'input', rows: 6,
+    placeholder: '一行一张，可以一次加多张。\n例如：\n在干嘛\n早点睡\n我想你了'
+  });
+
+  /* 分组：无分组时只有「＋ 新建分组…」一个选项 */
+  const gSel = el('select', { class: 'input' });
+  const fillSel = (defId) => {
+    gSel.innerHTML = '';
+    groups.forEach((g) => gSel.appendChild(el('option', { value: g.id, selected: g.id === defId }, [g.name])));
+    gSel.appendChild(el('option', { value: '__new__' }, ['＋ 新建分组…']));
+    if (defId) gSel.value = defId; else gSel.value = '__new__';
+  };
+  fillSel(groups[0]?.id || '');
+
+  const promptNewGroup = (onCreated) => {
+    const nameInput = el('input', { class: 'input', placeholder: '新分组名称，例如「日常」' });
+    sheet({
+      title: '新建分组',
+      node: el('div', { class: 'field' }, [nameInput]),
+      actions: [{ label: '创建', icon: 'IC-MIO-003', onSelect: async () => {
+        const name = nameInput.value.trim();
+        if (!name) return toast('请输入分组名称');
+        const g = { id: uid(), name, order: groups.length, enabled: true, createdAt: Date.now() };
+        await put('groups', g);
+        groups = (await all('groups')) || [];
+        fillSel(g.id);
+        toast('分组已创建');
+        if (onCreated) onCreated();
+      } }]
+    });
+    setTimeout(() => nameInput.focus(), 260);
+  };
+  gSel.addEventListener('change', () => {
+    if (gSel.value === '__new__') promptNewGroup();
+  });
+
+  const s = sheet({
+    title: '新建字卡',
+    node: el('div', {}, [
+      el('div', { class: 'field' }, [
+        el('label', { text: '所属分组' }), gSel,
+        el('div', { class: 'hint', text: '存的字卡同时会出现在「字卡库」页面，聊天发卡也能用。' })
+      ]),
+      el('div', { class: 'field' }, [el('label', { text: '字卡内容' }), ta])
+    ]),
+    actions: [{ label: '加入字卡库', icon: 'IC-MIO-021', onSelect: async () => {
+      const lines = ta.value.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+      if (!lines.length) return toast('请至少写一张字卡');
+      let gid = gSel.value;
+      if (!gid || gid === '__new__') {
+        /* 还没有分组 → 先建一个再继续存 */
+        promptNewGroup(() => doSave(ta.value, gSel.value, s));
+        toast('先建一个分组');
+        return;
+      }
+      doSave(lines.join('\n'), gid, s);
+    } }]
+  });
+  setTimeout(() => ta.focus(), 260);
+
+  async function doSave(text, gid, sheetRef) {
+    const lines2 = String(text).split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+    if (!lines2.length || !gid || gid === '__new__') return;
+    const cardsNow = await all('cards');
+    const existing = new Set(cardsNow.filter((c) => c.kind !== 'image').map((c) => c.content));
+    let order = Math.max(0, ...cardsNow.filter((c) => c.groupId === gid).map((c) => c.order ?? 0));
+    const added = []; let dup = 0;
+    for (const content of lines2) {
+      if (existing.has(content)) { dup++; continue; }
+      existing.add(content);
+      order++;
+      added.push({ id: uid(), groupId: gid, content, enabled: true, count: 0, weight: 1, kind: 'text', order, createdAt: Date.now() });
+    }
+    if (!added.length) return toast(dup ? `都已存在，重复 ${dup} 张` : '没有可添加的');
+    await bulkPut('cards', added);
+    await loadLib();          // 抽牌池立即包含新卡
+    redeal();
+    if (alive) paintDrawer();
+    toast(`已加入字卡库 ${added.length} 张${dup ? `，跳过重复 ${dup}` : ''}`);
+    if (sheetRef) sheetRef.close();
+    if (after) after();
+  }
 }
 
 /* ---------------- 设置 ---------------- */

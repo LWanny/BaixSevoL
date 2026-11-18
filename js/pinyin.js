@@ -412,11 +412,35 @@ let MAX_SYL = 1;      // 词库最长音节数
 let MAX_TXT = 1;      // 词库最长汉字数
 /* 按词性分池（句式模板选槽用） */
 const POOLS = { pn: [], tm: [], cj: [], dv: [], pt: [], vb: [], nn: [], aj: [] };
+
+/* ============ 词条停用开关（localStorage；停用的词不参与打字，但字库页仍可见、可重新启用） ============ */
+const DISABLED_KEY = 'zkcx.pinyin.disabled.v1';
+const DISABLED_SET = new Set((() => {
+  try {
+    const a = JSON.parse(localStorage.getItem(DISABLED_KEY) || '[]');
+    return Array.isArray(a) ? a.filter((x) => typeof x === 'string') : [];
+  } catch { return []; }
+})());
+
+/** 某条词当前是否停用（拼音字卡库页渲染开关用） */
+export function isWordDisabled(text) { return DISABLED_SET.has(text); }
+
+/** 保存停用名单并实时重建引擎索引（字库页开关切换后调用） */
+export function setDisabledWords(arr) {
+  const clean = [...new Set((Array.isArray(arr) ? arr : []).map((s) => String(s).trim()).filter(Boolean))];
+  try { localStorage.setItem(DISABLED_KEY, JSON.stringify(clean)); } catch {}
+  DISABLED_SET.clear();
+  for (const s of clean) DISABLED_SET.add(s);
+  rebuildWordIndex();
+  refreshStats();
+}
+
 function rebuildWordIndex() {
   WORD_MAP.clear(); TEXT_MAP.clear(); CHAR_BY_WORD.clear();
   MAX_SYL = 1; MAX_TXT = 1;
   for (const k of Object.keys(POOLS)) POOLS[k].length = 0;
   for (const w of WORD_POOL) {
+    if (DISABLED_SET.has(w.text)) continue;   // 停用词不进任何引擎索引（抽词/锚点/槽位/反推都不用它）
     if (!WORD_MAP.has(w.py)) WORD_MAP.set(w.py, w);
     if (!TEXT_MAP.has(w.text)) TEXT_MAP.set(w.text, w);
     const n = w.py.split(' ').length;
@@ -835,12 +859,13 @@ export const PINYIN_POOL_SIZE = POOL.length;
 /** 词库大小（用户在「拼音字卡库」增删后自动更新，import 端读到的是实时值） */
 export let PINYIN_WORD_SIZE = WORD_POOL.length;
 /** 词库分类统计：单字词 / 双字 / 三字 / 四字（含更长）/ 半截话 / 自定义 + 词性分布 */
-export const WORD_STATS = { one: 0, two: 0, three: 0, four: 0, frag: 0, user: 0, pos: {} };
+export const WORD_STATS = { one: 0, two: 0, three: 0, four: 0, frag: 0, user: 0, off: 0, pos: {} };
 function refreshStats() {
   const st = WORD_STATS;
-  st.one = st.two = st.three = st.four = st.frag = st.user = 0;
+  st.one = st.two = st.three = st.four = st.frag = st.user = st.off = 0;
   st.pos = {};
   for (const w of WORD_POOL) {
+    if (DISABLED_SET.has(w.text)) { st.off++; continue; }   // 停用的不占分类统计
     if (w.frag) st.frag++;
     else if (w.text.length <= 1) st.one++;
     else if (w.text.length === 2) st.two++;

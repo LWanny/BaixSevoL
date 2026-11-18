@@ -3137,6 +3137,13 @@ button.mc-import-line.as-btn:active{background:var(--accent-soft);color:var(--ac
 .pw-del{flex:0 0 auto;width:30px;height:30px;border:none;background:none;font-size:15px;color:var(--txt-mute);
   border-radius:8px;cursor:pointer}
 .pw-del:active{background:var(--danger);color:#fff}
+/* 词条启用/停用开关：停用行整体淡化 */
+.pw-sw{flex:0 0 auto;font-size:11px;line-height:1;padding:6px 10px;border-radius:999px;border:1px solid var(--line-soft);
+  background:var(--bg-elev2);color:var(--txt-mute);cursor:pointer}
+.pw-sw.off{color:var(--accent-2);border-color:var(--accent-2);background:var(--bg-elev)}
+.pw-row.is-off .pw-txt{color:var(--txt-mute);text-decoration:line-through}
+.pw-row.is-off .pw-p{opacity:.55}
+.pw-tag.off{color:var(--danger);border-color:rgba(196,60,60,.3)}
 .pw-more{margin-top:12px}
 /* 缺字补词模式标题 */
 .pw-add-h.pw-pend{color:var(--accent-2)}
