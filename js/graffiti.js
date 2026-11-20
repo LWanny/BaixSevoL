@@ -32,15 +32,20 @@ export const SHAPE_LIB = {
     fill ? c.fill() : c.stroke();
   },
   heart: (c, x, y, s, col, fill) => {
-    const a = s / 14;
+    // 经典参数化心形：x=16sin³t，y=13cost−5cos2t−2cos3t−cos4t
+    // 两个圆瓣饱满对称、凹谷浅、底部收尖——标准爱心轮廓
+    const k = s / 36;
+    const cy = y + 2.5 * k;   // 视觉居中微调
     c.beginPath();
-    c.moveTo(x, y + 3 * a);
-    c.bezierCurveTo(x, y - 2 * a, x - 8 * a, y - 2 * a, x - 5 * a, y + a);
-    c.bezierCurveTo(x - 8 * a, y + 5 * a, x - 3 * a, y + 8 * a, x, y + 11 * a);
-    c.bezierCurveTo(x + 3 * a, y + 8 * a, x + 8 * a, y + 5 * a, x + 5 * a, y + a);
-    c.bezierCurveTo(x + 8 * a, y - 2 * a, x, y - 2 * a, x, y + 3 * a);
-    fill ? c.fillStyle = col : c.strokeStyle = col; c.lineWidth = 3;
-    fill ? c.fill() : c.stroke();
+    for (let i = 0; i <= 72; i++) {
+      const t = (i / 72) * Math.PI * 2;
+      const px = 16 * Math.sin(t) ** 3;
+      const py = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
+      i === 0 ? c.moveTo(x + px * k, cy + py * k) : c.lineTo(x + px * k, cy + py * k);
+    }
+    c.closePath();
+    fill ? c.fillStyle = col : c.strokeStyle = col;
+    fill ? c.fill() : (c.lineWidth = 3, c.stroke());
   },
   star: (c, x, y, s, col, fill) => {
     const pts = 5, outer = s / 2, inner = s / 4.5;
