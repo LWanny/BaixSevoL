@@ -5,7 +5,7 @@
 import { chance, rndInt, pick, uid } from './util.js';
 import { state } from './state.js';
 import { drawInspiration } from './inspiration.js';
-import { randomPhrase, pickAnchor, cutPhrase } from './pinyin.js';
+import { randomPhrase, cutPhrase } from './pinyin.js';
 import { cfg, moodLenRange } from './pinyinConfig.js';
 
 /* ---------- 表情池 ---------- */
@@ -168,12 +168,12 @@ function pushPinyinSteps(steps, py, firstDelay, extra = {}) {
 /** 主动发送的拼音受「主动联系」配置约束：
     按当前心情的 proactiveLen 字数区间重生成（≈字数），最多重试 4 次取最接近的一版，超上限硬裁；
     forceRandom 时走极端字数（极短或极长），忽略用户区间 */
-function fitProactive(anchor) {
+function fitProactive() {
   const C = cfg();
-  let py = randomPhrase(anchor);
+  let py = randomPhrase();
   if (C.forceRandom) {
     const range = chance(30) ? [1, 3] : [15, 28];
-    py = randomPhrase(anchor, { mood: py.state, syllRange: range });
+    py = randomPhrase({ mood: py.state, syllRange: range });
     if (py.text.length > range[1]) py = cutPhrase(py, range[1]);
     return py;
   }
@@ -184,7 +184,7 @@ function fitProactive(anchor) {
   let bestD = dist(py);
   const mood = py.state;
   for (let i = 0; i < 4 && bestD > 0; i++) {
-    const again = randomPhrase(anchor, { mood, syllRange: range });
+    const again = randomPhrase({ mood, syllRange: range });
     const d = dist(again);
     if (d === 0) return again;
     if (d < bestD) { best = again; bestD = d; }
@@ -216,11 +216,7 @@ export async function buildReply({ cards, params, history = [], incomingText = '
     // 拼音打字：不翻字卡库，随机敲拼音组一句话（每批最多一条）
     if (!pinyinUsed && pinyinMasterOn && params.pinyinEnabled && chance(Number(params.pinyinPct) || 0)) {
       pinyinUsed = true;
-      // 上下文锚点：优先取对方刚说的这句的实词，兜底取我方上一条，保证能接上话
-      const lastMe = [...history].reverse().find((m) => m.role === 'me' && m.text);
-      const anchor = pickAnchor(incomingText) || (lastMe ? pickAnchor(lastMe.text) : null);
-      const py = randomPhrase(anchor);
-      pushPinyinSteps(steps, py, delayFor(params));
+      pushPinyinSteps(steps, randomPhrase(), delayFor(params));
       continue;
     }
     const one = await buildOne(textPool, params);
@@ -337,11 +333,7 @@ export async function buildProactive({ cards, params, history = [], medias = [] 
       && (C.enableProactive || C.forceRandom);
     if (!pinyinUsed && pyOn) {
       pinyinUsed = true;
-      // 主动消息没有 incomingText，锚点取我方上一条
-      const lastMe = [...history].reverse().find((m) => m.role === 'me' && m.text);
-      const anchor = lastMe ? pickAnchor(lastMe.text) : null;
-      const py = fitProactive(anchor);
-      pushPinyinSteps(steps, py, i === 0 ? 0 : delayFor(params), { proactive: true });
+      pushPinyinSteps(steps, fitProactive(), i === 0 ? 0 : delayFor(params), { proactive: true });
       continue;
     }
     const one = await buildOne(textPool, params);

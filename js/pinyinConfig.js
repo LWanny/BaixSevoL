@@ -22,12 +22,9 @@ export const DEFAULT_PCFG = {
   singleRatio: [20, 40],      // 抽单字拼音的概率区间 %
   typoRate: [0, 10],          // 打错字并退格的概率区间 %
 
-  /* ---- 2 句式模板与上下文锚点 ---- */
+  /* ---- 2 句式模板 ---- */
   useTemplate: true,          // 是否启用句式模板
   templateRate: [40, 80],     // 启用后抽中模板的概率区间 %（每次生成取点）
-  useAnchor: true,            // 是否用对方的话作锚点接话
-  anchorTailRate: [55, 85],   // 尾词命中率区间 %：锚点取对方话里最后一个实词
-  anchorRandomRate: [15, 45], // 随机命中率区间 %：锚点取对方话里随机一个实词
 
   /* ---- 3 句首 / 句尾修饰 ---- */
   useTailWord: true,          // 句尾追加语气词开关（拼音 UI 会一并显示，如 ba）

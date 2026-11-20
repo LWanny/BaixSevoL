@@ -10,7 +10,7 @@ import { toast, confirmBox } from '../ui.js';
 import { go } from '../router.js';
 import { cfg, saveCfg, MOOD_KEYS, randRange, typingDurMs, queuePending } from '../pinyinConfig.js';
 import { PINYIN_POOL_SIZE, PINYIN_WORD_SIZE, WORD_STATS, SLOT_NAMES,
-  builtinTemplates, templateText, randomPhrase, pickAnchor, probeText } from '../pinyin.js';
+  builtinTemplates, templateText, randomPhrase, probeText } from '../pinyin.js';
 
 export default async function pageRole(view) {
   fullPage({ back: true, title: '角色', actions: [
@@ -220,12 +220,6 @@ function buildPinyinCfg() {
   p2.appendChild(cfgPair('模板使用概率 %', '开启后每次生成先取点再掷，命中才用句型',
     () => C().templateRate, (v) => saveCfg({ templateRate: v }), 0, 100));
   p2.appendChild(buildTemplateBox());
-  p2.appendChild(cfgToggle('上下文锚点', '把对方话里的实词插进回复接话',
-    () => C().useAnchor, (v) => saveCfg({ useAnchor: !!v })));
-  p2.appendChild(cfgPair('锚点 · 尾词命中 %', '取对方话里最后一个实词的概率区间',
-    () => C().anchorTailRate, (v) => saveCfg({ anchorTailRate: v }), 0, 100));
-  p2.appendChild(cfgPair('锚点 · 随机命中 %', '取对方话里随机实词的概率区间',
-    () => C().anchorRandomRate, (v) => saveCfg({ anchorRandomRate: v }), 0, 100));
   p2.appendChild(cfgToggle('句尾语气词', '句尾追加语气词，拼音 UI 会连它的拼音一起显示（如 吧·ba）',
     () => C().useTailWord, (v) => saveCfg({ useTailWord: !!v })));
   p2.appendChild(cfgPair('句尾追加概率 %', '每次生成取点后掷，命中就在句尾追加 ba/ma/呢…',
@@ -349,12 +343,9 @@ function buildPreview() {
 
   /* 模式一：随机句（完整读取当前配置） */
   const playRandom = () => {
-    const incoming = input.value.trim();
-    const anchor = incoming ? pickAnchor(incoming) : null;
-    const py = randomPhrase(anchor);
+    const py = randomPhrase();
     stage.appendChild(el('div', { class: 'cv-meta' }, [
       el('span', { class: 'pw-tag pos', text: '心情 · ' + (py.stateLabel || '平常') }),
-      anchor ? el('span', { class: 'pw-tag', text: '锚点 · ' + anchor.text }) : null,
       py.madeUp ? el('span', { class: 'pw-tag frag', text: '含生造词 · 发送后补 [dǎ cuò le]' }) : null
     ]));
     const line = (py.segs || []).flatMap((sg, i) => [

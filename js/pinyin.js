@@ -3,8 +3,7 @@
    纯本地规则 + 随机（无任何 AI/网络依赖）：
    1. 词库优先：1200+ 高频双字/三字词（data/pinyinwords.js），70% 直接抽词、30% 抽单字；
    2. 句式模板：按 [代词]+[动词]+[名词]+[语气] 之类预设句型填槽，句尾高概率加语气词、句首高概率加连接词；
-   3. 上下文锚点：anchorFrom() 从对方的话里取一个实词拼音，随机插进生成串里，保证能接上话；
-   4. 拼音转汉字走「音节级最长匹配」——词库能接上就组词，接不上才退回单字映射。 */
+   3. 拼音转汉字走「音节级最长匹配」——词库能接上就组词，接不上才退回单字映射。 */
 
 import { chance, rndInt, pick } from './util.js';
 import { WORD_POOL } from './data/pinyinwords.js';
@@ -400,7 +399,7 @@ for (const x of CHARS) {
   if (!CHAR_BY_TEXT.has(x.c)) CHAR_BY_TEXT.set(x.c, x.p);
 }
 
-/* ---------- 词库索引：拼音串 → 词（音节级最长匹配用）、汉字 → 词（锚点提取用） ----------
+/* ---------- 词库索引：拼音串 → 词（音节级最长匹配用）、汉字 → 词（缺字反推用） ----------
    抽成 rebuildWordIndex()：用户在「拼音字卡库」页面增删词条后重新构建，实时生效 */
 const WORD_MAP = new Map();
 const TEXT_MAP = new Map();
@@ -440,7 +439,7 @@ function rebuildWordIndex() {
   MAX_SYL = 1; MAX_TXT = 1;
   for (const k of Object.keys(POOLS)) POOLS[k].length = 0;
   for (const w of WORD_POOL) {
-    if (DISABLED_SET.has(w.text)) continue;   // 停用词不进任何引擎索引（抽词/锚点/槽位/反推都不用它）
+    if (DISABLED_SET.has(w.text)) continue;   // 停用词不进任何引擎索引（抽词/槽位/反推都不用它）
     if (!WORD_MAP.has(w.py)) WORD_MAP.set(w.py, w);
     if (!TEXT_MAP.has(w.text)) TEXT_MAP.set(w.text, w);
     const n = w.py.split(' ').length;
@@ -511,54 +510,6 @@ const CONNECTORS = [
 
 /* ---------- 心情标签（权重与音节上限都在 pinyinConfig.js 里配置） ---------- */
 const MOOD_LABEL = { lazy: '敷衍', normal: '平常', chatty: '话唠', warm: '热情', sad: '伤心' };
-
-/* ---------- 上下文锚点 ----------
-   mode：'tail'   → 取最后一个实词（配置 anchorTailRate 命中）
-         'random' → 取随机一个实词（配置 anchorRandomRate 命中）
-         省略     → 老逻辑 70% 尾词 / 30% 随机兜底 */
-export function anchorFrom(text, mode) {
-  if (!text) return null;
-  const s = String(text);
-  const hits = [];
-  for (let i = 0; i < s.length;) {
-    let found = null;
-    for (let len = Math.min(MAX_TXT, s.length - i); len >= 2; len--) {
-      const w = TEXT_MAP.get(s.substr(i, len));
-      if (w) { found = w; break; }
-    }
-    if (found) { hits.push(found); i += found.text.length; } else i++;
-  }
-  if (hits.length) {
-    if (mode === 'tail') return hits[hits.length - 1];
-    if (mode === 'random') return pick(hits);
-    return chance(70) ? hits[hits.length - 1] : pick(hits);
-  }
-  /* 兜底：最后一个汉字的拼音（内置单字表或词库单字词条里有才收） */
-  const m = s.match(/[\u4e00-\u9fa5]/g);
-  if (m) {
-    const ch = m[m.length - 1];
-    const py = CHAR_BY_TEXT.get(ch);
-    if (py) return { py, text: ch };
-    const w1 = TEXT_MAP.get(ch);       // 词库单字词条（呀/啦等语气词常只在词库）
-    if (w1) return w1;
-  }
-  return null;
-}
-
-/** 按配置决定这句话接不接锚点、用哪种锚点：
-    useAnchor 开关 → 尾词命中率 anchorTailRate → 随机命中率 anchorRandomRate → 都不中则不接 */
-export function pickAnchor(text) {
-  const C = cfg();
-  if (!C.useAnchor || !text) return null;
-  if (C.forceRandom && chance(35)) return null;      // forceRandom：锚点时有时无
-  // 命中率是区间：每次生成先取点再判定；forceRandom 时忽略用户区间、内置极端命中率
-  const tail = C.forceRandom ? rndInt(50, 90) : randRange(C.anchorTailRate, 70);
-  const rand = C.forceRandom ? rndInt(10, 40) : randRange(C.anchorRandomRate, 30);
-  const r = Math.random() * 100;
-  if (r < tail) return anchorFrom(text, 'tail');
-  if (r < tail + rand) return anchorFrom(text, 'random');
-  return null;
-}
 
 /** 从多字词反推单字拼音：取出现最多的音节；并列则不猜 */
 function inferCharPy(ch) {
@@ -683,11 +634,11 @@ export function cutPhrase(py, maxChars) {
   };
 }
 
-/** 随机拼一句（anchor 可选：对方上一句话里的实词拼音，会被强制插进句中）
+/** 随机拼一句
     优先级：forceRandom（极端随机）> 心情状态（音节区间）> 用户配置的各项概率与区间。
     opt.mood / opt.syllRange 供主动发送指定心情与字数区间（重生成时用）。
     返回 { text, pinyin, pinyinTone, segs, parts, state, stateLabel, madeUp } */
-export function randomPhrase(anchor, opt = {}) {
+export function randomPhrase(opt = {}) {
   const C = cfg();
   const extreme = !!C.forceRandom;                     // 1 级优先 · 全局全部随机
   const stKey = opt.mood || pickMood();                // 2 级优先 · 心情状态
@@ -697,7 +648,7 @@ export function randomPhrase(anchor, opt = {}) {
 
   const pieces = [];
   let tpl = null;
-  /* forceRandom 的极端短句：30% 概率只打 1-2 个单字，且不加连接词/语气词/锚点/模板，
+  /* forceRandom 的极端短句：30% 概率只打 1-2 个单字，且不加连接词/语气词/模板，
      保证"极短"一定出现（否则极端长句会把极短完全淹没） */
   const extremeShort = extreme && chance(30);
   // 模板使用概率是区间：每次生成取点再掷；forceRandom 忽略开关与用户区间
@@ -735,12 +686,6 @@ export function randomPhrase(anchor, opt = {}) {
     const c = pick(CONNECTORS);
     pieces.unshift({ py: c.py, text: c.text });
   }
-  /* 锚点：把对方话里的实词强制插进随机位置，保证能接上话（极端短句不插） */
-  let anchorIdx = -1;
-  if (anchor && anchor.py && !extremeShort) {
-    anchorIdx = rndInt(0, pieces.length);
-    pieces.splice(anchorIdx, 0, { py: anchor.py, text: anchor.text });
-  }
   /* 句尾语气词：useTailWord 开关 + tailRate 概率区间（拼音 UI 会连同 ba 这类拼音一起显示） */
   const tailOn = !extremeShort && (extreme ? chance(50)
     : (C.useTailWord && chance(randRange(C.tailRate, 80))));
@@ -766,7 +711,7 @@ export function randomPhrase(anchor, opt = {}) {
     }
   }
 
-  /* 心情 / 区间 · 音节上限裁剪：句尾语气词与锚点永远保留，并尽量凑到下限
+  /* 心情 / 区间 · 音节上限裁剪：句尾语气词永远保留，并尽量凑到下限
      （forceRandom 无 opt 区间时不裁 —— 极端字数优先级最高） */
   if (sylls.length > sylMax && (!extreme || opt.syllRange)) {
     /* 1) 句尾语气词先摘出来：主体裁完再拼回去，保证 ba/ma 这类拼音一定显示出来 */
@@ -779,23 +724,7 @@ export function randomPhrase(anchor, opt = {}) {
     /* 2) 主体可用名额 = 上限 − 语气词占位（至少留 1 个音节，不出现光剩语气词的句子） */
     const cap = Math.max(1, sylMax - (tS ? tS.length : 0));
     let s = 0;
-    let e = cap;
-    if (anchorIdx >= 0) {
-      let a0 = 0;
-      for (let k = 0; k < anchorIdx; k++) a0 += pieces[k].py.split(' ').length;
-      const aLen = pieces[anchorIdx].py.split(' ').length;
-      s = a0;
-      e = a0 + Math.min(aLen, cap);
-      let room = cap - (e - s);
-      const pre = Math.min(room, s);
-      s -= pre;
-      room -= pre;
-      e = Math.min(sylls.length, e + room);
-      if (e - s < cap && e < sylls.length) e = Math.min(sylls.length, s + cap);
-      /* 下限兜底：窗口还不够 [min] 就前后再扩 */
-      let need = sylMin - (e - s);
-      if (need > 0) { e = Math.min(sylls.length, e + need); need = sylMin - (e - s); if (need > 0) s = Math.max(0, s - need); }
-    }
+    let e = Math.min(sylls.length, cap);
     const keptS = sylls.slice(s, e);
     const keptK = known.slice(s, e);
     sylls.length = 0; sylls.push(...keptS);
