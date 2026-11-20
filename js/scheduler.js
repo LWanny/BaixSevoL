@@ -324,8 +324,8 @@ async function fireProactive(p) {
   if (!steps.length) return false;
   runSteps(steps);
 
-  // 概率触发 TA 主动来电（不通过聊天消息）
-  if (chance(Number(p.callProactivePct))) {
+  // 概率触发 TA 主动来电（不通过聊天消息）；通话中/来电未接时不发起
+  if (!state.callBusy && chance(Number(p.callProactivePct))) {
     setTimeout(async () => {
       try {
         const { triggerIncoming } = await import('./call.js');

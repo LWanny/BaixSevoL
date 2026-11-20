@@ -3,6 +3,7 @@
    引擎只产出「计划」，由聊天页负责落库与渲染。 */
 
 import { chance, rndInt, pick, uid } from './util.js';
+import { state } from './state.js';
 import { drawInspiration } from './inspiration.js';
 import { randomPhrase, pickAnchor, cutPhrase } from './pinyin.js';
 import { cfg, moodLenRange } from './pinyinConfig.js';
@@ -282,8 +283,8 @@ export async function buildReply({ cards, params, history = [], incomingText = '
     steps.push({ kind: 'pat', delayMs: delayFor(params), by: 'ta' });
   }
 
-  // TA 主动发起通话请求（概率 callPct）
-  if (chance(Number(params.callPct) || 0)) {
+  // TA 主动发起通话请求（概率 callPct）；通话中/来电未接时不再发起
+  if (!state.callBusy && chance(Number(params.callPct) || 0)) {
     steps.push({
       kind: 'call-request',
       delayMs: delayFor(params),
@@ -365,7 +366,7 @@ export async function buildProactive({ cards, params, history = [], medias = [] 
     }
   }
   if (chance(params.patPct)) steps.push({ kind: 'pat', delayMs: 1200, by: 'ta' });
-  if (chance(Number(params.callPct) || 0)) {
+  if (!state.callBusy && chance(Number(params.callPct) || 0)) {
     steps.push({ kind: 'call-request', delayMs: 1200, text: '给你打个电话', proactive: true });
   }
   return steps;

@@ -30,8 +30,10 @@ let session = null;       // { state, direction, startedAt, sec, bgId, answerAt 
 let tickId = null;
 let answerId = null;
 
-/** 把当前通话状态写进 kv（state 变化时调用）；active 的秒数不落库，恢复时按 startedAt 算 */
+/** 把当前通话状态写进 kv（state 变化时调用）；active 的秒数不落库，恢复时按 startedAt 算。
+    同时同步共享标志 state.callBusy —— engine/scheduler 据此「通话中不再发起通话」 */
 function persist() {
+  state.callBusy = !!(session && session.state);
   kvSet(SESSION_KEY, session ? { ...session } : null).catch(() => {});
 }
 
@@ -125,11 +127,12 @@ function startIncoming() {
   paintCall();
 }
 
-/** scheduler.js 调用：TA 主动打来电（概率由 callProactivePct 控制） */
+/** scheduler.js 调用：TA 主动打来电（概率由 callProactivePct 控制）。
+    通话中 / 呼叫中一律不发起；上一通挂断后，由 scheduler 到点再按概率打来 */
 export function triggerIncoming() {
-  if (session && session.state !== 'incoming') { restore(); return; }   // 通话中/呼叫中：只回到画面
-  if (!session) startIncoming();
-  else paintCall();   // 上一个来电还没接：刷新来电屏再响一遍，不闷声丢掉
+  if (session && (session.state === 'active' || session.state === 'calling')) return;   // 通话中/呼叫中：忽略，不弹不响
+  if (session && session.state === 'incoming') { paintCall(); ringIncoming(); return; } // 旧来电还没接：刷新来电屏再响一遍
+  startIncoming();
   ringIncoming();
 }
 
@@ -162,15 +165,18 @@ export async function resumeCall() {
   if (!s || !s.state) return;
   if (s.state === 'calling') {
     session = s;
+    persist();
     paintCall();
     const remain = Number(s.answerAt || 0) - Date.now();
     if (remain > 0) scheduleAnswer(remain);
     else resolveAnswer();
   } else if (s.state === 'incoming') {
     session = s;
+    persist();
     paintCall();
   } else if (s.state === 'active') {
     session = s;
+    persist();
     session.sec = Math.max(0, Math.floor((Date.now() - Number(s.startedAt || Date.now())) / 1000));
     if (session.sec >= MAX_SEC) { endCall('ended'); return; }
     paintCall();
