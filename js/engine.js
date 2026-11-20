@@ -160,9 +160,6 @@ function pushPinyinSteps(steps, py, firstDelay, extra = {}) {
       ...extra
     });
   });
-  if (py.madeUp) {
-    steps.push({ kind: 'message', delayMs: rndInt(600, 2400), text: '[dǎ cuò le]', cardIds: [], ...extra });
-  }
 }
 
 /** 主动发送的拼音受「主动联系」配置约束：

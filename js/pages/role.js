@@ -346,7 +346,7 @@ function buildPreview() {
     const py = randomPhrase();
     stage.appendChild(el('div', { class: 'cv-meta' }, [
       el('span', { class: 'pw-tag pos', text: '心情 · ' + (py.stateLabel || '平常') }),
-      py.madeUp ? el('span', { class: 'pw-tag frag', text: '含生造词 · 发送后补 [dǎ cuò le]' }) : null
+      py.madeUp ? el('span', { class: 'pw-tag frag', text: '含生造词' }) : null
     ]));
     const line = (py.segs || []).flatMap((sg, i) => [
       i ? document.createTextNode(' ') : null,
