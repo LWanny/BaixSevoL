@@ -779,7 +779,7 @@ export function randomPhrase(opt = {}) {
     parts: partsOf(segs),
     state: st.key,
     stateLabel: st.label,
-    madeUp: segs.some((s) => !s.m)   // 词库接不上的「生造词」→ engine 补一句 [dǎ cuò le]
+    madeUp: segs.some((s) => !s.m)   // 词库接不上的「生造词」（仅作标记，不再补发提示）
   };
 }
 

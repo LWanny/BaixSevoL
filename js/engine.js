@@ -141,7 +141,6 @@ export function delayFor(params) {
 
 /** 需求4+5 · 把一次拼音生成摊成若干 step：
     - 长文按 parts（标点小句）分阶段逐句打出发送，第 2 句起用短间隔，节奏像真人连续敲
-    - 生造词（词库接不上的段）紧跟着补发一句 [dǎ cuò le]
     extra 用于附带 proactive 等标记 */
 function pushPinyinSteps(steps, py, firstDelay, extra = {}) {
   const parts = (Array.isArray(py.parts) && py.parts.length)
