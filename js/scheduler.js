@@ -339,6 +339,8 @@ async function fireProactive(p) {
 
 /** 每 20 秒检查一次；到点就发，并把下一次排上 */
 async function tickProactive() {
+  /* 审批小钱包：TA 的 3 天内随机审批/投票计划到点自动执行 */
+  try { const ap = await import('./pages/approval.js'); if (await ap.checkTaAuto()) emit('approval-ta'); } catch {}
   const p = state.role.params;
   if (!p.proactive) return;
   if (running) return;

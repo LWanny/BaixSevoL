@@ -32,7 +32,77 @@ export default async function pageApproval(v) {
 
 async function load() {
   rows = (await all('approvals')).sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0));
+  let changed = await migrateRows(rows);
+  changed = (await checkTaAuto()) || changed;
+  if (changed) rows = (await all('approvals')).sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0));
   paint();
+}
+
+/* ---------------- 权限规则 ----------------
+   buy  ：我提交的只有 TA 能批；TA 提交的只有我能批（自己不能批自己发起的）
+   vote ：双方各投一票，都投完才互相可见对方的票
+   TA   ：提交后 3 天内随机时间、按概率处理；通过/驳回/投给谁完全随机 */
+
+const TA_WINDOW_MIN = 10 * 60e3;               // 最早 10 分钟后
+const TA_WINDOW_MAX = 3 * 24 * 3600e3;         // 最晚 3 天后
+const TA_RATE = 0.85;                          // TA 会处理的比例
+
+const TA_BUY_OK = ['行，批准了，买吧', '嗯，这个可以买', '好呀，通过～', '理由充分，准了', '买！'];
+const TA_BUY_NO = ['这个先不买啦', '再想想吧，驳回～', '最近有点超支，先缓缓', '不许买，下次再说'];
+const TA_VOTE_MSG = ['我选好了，你猜～', '纠结了一下，我投了一票', '嗯，我投了一个，投完你就知道'];
+
+/** 新记录排 TA 计划：85% 会处理，时间取 10 分钟 ~ 3 天内的随机点 */
+function scheduleTaPlan(row) {
+  row.taWillDo = Math.random() < TA_RATE;
+  row.taPlanAt = row.taWillDo ? Date.now() + TA_WINDOW_MIN + Math.random() * (TA_WINDOW_MAX - TA_WINDOW_MIN) : 0;
+}
+
+/** 老数据迁移：单票 vote 字段拆成 myVote/taVote；老的 pending 记录补 TA 计划 */
+async function migrateRows(rows) {
+  let changed = false;
+  for (const rec of rows) {
+    const before = JSON.stringify([rec.vote, rec.myVote, rec.taVote, rec.taWillDo, rec.taPlanAt]);
+    if (rec.vote && !rec.myVote && !rec.taVote) {
+      if (rec.decider === 'ta') rec.taVote = rec.vote; else rec.myVote = rec.vote;
+      rec.vote = null;
+    }
+    if (rec.taWillDo === undefined && rec.status === 'pending') {
+      if (rec.type === 'buy' && rec.from === 'me') scheduleTaPlan(rec);
+      if (rec.type === 'vote' && !rec.taVote) scheduleTaPlan(rec);
+    }
+    if (before !== JSON.stringify([rec.vote, rec.myVote, rec.taVote, rec.taWillDo, rec.taPlanAt])) {
+      await put('approvals', rec);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+/** 到点的 TA 计划：buy 随机通过/驳回；vote 均匀随机投一票。scheduler 每 20 秒也会调 */
+async function checkTaAuto() {
+  const now = Date.now();
+  let changed = false;
+  for (const rec of await all('approvals')) {
+    if (rec.taDone || !rec.taWillDo || !rec.taPlanAt || rec.taPlanAt > now) continue;
+    if (rec.type === 'buy') {
+      if (rec.from === 'me' && rec.status === 'pending') {
+        rec.status = Math.random() < 0.5 ? 'approved' : 'rejected';
+        rec.decider = 'ta';
+        rec.decidedAt = now;
+        rec.reply = Math.random() < 0.6 ? TA_BUY_OK[Math.floor(Math.random() * TA_BUY_OK.length)] : (rec.status === 'rejected' ? TA_BUY_NO[Math.floor(Math.random() * TA_BUY_NO.length)] : '');
+      }
+    } else if (!rec.taVote && (rec.options || []).length) {
+      const opt = rec.options[Math.floor(Math.random() * rec.options.length)];
+      rec.taVote = opt?.id || null;
+      rec.taVoteAt = now;
+      rec.reply = rec.reply || (Math.random() < 0.4 ? TA_VOTE_MSG[Math.floor(Math.random() * TA_VOTE_MSG.length)] : '');
+      if (rec.myVote && rec.taVote) rec.status = 'voted';
+    }
+    rec.taDone = true;
+    await put('approvals', rec);
+    changed = true;
+  }
+  return changed;
 }
 
 const STAT_LABEL = { pending: '审批中', approved: '已通过', rejected: '已驳回', voted: '已投票' };
@@ -109,17 +179,22 @@ function mkTab(t, on, onclick) {
 
 function cardOf(r) {
   const isBuy = r.type === 'buy';
-  const status = STAT_LABEL[r.status] || r.status;
-  const canAct = r.status === 'pending';   // pending 才能审批
+  const bothVoted = !!(r.myVote && r.taVote);
+  const vs = !isBuy && (r.myVote || r.taVote) && !bothVoted
+    ? (r.myVote ? '我已投票' : 'TA 已投票') : null;
+  const status = vs || STAT_LABEL[r.status] || r.status;
+  const canAct = r.status === 'pending';
 
   const title = r.title || (isBuy ? '未填标题' : (r.question || '纠结投票'));
+  const optTitle = (id) => (r.options || []).find((o) => o.id === id)?.title || '-';
   const subBits = [];
   if (isBuy) {
     if (r.price) subBits.push(`¥${r.price}`);
   } else {
     const n = (r.options || []).length;
     if (n) subBits.push(`${n} 个选项`);
-    if (r.vote) subBits.push(`投给了「${(r.options || []).find((o) => o.id === r.vote)?.title || '-'}」`);
+    if (r.myVote) subBits.push(`我投了「${optTitle(r.myVote)}」`);
+    if (bothVoted) subBits.push(`TA 投了「${optTitle(r.taVote)}」`);
   }
   subBits.push(fmtDay(r.ts));
 
@@ -133,8 +208,13 @@ function cardOf(r) {
     el('div', { class: 'ap-card-sub', text: subBits.join(' · ') }),
     r.reply ? el('div', { class: 'ap-card-reply', text: `审批人：${r.reply}` }) : null,
     !isBuy && (r.options || []).length ? el('div', { class: 'ap-vote-row' }, (r.options || []).slice(0, 4).map((o) =>
-      el('span', { class: 'ap-vote-chip' + (r.vote === o.id ? ' on' : ''), text: o.title + (o.price ? ` ¥${o.price}` : '') }))) : null,
-    canAct ? el('div', { class: 'ap-card-act', text: '点我审批' }) : null
+      el('span', {
+        class: 'ap-vote-chip'
+          + (r.myVote === o.id ? ' on' : '')
+          + (bothVoted && r.taVote === o.id ? ' ta' : ''),
+        text: o.title + (o.price ? ` ¥${o.price}` : '')
+      }))) : null,
+    canAct && (isBuy ? r.from === 'ta' : !r.myVote) ? el('div', { class: 'ap-card-act', text: '点我审批' }) : null
   ]);
 }
 
@@ -204,13 +284,15 @@ function openBuyForm(rec) {
     actions: [{ label: '提交', icon: 'IC-MIO-021', onSelect: async () => {
       if (!title.value.trim()) { toast('请填写想买什么'); return; }
       const row = {
-        id: uid(), type: 'buy', from: 'me', ts: Date.now(),
-        status: 'pending', decidedAt: 0, decider: '', reply: '',
+        ...(rec || {}),
+        id: rec?.id || uid(), type: 'buy', from: rec?.from || 'me', ts: rec?.ts || Date.now(),
+        status: rec?.status || 'pending', decidedAt: rec?.decidedAt || 0, decider: rec?.decider || '', reply: rec?.reply || '',
         title: title.value.trim(), price: Number(price.value) || 0,
         why: why.value.trim(), alternative: alt.value.trim(), imgId
       };
+      if (!rec) scheduleTaPlan(row);   // 新记录：排 TA 的 3 天内随机审批计划
       await put('approvals', row);
-      s.close(); await load(); toast('已提交，等 TA 审批');
+      s.close(); await load(); toast('已提交，TA 会在 3 天内找时间审批');
     } }]
   });
   setTimeout(() => title.focus(), 260);
@@ -279,12 +361,14 @@ function openVoteForm(rec) {
       if (!question.value.trim()) { toast('请填写纠结点'); return; }
       if (opts.length < 2) { toast('至少 2 个选项'); return; }
       const row = {
-        id: uid(), type: 'vote', from: 'me', ts: Date.now(),
-        status: 'pending', decidedAt: 0, decider: '', reply: '',
-        question: question.value.trim(), options: opts, vote: null, imgId
+        ...(rec || {}),
+        id: rec?.id || uid(), type: 'vote', from: rec?.from || 'me', ts: rec?.ts || Date.now(),
+        status: rec?.status || 'pending', decidedAt: rec?.decidedAt || 0, decider: rec?.decider || '', reply: rec?.reply || '',
+        question: question.value.trim(), options: opts, myVote: rec?.myVote || null, taVote: rec?.taVote || null, imgId
       };
+      if (!rec) scheduleTaPlan(row);   // 新记录：排 TA 的 3 天内随机投票计划
       await put('approvals', row);
-      s.close(); await load(); toast('已提交，等 TA 投票');
+      s.close(); await load(); toast('已提交，双方各投一票，TA 也会投');
     } }]
   });
   setTimeout(() => question.focus(), 260);
@@ -305,13 +389,24 @@ async function openDetail(r) {
     if (rec.why) node.appendChild(el('div', { class: 'ap-row-txt', text: `为什么想买：${rec.why}` }));
     if (rec.alternative) node.appendChild(el('div', { class: 'ap-row-txt', text: `替代品：${rec.alternative}` }));
   } else {
+    const reveal = !!(rec.myVote && rec.taVote);   // 双方都投完才互相可见
     const box = el('div', { class: 'ap-vote-list' });
-    (rec.options || []).forEach((o) => box.appendChild(el('div', { class: 'ap-vote-item' + (rec.vote === o.id ? ' on' : '') }, [
-      el('span', { text: o.title }),
-      o.price ? el('span', { class: 'right', text: `¥${o.price}` }) : null,
-      rec.vote === o.id ? el('span', { class: 'ap-vote-mark', text: '✓ TA 投给这里' }) : null
-    ])));
+    (rec.options || []).forEach((o) => {
+      const marks = [];
+      if (rec.myVote === o.id) marks.push(el('span', { class: 'ap-vote-mark', text: '✓ 我投给这里' }));
+      if (reveal && rec.taVote === o.id) marks.push(el('span', { class: 'ap-vote-mark ta', text: '✓ TA 投给这里' }));
+      box.appendChild(el('div', { class: 'ap-vote-item' + ((rec.myVote === o.id || (reveal && rec.taVote === o.id)) ? ' on' : '') }, [
+        el('span', { text: o.title }),
+        o.price ? el('span', { class: 'right', text: `¥${o.price}` }) : null,
+        ...marks
+      ]));
+    });
     node.appendChild(box);
+    if (!reveal) {
+      node.appendChild(el('div', { class: 'ap-row-txt', text: rec.taVote
+        ? 'TA 已投票。投完你的票后才能看到 TA 的选择'
+        : (rec.myVote ? 'TA 还没投票，投完你们就能互相看到结果' : '双方各投一票，都投完后互相可见') }));
+    }
   }
   if (rec.imgId) {
     try {
@@ -323,7 +418,15 @@ async function openDetail(r) {
   if (rec.reply) node.appendChild(el('div', { class: 'ap-reply-box' }, [el('div', { class: 'ap-reply-t', text: rec.decider === 'ta' ? 'TA 留言' : '我的留言' }), el('div', { text: rec.reply })]));
 
   const actions = [];
-  actions.push({ label: rec.type === 'buy' ? '通过 / 驳回' : '投票', icon: 'IC-MIO-021', onSelect: () => openAct(rec) });
+  if (rec.type === 'buy') {
+    if (rec.from === 'ta' && rec.status === 'pending') {
+      actions.push({ label: '通过 / 驳回', icon: 'IC-MIO-021', onSelect: () => openAct(rec) });
+    } else if (rec.from === 'me' && rec.status === 'pending') {
+      actions.push({ label: '等 TA 审批', icon: 'IC-MIO-014', onSelect: () => toast('自己发起的审批由 TA 来批，TA 会在 3 天内找时间处理') });
+    }
+  } else if (!rec.myVote) {
+    actions.push({ label: '投票', icon: 'IC-MIO-021', onSelect: () => openAct(rec) });
+  }
   actions.push({ label: '编辑', icon: 'IC-CRD-006', onSelect: () => {
     if (rec.type === 'buy') openBuyForm(rec); else openVoteForm(rec);
   } });
@@ -343,6 +446,9 @@ async function openAct(r) {
   if (!rec) return;
 
   if (rec.type === 'buy') {
+    /* 自己不能审批自己发起的 */
+    if (rec.from === 'me') { toast('自己发起的审批由 TA 来批'); return; }
+    if (rec.status !== 'pending') { toast('这条已审批完成'); return; }
     const reply = el('textarea', { class: 'input', rows: 2, placeholder: '留言（可选）' });
     const s = sheet({
       title: '审批：' + rec.title,
@@ -355,9 +461,10 @@ async function openAct(r) {
     return;
   }
 
-  /* 投票审批：单选 */
+  /* 投票审批：双方各投一票，都投完才互相可见 */
+  if (rec.myVote) { toast('你已经投过票了'); return; }
   const box = el('div');
-  let picked = rec.vote || null;
+  let picked = null;
   const draw = () => {
     box.innerHTML = '';
     (rec.options || []).forEach((o) => {
@@ -376,13 +483,15 @@ async function openAct(r) {
     node: el('div', {}, [box, el('div', { class: 'field', style: { marginTop: '10px' } }, [el('label', { text: '留言' }), reply])]),
     actions: [{ label: '提交投票', icon: 'IC-MIO-021', onSelect: async () => {
       if (!picked) { toast('请先选一个选项'); return; }
-      rec.status = 'voted';
-      rec.vote = picked;
-      rec.reply = reply.value.trim();
+      rec.myVote = picked;
+      rec.myVoteAt = Date.now();
       rec.decider = 'me';
-      rec.decidedAt = Date.now();
+      rec.reply = reply.value.trim() || rec.reply || '';
+      rec.status = (rec.myVote && rec.taVote) ? 'voted' : 'pending';
+      rec.decidedAt = rec.status === 'voted' ? Date.now() : (rec.decidedAt || 0);
       await put('approvals', rec);
-      s.close(); await load(); toast('已投票');
+      s.close(); await load();
+      toast(rec.status === 'voted' ? '已投票，双方都投完了，结果互相可见' : '已投票，等 TA 投票后互相可见');
     } }]
   });
 }
