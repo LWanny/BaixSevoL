@@ -635,7 +635,7 @@ function renderSpread(wrap) {
     renderCard: (sp) => [
       el('div', { class: 'pk-frame' }, [miniLayout(sp)]),
       el('div', { class: 'pk-name', text: sp.name }),
-      el('div', { class: 'pk-desc', text: sp.positions.join(' · ') })
+      el('div', { class: 'pk-desc', text: sp.note || sp.positions.join(' · ') })
     ],
     onConfirm: chooseSpread
   });
