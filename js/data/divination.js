@@ -134,7 +134,7 @@ export const HOUSES = [
   ['第十一宫', '朋友 / 圈子 / 期望'], ['第十二宫', '隐藏 / 潜意识 / 放下']
 ].map((h, i) => ({ id: `house-${i}`, system: 'astro', kind: 'house', name: h[0], meaning: h[1] }));
 
-/* ---------- 14 种牌阵 ---------- */
+/* ---------- 18 种牌阵 ---------- */
 export const SPREADS = [
   /* 塔罗牌阵（Sara 基础牌阵系列：身心灵 / 圣三角 / 时间之流 / 得与失 / Yes or No） */
   { id: 'body-mind-spirit', name: '身心灵牌阵', system: 'tarot', layoutCells: [[null, 3, null], [1, null, 2]],
@@ -152,6 +152,18 @@ export const SPREADS = [
   { id: 'yes-no', name: 'Yes or No', system: 'tarot',
     positions: ['答案'],
     note: '1 张 · 忽略正逆位，以牌面判定——圣杯九：明确的「是」；任意 ACE：需调整动作或等待时机，目前不宜下结论；大阿卡那「是」：愚人、魔术师、女皇、皇帝、战车、正义、星星、太阳、世界；「否」：力量、塔、节制、隐士、倒吊人、死神、恶魔；其余（女祭司、命运之轮、恋人、教皇、月亮、审判）凭直觉判断' },
+  { id: 'self-explore', name: '自我探索', system: 'tarot', layoutCells: [[null, 4, null], [2, null, 3], [null, 1, null]],
+    positions: ['我当前的状态', '我外在的表现', '我内在的渴望', '我的潜意识'],
+    note: '4 张 · 从当前状态出发，对照外在表现与内在渴望，最后看潜意识里更深层的动因' },
+  { id: 'jung-archetype', name: '荣格原型', system: 'tarot', layoutCells: [[1, 5, 2], [4, null, 3]],
+    positions: ['自我/人格面具·呈现给外部世界的面孔、社会角色，以及你认为的「自己」', '阴暗自我·被压抑、否认或隐藏的潜意识部分，包含负面特质，但也蕴藏着创造力', '阿尼玛/阿尼姆斯·你内在的异性原型，影响我们如何与异性建立关系，也是通往潜意识（特别是集体无意识）的桥梁', '智慧老人·智慧、意义和灵性的原型，超越「自我」的指导力量', '自性·心灵的终极完整性和目标，是所有其他原型围绕的中心'],
+    note: '5 张 · 中央「自性」为核心，先看四个角的原型，再回到中心看整体的整合方向' },
+  { id: 'tarot-choice2', name: '二选一牌阵', system: 'tarot', layoutCells: [[4, null, 5], [2, null, 3], [null, 1, null]],
+    positions: ['本人现状/问题现状', '选择A的现状', '选择B的现状', '选择A的影响', '选择B的影响'],
+    note: '5 张 · 先看 1 的本人现状，再分别对照 A/B 两路的现状（2、3）与后续影响（4、5）' },
+  { id: 'one-card', name: '单张牌', system: 'tarot',
+    positions: ['今日讯息·回应当下提问的核心讯息'],
+    note: '1 张 · 最简单的一张牌，适合日常一题一答、晨起感受当日基调' },
   /* 雷诺曼牌阵（线性 / 矩形 / 选择 / 十字 / H 型 / 九宫格，线性牌阵解读法）
      layoutKind: line=单行；three=每行 3 张；cross=十字布局；layoutCells=自定义摆放（null 为空格） */
   { id: 'len-line3', name: '线性牌阵 · 3 张', system: 'lenormand', layoutKind: 'line',
