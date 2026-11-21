@@ -142,8 +142,20 @@ export const SPREADS = [
   { id: 'lovers-pyramid', name: '恋人金字塔', system: 'tarot', positions: ['你', '我', '关系现状', '关系走向'] },
   { id: 'inspiration', name: '灵感对应', system: 'tarot', positions: ['你的想法', '我的想法', '你的行动', '我的行动', '交集'] },
   { id: 'repair', name: '关系修复', system: 'tarot', positions: ['裂痕所在', '还能补的地方', '需要时间', '主动的一方', '修复后的样子'] },
-  /* 雷诺曼牌阵（矩形 / 选择 / 十字 / H 型，线性牌阵解读法）
-     layoutKind: three=每行 3 张；cross=十字布局；layoutCells=自定义摆放（null 为空格） */
+  /* 雷诺曼牌阵（线性 / 矩形 / 选择 / 十字 / H 型 / 九宫格，线性牌阵解读法）
+     layoutKind: line=单行；three=每行 3 张；cross=十字布局；layoutCells=自定义摆放（null 为空格） */
+  { id: 'len-line3', name: '线性牌阵 · 3 张', system: 'lenormand', layoutKind: 'line',
+    positions: ['起 1', '承 2', '合 3'],
+    note: '3 张 · 适用于几乎所有场景。提问→抽牌→造句：用牌义组成能够回答问题的句子，把一行的牌当成整体进行解读' },
+  { id: 'len-line5', name: '线性牌阵 · 5 张', system: 'lenormand', layoutKind: 'line',
+    positions: ['1', '2', '3', '4', '5'],
+    note: '5 张 · 适用于几乎所有场景。提问→抽牌→造句：用牌义组成能够回答问题的句子，把一行的牌当成整体进行解读' },
+  { id: 'len-line7', name: '线性牌阵 · 7 张', system: 'lenormand', layoutKind: 'line',
+    positions: ['1', '2', '3', '4', '5', '6', '7'],
+    note: '7 张（必要时使用）· 适用于几乎所有场景。提问→抽牌→造句：用牌义组成能够回答问题的句子，把一行的牌当成整体进行解读' },
+  { id: 'len-9', name: '九宫格牌阵', system: 'lenormand', layoutKind: 'three',
+    positions: ['过去·焦虑不可控 1', '现在·核心 2', '未来·焦虑不可控 3', '过去·现状 4', '现在·核心 5', '未来·现状 6', '过去·可控可解决 7', '现在·可控可解决 8', '未来·可控可解决 9'],
+    note: '9 张 · 适用于对一个事件的全面解读。横向三行：焦虑、不可控 / 现状（时间流）/ 可控、可解决；纵向三列：过去 / 现在 / 未来；两条对角线：不愿表达的事情、隐藏的导火线' },
   { id: 'len-rect', name: '矩形牌阵', system: 'lenormand', layoutKind: 'three',
     positions: ['总体情况·1', '总体情况·2', '总体情况·3', '处理方式·4', '处理方式·5', '解决方案·6'],
     note: '线性牌阵变形之一 · 6 张，适用于几乎所有场景。1+2+3 代表问题的总体情况；4+5+6 代表情况的处理方式、解决方案' },
