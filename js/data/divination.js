@@ -134,7 +134,7 @@ export const HOUSES = [
   ['第十一宫', '朋友 / 圈子 / 期望'], ['第十二宫', '隐藏 / 潜意识 / 放下']
 ].map((h, i) => ({ id: `house-${i}`, system: 'astro', kind: 'house', name: h[0], meaning: h[1] }));
 
-/* ---------- 18 种牌阵 ---------- */
+/* ---------- 23 种牌阵 ---------- */
 export const SPREADS = [
   /* 塔罗牌阵（Sara 基础牌阵系列：身心灵 / 圣三角 / 时间之流 / 得与失 / Yes or No） */
   { id: 'body-mind-spirit', name: '身心灵牌阵', system: 'tarot', layoutCells: [[null, 3, null], [1, null, 2]],
@@ -164,6 +164,21 @@ export const SPREADS = [
   { id: 'one-card', name: '单张牌', system: 'tarot',
     positions: ['今日讯息·回应当下提问的核心讯息'],
     note: '1 张 · 最简单的一张牌，适合日常一题一答、晨起感受当日基调' },
+  { id: 'core-4', name: '直指核心牌阵', system: 'tarot', layoutCells: [[null, 1, null], [2, 3, 4]],
+    positions: ['问题核心', '主要障碍', '应对策略', '优势与可用资源'],
+    note: '4 张 · 适合事情卡住、反复失败、找不到原因。建议问「这件事真正卡在哪里？」「我现在能做什么？」；先用第 1 张定锚，再看第 2 张阻碍，第 3、4 张要落到现实行动' },
+  { id: 'diamond-4', name: '钻石牌阵', system: 'tarot', layoutCells: [[null, 2, null], [1, null, 4], [null, 3, null]],
+    positions: ['过去', '现在的主要状态', '现在的另一影响', '未来趋势'],
+    note: '4 张 · 适合想比三张时间流看得更细。读牌顺序：过去 → 现在的双重影响 → 未来；第 2、3 张都在解释「现在」，要比较它们是互相支持还是彼此冲突' },
+  { id: 'love-tree', name: '爱情之树牌阵', system: 'tarot', layoutCells: [[2, null, 3], [null, 1, null], [4, null, 5]],
+    positions: ['自己的状态', '过去与原因', '现在与解决方式', '未来与可能性', '外在环境与潜意识'],
+    note: '5 张 · 适合关系现状、停滞原因、后续发展。先看第 1 张是否与关系需求一致，再用第 2、3 张找问题脉络；第 4 张是趋势，第 5 张是容易被忽略的影响' },
+  { id: 'hexagram-7', name: '六芒星牌阵', system: 'tarot', layoutCells: [[null, 1, null], [4, null, 2], [null, 7, null], [5, null, 6], [null, 3, null]],
+    positions: ['过去', '现在', '未来', '解决办法', '外部因素', '自己的心态', '结果趋势'],
+    note: '7 张 · 适合关系、事业及多因素问题。先读时间线 1—3，再看 4—6 如何影响事情，最后读 7；信息多不等于更准，先把各位置之间的因果关系串起来' },
+  { id: 'venus-8', name: '维纳斯牌阵', system: 'tarot', layoutCells: [[1, null, 2], [3, null, 4], [7, null, 8], [null, 5, 6]],
+    positions: ['自己的想法', '对方的想法', '关系对自己的影响', '关系对对方的影响', '可能遇到的障碍', '目前趋势下的结果', '未来自己的心情', '未来对方的心情'],
+    note: '8 张 · 适合恋爱、婚姻、复杂关系走向。抽牌前先固定位置，不要解到一半再更换定义；结果是趋势，不替任何人决定' },
   /* 雷诺曼牌阵（线性 / 矩形 / 选择 / 十字 / H 型 / 九宫格，线性牌阵解读法）
      layoutKind: line=单行；three=每行 3 张；cross=十字布局；layoutCells=自定义摆放（null 为空格） */
   { id: 'len-line3', name: '线性牌阵 · 3 张', system: 'lenormand', layoutKind: 'line',
