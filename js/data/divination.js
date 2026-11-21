@@ -134,14 +134,24 @@ export const HOUSES = [
   ['第十一宫', '朋友 / 圈子 / 期望'], ['第十二宫', '隐藏 / 潜意识 / 放下']
 ].map((h, i) => ({ id: `house-${i}`, system: 'astro', kind: 'house', name: h[0], meaning: h[1] }));
 
-/* ---------- 13 种牌阵 ---------- */
+/* ---------- 14 种牌阵 ---------- */
 export const SPREADS = [
-  { id: 'bridge', name: '沟通之桥', system: 'tarot', positions: ['我的表达', '你的理解', '桥中间的误解', '跨过去的方法'] },
-  { id: 'stuck', name: '关系卡点与深度对话', system: 'tarot', positions: ['表面的卡点', '底下的原因', '你真正想说的', '我真正想听的', '下一步对话'] },
-  { id: 'conflict', name: '冲突化解与爱意重建', system: 'tarot', positions: ['冲突的引线', '各自的立场', '被忽略的感受', '还能留下的爱意', '重建的第一步'] },
-  { id: 'lovers-pyramid', name: '恋人金字塔', system: 'tarot', positions: ['你', '我', '关系现状', '关系走向'] },
-  { id: 'inspiration', name: '灵感对应', system: 'tarot', positions: ['你的想法', '我的想法', '你的行动', '我的行动', '交集'] },
-  { id: 'repair', name: '关系修复', system: 'tarot', positions: ['裂痕所在', '还能补的地方', '需要时间', '主动的一方', '修复后的样子'] },
+  /* 塔罗牌阵（Sara 基础牌阵系列：身心灵 / 圣三角 / 时间之流 / 得与失 / Yes or No） */
+  { id: 'body-mind-spirit', name: '身心灵牌阵', system: 'tarot', layoutCells: [[null, 3, null], [1, null, 2]],
+    positions: ['身·物质身体、外在行为、实际行动、健康、日常生活、安全感', '心·理智、情绪、潜意识、感受、欲望、恐惧与人际互动模式', '灵·高我、直觉、精神追求、人生目标、宇宙指引与灵魂成长方向'],
+    note: '3 张 · 适用于观测自身情况，或查看某一事件对人的影响。解牌顺序：身→心→灵，互相印证；正式抽牌前也可另抽一张「切牌」摆在中央，作为整体基调的指示牌' },
+  { id: 'holy-triangle', name: '圣三角牌阵', system: 'tarot', layoutCells: [[2, null, 3], [null, 1, null]],
+    positions: ['过去·问题过去的状况或形成的原因', '现在·问题现在的状况', '未来·问题未来的发展方向、结果的最终预测'],
+    note: '3 张 · 解牌时把三张牌连成一条时间线，看因果如何流转到最终预测' },
+  { id: 'timeflow', name: '时间之流', system: 'tarot', layoutKind: 'line',
+    positions: ['过去·何种事件或经验导致了现在', '现在·正在发生的状况', '未来·将走向何方'],
+    note: '3 张 · 适用于事件有开端但还没有结束、想看后续如何发展' },
+  { id: 'gain-loss', name: '得与失', system: 'tarot', layoutKind: 'two',
+    positions: ['我将失去什么', '我将得到什么'],
+    note: '2 张 · 同类型 2 张牌阵还可以测——一天：1 事件（今天可能发生的事）/ 2 影响（对你身心的影响）；一周：1 本周对你的潜在影响 / 2 本周的主要情势' },
+  { id: 'yes-no', name: 'Yes or No', system: 'tarot',
+    positions: ['答案'],
+    note: '1 张 · 忽略正逆位，以牌面判定——圣杯九：明确的「是」；任意 ACE：需调整动作或等待时机，目前不宜下结论；大阿卡那「是」：愚人、魔术师、女皇、皇帝、战车、正义、星星、太阳、世界；「否」：力量、塔、节制、隐士、倒吊人、死神、恶魔；其余（女祭司、命运之轮、恋人、教皇、月亮、审判）凭直觉判断' },
   /* 雷诺曼牌阵（线性 / 矩形 / 选择 / 十字 / H 型 / 九宫格，线性牌阵解读法）
      layoutKind: line=单行；three=每行 3 张；cross=十字布局；layoutCells=自定义摆放（null 为空格） */
   { id: 'len-line3', name: '线性牌阵 · 3 张', system: 'lenormand', layoutKind: 'line',
@@ -170,11 +180,7 @@ export const SPREADS = [
     note: '5 张 · 适用于追求明确答案的情况' },
   { id: 'len-h', name: 'H 型牌阵', system: 'lenormand', layoutCells: [[1, null, 5], [2, 4, 6], [3, null, 7]],
     positions: ['自己情况·1', '自己情况·2', '自己情况·3', '关联（纽带）', '对方情况·5', '对方情况·6', '对方情况·7'],
-    note: '7 张 · 适用于爱情方面、两人关系，也可扩展至两个事物之间的联系。解读时先纵后横，「自己情况」「对方情况」用线性牌阵的解读方法' },
-  { id: 'timeflow', name: '时间之流', system: 'tarot', positions: ['过去', '现在', '未来'] },
-  { id: 'fork', name: '选择岔路口', system: 'tarot', positions: ['现状', 'A 路的走向', 'B 路的走向', '你更想要的', '建议'] },
-  { id: 'threeking', name: '身心灵三维', system: 'tarot', positions: ['身体·现实', '心·情感', '灵·方向'] },
-  { id: 'bigdipper', name: '北斗七星', system: 'tarot', positions: ['天枢·起因', '天璇·你的想法', '天玑·对方想法', '天权·阻碍', '玉衡·转机', '开阳·行动', '摇光·结局'] }
+    note: '7 张 · 适用于爱情方面、两人关系，也可扩展至两个事物之间的联系。解读时先纵后横，「自己情况」「对方情况」用线性牌阵的解读方法' }
 ];
 
 /* ---------- 23 种洗牌动画（复用 8 个动作原语，各自不同节奏与色调） ---------- */
