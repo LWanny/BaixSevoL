@@ -134,7 +134,7 @@ export const HOUSES = [
   ['第十一宫', '朋友 / 圈子 / 期望'], ['第十二宫', '隐藏 / 潜意识 / 放下']
 ].map((h, i) => ({ id: `house-${i}`, system: 'astro', kind: 'house', name: h[0], meaning: h[1] }));
 
-/* ---------- 23 种牌阵 ---------- */
+/* ---------- 26 种牌阵 ---------- */
 export const SPREADS = [
   /* 塔罗牌阵（Sara 基础牌阵系列：身心灵 / 圣三角 / 时间之流 / 得与失 / Yes or No） */
   { id: 'body-mind-spirit', name: '身心灵牌阵', system: 'tarot', layoutCells: [[null, 3, null], [1, null, 2]],
@@ -144,8 +144,8 @@ export const SPREADS = [
     positions: ['过去·问题过去的状况或形成的原因', '现在·问题现在的状况', '未来·问题未来的发展方向、结果的最终预测'],
     note: '3 张 · 解牌时把三张牌连成一条时间线，看因果如何流转到最终预测' },
   { id: 'timeflow', name: '时间之流', system: 'tarot', layoutKind: 'line',
-    positions: ['过去·何种事件或经验导致了现在', '现在·正在发生的状况', '未来·将走向何方'],
-    note: '3 张 · 适用于事件有开端但还没有结束、想看后续如何发展' },
+    positions: ['过去·造成现状的过往因素', '现在·当下的实际状况', '未来·依此方向将到达的结果'],
+    note: '3 张 · 经典时间序列，理解一件事的演变脉络；适用于事件有开端但还没有结束、想看后续如何发展' },
   { id: 'gain-loss', name: '得与失', system: 'tarot', layoutKind: 'two',
     positions: ['我将失去什么', '我将得到什么'],
     note: '2 张 · 同类型 2 张牌阵还可以测——一天：1 事件（今天可能发生的事）/ 2 影响（对你身心的影响）；一周：1 本周对你的潜在影响 / 2 本周的主要情势' },
@@ -179,6 +179,15 @@ export const SPREADS = [
   { id: 'venus-8', name: '维纳斯牌阵', system: 'tarot', layoutCells: [[1, null, 2], [3, null, 4], [7, null, 8], [null, 5, 6]],
     positions: ['自己的想法', '对方的想法', '关系对自己的影响', '关系对对方的影响', '可能遇到的障碍', '目前趋势下的结果', '未来自己的心情', '未来对方的心情'],
     note: '8 张 · 适合恋爱、婚姻、复杂关系走向。抽牌前先固定位置，不要解到一半再更换定义；结果是趋势，不替任何人决定' },
+  { id: 'mbs-3', name: '三张牌 · 身心灵', system: 'tarot', layoutKind: 'line',
+    positions: ['身体·肉身层面的状况与需求', '心智·理性与情绪层面', '灵性·灵魂层面的功课与指引'],
+    note: '3 张 · 查看自身整体状态，适合内省' },
+  { id: 'two-choices', name: '二选一 · 发展与结果', system: 'tarot', layoutCells: [[3, null, 5], [2, null, 4], [null, 1, null]],
+    positions: ['现状·你目前的整体处境', 'A·发展·选择A将带来的发展', 'A·结果·选择A的最终结局', 'B·发展·选择B将带来的发展', 'B·结果·选择B的最终结局'],
+    note: '5 张 · 面临二选一难题时使用。第一张代表当下处境，中后分别代表两个选项的发展与最终结局' },
+  { id: 'chakras-7', name: '脉轮 · 七张', system: 'tarot', layoutCells: [[7], [6], [5], [4], [3], [2], [1]],
+    positions: ['海底轮·安全感、根基、生存', '脐轮·情感、性、创造力', '太阳轮·意志力、自我认同', '心轮·爱、关系、慈悲', '喉轮·沟通、表达、真实', '眉心轮·直觉、洞察、智慧', '顶轮·灵性连结、超越'],
+    note: '7 张 · 对应人体七脉轮，看每个能量中心当下的状态。由下而上依次排列，从海底轮读到顶轮' },
   /* 雷诺曼牌阵（线性 / 矩形 / 选择 / 十字 / H 型 / 九宫格，线性牌阵解读法）
      layoutKind: line=单行；three=每行 3 张；cross=十字布局；layoutCells=自定义摆放（null 为空格） */
   { id: 'len-line3', name: '线性牌阵 · 3 张', system: 'lenormand', layoutKind: 'line',
