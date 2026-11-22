@@ -6,7 +6,7 @@ import { chance, rndInt, pick, uid } from './util.js';
 import { state } from './state.js';
 import { drawInspiration } from './inspiration.js';
 import { randomPhrase, cutPhrase } from './pinyin.js';
-import { cfg, moodLenRange } from './pinyinConfig.js';
+import { cfg } from './pinyinConfig.js';
 
 /* ---------- 表情池 ---------- */
 export const EMOJI = ['😢', '🥺', '😆', '😘', '💕', '😌', '😻', '😴', '😤', '🤣', '😅', '😊', '💪', '✨', '🍀', '🌙', '☀️', '🐱', '🐶'];
@@ -162,25 +162,23 @@ function pushPinyinSteps(steps, py, firstDelay, extra = {}) {
 }
 
 /** 主动发送的拼音受「主动联系」配置约束：
-    按当前心情的 proactiveLen 字数区间重生成（≈字数），最多重试 4 次取最接近的一版，超上限硬裁；
+    按 proactiveLen 字数区间重生成（≈字数），最多重试 4 次取最接近的一版，超上限硬裁；
     forceRandom 时走极端字数（极短或极长），忽略用户区间 */
 function fitProactive() {
   const C = cfg();
-  let py = randomPhrase();
   if (C.forceRandom) {
     const range = chance(30) ? [1, 3] : [15, 28];
-    py = randomPhrase({ mood: py.state, syllRange: range });
+    let py = randomPhrase({ syllRange: range });
     if (py.text.length > range[1]) py = cutPhrase(py, range[1]);
     return py;
   }
-  const range = moodLenRange(py.state);
+  const range = C.proactiveLen || [4, 10];
   const dist = (x) => (x.text.length < range[0] ? range[0] - x.text.length : 0)
     + (x.text.length > range[1] ? x.text.length - range[1] : 0);
-  let best = py;
-  let bestD = dist(py);
-  const mood = py.state;
+  let best = randomPhrase({ syllRange: range });
+  let bestD = dist(best);
   for (let i = 0; i < 4 && bestD > 0; i++) {
-    const again = randomPhrase({ mood, syllRange: range });
+    const again = randomPhrase({ syllRange: range });
     const d = dist(again);
     if (d === 0) return again;
     if (d < bestD) { best = again; bestD = d; }

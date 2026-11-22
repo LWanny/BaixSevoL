@@ -8,7 +8,7 @@ import { state, saveRole, DEFAULT_PARAMS, roleStatusMeta } from '../state.js';
 import { saveMedia, mediaURL } from '../media.js';
 import { toast, confirmBox } from '../ui.js';
 import { go } from '../router.js';
-import { cfg, saveCfg, MOOD_KEYS, randRange, typingDurMs, queuePending } from '../pinyinConfig.js';
+import { cfg, saveCfg, randRange, typingDurMs, queuePending } from '../pinyinConfig.js';
 import { PINYIN_POOL_SIZE, PINYIN_WORD_SIZE, WORD_STATS, SLOT_NAMES,
   builtinTemplates, templateText, randomPhrase, probeText } from '../pinyin.js';
 
@@ -106,8 +106,7 @@ export default async function pageRole(view) {
 /* ================= 拼音打字 · 全局配置面板 =================
    数据在 pinyinConfig.js（localStorage），每次改动 saveCfg() 即刻落盘；
    pinyin.js / engine.js / scheduler.js 每次生成/打字都会重新 cfg() 读取 → 改完立即生效。
-   优先级：全部随机(forceRandom) > 心情(Mood) > 用户各项概率与区间 */
-const MOOD_NAMES = { lazy: '敷衍', normal: '平常', chatty: '话唠', warm: '热情', sad: '伤心' };
+   优先级：全部随机(forceRandom) > 用户各项概率与区间 */
 
 function cfgRow(name, desc, ctl) {
   return el('div', { class: 'set-row' }, [
@@ -206,6 +205,8 @@ function buildPinyinCfg() {
     () => C().singleRatio, (v) => saveCfg({ singleRatio: v }), 0, 100));
   p1.appendChild(cfgPair('打错字 + 退格', '每个字母打错并按退格删除的概率区间',
     () => C().typoRate, (v) => saveCfg({ typoRate: v }), 0, 100));
+  p1.appendChild(cfgPair('句子音节数', '一句话的音节数区间（每个汉字一个音节），生成时在区间里取点',
+    () => C().syllableRange, (v) => saveCfg({ syllableRange: v }), 1, 16));
   p1.appendChild(cfgRow('打完一句的时长',
     '从开打到落卡的总时间：区间取点随机；长句分阶段时按段平摊；预览最多演示 9 秒', []));
   p1.appendChild(cfgSlider('最短（秒）', () => C().typingDuration[0],
@@ -227,17 +228,7 @@ function buildPinyinCfg() {
   p2.appendChild(cfgPair('句首连接词', '句首加「那个 / 然后 / 不过」的概率区间',
     () => C().headRate, (v) => saveCfg({ headRate: v }), 0, 100));
 
-  /* ---- 面板 3 · 心情设定（权重区间 + 音节限制，心情优先于底层概率） ---- */
-  const p3 = el('div');
-  MOOD_KEYS.forEach((k) => {
-    p3.appendChild(el('div', { class: 'cfg-mood-h', text: MOOD_NAMES[k] }));
-    p3.appendChild(cfgPair('抽中权重概率区间 %', '每次抽心情时在区间里取点再加权',
-      () => C().moodWeights[k], (v) => saveCfg({ moodWeights: { ...C().moodWeights, [k]: v } }), 0, 100));
-    p3.appendChild(cfgPair('音节数（最短 ~ 最长）', null,
-      () => C().moodSyll[k], (v) => saveCfg({ moodSyll: { ...C().moodSyll, [k]: v } }), 1, 16));
-  });
-
-  /* ---- 面板 4 · 主动联系（独立于普通回复的配置） ---- */
+  /* ---- 面板 3 · 主动联系（独立于普通回复的配置） ---- */
   const p4 = el('div');
   p4.appendChild(cfgToggle('主动打字', '关闭后 TA 主动联系时不再敲拼音（仍会发普通字卡消息）',
     () => C().enableProactive, (v) => saveCfg({ enableProactive: !!v })));
@@ -246,16 +237,13 @@ function buildPinyinCfg() {
     (v) => saveCfg({ proactiveInterval: [v, C().proactiveInterval[1]] }), 1, 120));
   p4.appendChild(cfgSlider('最长（分钟）', () => C().proactiveInterval[1],
     (v) => saveCfg({ proactiveInterval: [C().proactiveInterval[0], v] }), 1, 180));
-  MOOD_KEYS.forEach((k) => {
-    p4.appendChild(cfgPair(`${MOOD_NAMES[k]} · 主动一句话字数`, null,
-      () => C().proactiveLen[k], (v) => saveCfg({ proactiveLen: { ...C().proactiveLen, [k]: v } }), 1, 40));
-  });
+  p4.appendChild(cfgPair('主动一句话字数', '主动发送的句子按此字数区间重生成，最多重试几次取最接近的一版',
+    () => C().proactiveLen, (v) => saveCfg({ proactiveLen: v }), 1, 40));
 
   const panels = el('div', { class: 'cfg-panels' }, [
     fold('输入习惯', '专属字库 · 抽词/抽单字概率 · 打错字与退格', p1, true),
     fold('句式与接话', '模板与预设句型 · 锚点命中 · 句首句尾修饰', p2),
-    fold('心情设定', '五种心情的权重概率区间与音节数限制', p3),
-    fold('主动联系', '主动打字开关 · 秒~分钟发送间隔 · 心情字数', p4)
+    fold('主动联系', '主动打字开关 · 秒~分钟发送间隔 · 一句话字数', p4)
   ]);
   function paintOff() {
     const noMaster = !C().enabled;
@@ -272,7 +260,7 @@ function buildPinyinCfg() {
 }
 
 /* ---- 预览：模拟 TA 的拼音打字（逐字母 + 按当前 typoRate 敲错退格）→ 落卡 ----
-   全部读取当前配置（心情/区间/forceRandom），改完设置点一下即可看效果；
+   全部读取当前配置（区间/forceRandom），改完设置点一下即可看效果；
    打字气泡与落卡样式直接复用聊天页的 typing.hypy / py-card，所见即所得。 */
 function buildPreview() {
   /* 两种模式：随机句预览（配置驱动） / 感同身受·试打（输入一句话，模拟对方逐字母打出来
@@ -345,7 +333,6 @@ function buildPreview() {
   const playRandom = () => {
     const py = randomPhrase();
     stage.appendChild(el('div', { class: 'cv-meta' }, [
-      el('span', { class: 'pw-tag pos', text: '心情 · ' + (py.stateLabel || '平常') }),
       py.madeUp ? el('span', { class: 'pw-tag frag', text: '含生造词' }) : null
     ]));
     const line = (py.segs || []).flatMap((sg, i) => [

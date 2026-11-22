@@ -4,14 +4,11 @@
      pinyin.js / engine.js / scheduler.js 下一次调用即拿到新值，改完立即生效
    - 优先级（从高到低）：
      1) forceRandom 全局全部随机 —— 忽略下面所有用户概率/区间，走内置极端逻辑
-     2) 心情状态 —— 覆盖 / 限制底层的字数设定
-     3) 用户设定的各项概率与区间 */
+     2) 用户设定的各项概率与区间 */
 
 import { rndInt } from './util.js';
 
 export const PCFG_KEY = 'zkcx.pinyin.cfg.v1';
-
-export const MOOD_KEYS = ['lazy', 'normal', 'chatty', 'warm', 'sad'];
 
 export const DEFAULT_PCFG = {
   /* ---- 0 总开关 ---- */
@@ -21,6 +18,7 @@ export const DEFAULT_PCFG = {
   wordRatio: [60, 80],        // 抽完整词库拼音的概率区间 %（与单字按比例混合）
   singleRatio: [20, 40],      // 抽单字拼音的概率区间 %
   typoRate: [0, 10],          // 打错字并退格的概率区间 %
+  syllableRange: [2, 8],      // 一句话的音节数 [最短, 最长]
 
   /* ---- 2 句式模板 ---- */
   useTemplate: true,          // 是否启用句式模板
@@ -31,21 +29,11 @@ export const DEFAULT_PCFG = {
   tailRate: [65, 95],         // 追加语气词的概率区间 %
   headRate: [50, 70],         // 句首加连接词（那个/然后/不过）的概率区间 %
 
-  /* ---- 4 心情状态：权重区间 + 音节数限制（心情优先于基础概率） ---- */
-  moodWeights: {              // 每种心情的抽中权重区间 %（每次抽心情时取点）
-    lazy: [12, 24], normal: [22, 38], chatty: [12, 24], warm: [12, 24], sad: [10, 22]
-  },
-  moodSyll: {                // 每种心情的音节数 [最短, 最长]
-    lazy: [1, 3], normal: [2, 6], chatty: [8, 14], warm: [3, 7], sad: [2, 5]
-  },
-
   /* ---- 5 主动拼音打字（独立配置） ---- */
   enableProactive: true,     // 主动打字开关（关闭后主动消息不再敲拼音）
   proactiveInterval: [5, 30],// 发送间隔 [最短秒, 最长分钟]
   typingDuration: [3, 1],    // 打完一句的总时长 [最短秒, 最长分钟]（从开打到落卡）
-  proactiveLen: {            // 不同心情下主动一句话的 [最短, 最长] 字数
-    lazy: [2, 4], normal: [4, 8], chatty: [8, 14], warm: [5, 10], sad: [3, 6]
-  },
+  proactiveLen: [4, 10],     // 主动一句话的 [最短, 最长] 字数
 
   /* ---- 句式模板 · 用户自定义预设句型（词性槽位数组，如 ['pn','vb','nn','pt']） ---- */
   customTemplates: [],
@@ -55,8 +43,8 @@ export const DEFAULT_PCFG = {
 };
 
 /* 区间型字段：读档时统一归一成 [lo, hi]（老版本存过单值的自动包成 [v,v]） */
-const RANGE_KEYS = ['wordRatio', 'singleRatio', 'typoRate', 'templateRate',
-  'anchorTailRate', 'anchorRandomRate', 'tailRate', 'headRate', 'proactiveInterval', 'typingDuration'];
+const RANGE_KEYS = ['wordRatio', 'singleRatio', 'typoRate', 'syllableRange', 'templateRate',
+  'anchorTailRate', 'anchorRandomRate', 'tailRate', 'headRate', 'proactiveInterval', 'typingDuration', 'proactiveLen'];
 
 function normRange(v, dflt) {
   if (typeof v === 'number' && Number.isFinite(v)) return [v, v];
@@ -69,9 +57,6 @@ function normRange(v, dflt) {
 
 function normalize(c) {
   for (const k of RANGE_KEYS) c[k] = normRange(c[k], DEFAULT_PCFG[k]);
-  const mw = {};
-  for (const k of MOOD_KEYS) mw[k] = normRange(c.moodWeights && c.moodWeights[k], DEFAULT_PCFG.moodWeights[k]);
-  c.moodWeights = mw;
   if (!Array.isArray(c.customTemplates)) c.customTemplates = [];
   c.customTemplates = c.customTemplates.filter((t) => Array.isArray(t) && t.length >= 2);
   return c;
@@ -163,35 +148,10 @@ export function typingDurMs() {
   return [lo, hi];
 }
 
-/** 抽当前心情：forceRandom 时忽略权重、等概率；否则把每种心情的权重区间取点后加权 */
-export function pickMood() {
-  const c = cfg();
-  if (c.forceRandom) return MOOD_KEYS[rndInt(0, MOOD_KEYS.length - 1)];
-  const w = MOOD_KEYS.map((k) => Math.max(0, randRange(c.moodWeights && c.moodWeights[k], 0)));
-  const total = w.reduce((s, x) => s + x, 0);
-  if (total <= 0) return 'normal';
-  let r = Math.random() * total;
-  for (let i = 0; i < MOOD_KEYS.length; i++) {
-    r -= w[i];
-    if (r <= 0) return MOOD_KEYS[i];
-  }
-  return 'normal';
-}
-
-/** 心情的音节区间 [min, max]（forceRandom 时由调用方走极端区间，不走这里） */
-export function moodSyllRange(mood) {
-  const c = cfg();
-  const r = c.moodSyll && c.moodSyll[mood];
+/** 抽一个音节数区间 [min, max]（opt.syllRange 优先；forceRandom 极端区间由调用方处理） */
+export function syllRangeOf() {
+  const r = cfg().syllableRange;
   const lo = Math.max(1, Number(r && r[0]) || 2);
-  const hi = Math.max(lo, Number(r && r[1]) || 6);
-  return [lo, hi];
-}
-
-/** 心情的主动一句话字数区间 [min, max] */
-export function moodLenRange(mood) {
-  const c = cfg();
-  const r = c.proactiveLen && c.proactiveLen[mood];
-  const lo = Math.max(1, Number(r && r[0]) || 4);
   const hi = Math.max(lo, Number(r && r[1]) || 8);
   return [lo, hi];
 }

@@ -7,7 +7,7 @@
 
 import { chance, rndInt, pick } from './util.js';
 import { WORD_POOL } from './data/pinyinwords.js';
-import { cfg, pickMood, moodSyllRange, randRange } from './pinyinConfig.js';
+import { cfg, syllRangeOf, randRange } from './pinyinConfig.js';
 
 /* 常用字 + 带声调拼音（多音字只保留最常见读音） */
 const RAW = `我 wǒ
@@ -508,9 +508,6 @@ const CONNECTORS = [
   { py: 'suo yi', text: '所以' }, { py: 'bu guo', text: '不过' }
 ];
 
-/* ---------- 心情标签（权重与音节上限都在 pinyinConfig.js 里配置） ---------- */
-const MOOD_LABEL = { lazy: '敷衍', normal: '平常', chatty: '话唠', warm: '热情', sad: '伤心' };
-
 /** 从多字词反推单字拼音：取出现最多的音节；并列则不猜 */
 function inferCharPy(ch) {
   const m = CHAR_BY_WORD.get(ch);
@@ -606,7 +603,7 @@ export function partsOf(segs) {
   }));
 }
 
-/** 按字数把一句话硬裁到 ≤ maxChars（主动拼音的心情字数限制兜底），并重建 parts */
+/** 按字数把一句话硬裁到 ≤ maxChars（主动拼音的字数限制兜底），并重建 parts */
 export function cutPhrase(py, maxChars) {
   const cap = Math.max(1, Math.round(maxChars) || 1);
   const kept = [];
@@ -635,16 +632,14 @@ export function cutPhrase(py, maxChars) {
 }
 
 /** 随机拼一句
-    优先级：forceRandom（极端随机）> 心情状态（音节区间）> 用户配置的各项概率与区间。
-    opt.mood / opt.syllRange 供主动发送指定心情与字数区间（重生成时用）。
-    返回 { text, pinyin, pinyinTone, segs, parts, state, stateLabel, madeUp } */
+    优先级：forceRandom（极端随机）> 用户配置的各项概率与区间。
+    opt.syllRange 供主动发送指定字数区间（重生成时用），缺省用配置的句子音节数区间。
+    返回 { text, pinyin, pinyinTone, segs, parts, madeUp } */
 export function randomPhrase(opt = {}) {
   const C = cfg();
   const extreme = !!C.forceRandom;                     // 1 级优先 · 全局全部随机
-  const stKey = opt.mood || pickMood();                // 2 级优先 · 心情状态
-  const st = { key: stKey, label: MOOD_LABEL[stKey] || stKey };
-  let [sylMin, sylMax] = opt.syllRange || moodSyllRange(stKey);   // 3 级 · 心情音节区间
-  if (extreme && !opt.syllRange) [sylMin, sylMax] = [1, 16];      // forceRandom 忽略心情限制 → 极端字数
+  let [sylMin, sylMax] = opt.syllRange || syllRangeOf();   // 2 级 · 音节数区间
+  if (extreme && !opt.syllRange) [sylMin, sylMax] = [1, 16];      // forceRandom 忽略区间限制 → 极端字数
 
   const pieces = [];
   let tpl = null;
@@ -653,7 +648,7 @@ export function randomPhrase(opt = {}) {
   const extremeShort = extreme && chance(30);
   // 模板使用概率是区间：每次生成取点再掷；forceRandom 忽略开关与用户区间
   const useTpl = extreme ? (!extremeShort && chance(50))
-    : (st.key !== 'chatty' && C.useTemplate && chance(randRange(C.templateRate, 60)));
+    : (C.useTemplate && chance(randRange(C.templateRate, 60)));
   if (useTpl) {
     /* 句式模板：按 [代词]+[动词]+[名词]+[语气] 之类预设句型填槽（内置 + 用户自定义） */
     tpl = pick(allTemplates());
@@ -669,7 +664,7 @@ export function randomPhrase(opt = {}) {
     const pWordPct = (wPct + sPct) > 0 ? (wPct / (wPct + sPct)) * 100 : 50;
     const n = extreme
       ? (extremeShort ? rndInt(1, 2) : rndInt(10, 16))     // 极端字数：极短或极长
-      : rndInt(sylMin, sylMax);                          // 心情音节区间（心情覆盖底层）
+      : rndInt(sylMin, sylMax);                          // 音节数区间取点
     for (let k = 0; k < n; k++) {
       if (!extremeShort && chance(pWordPct)) {
         const w = pick(WORD_POOL);
@@ -711,7 +706,7 @@ export function randomPhrase(opt = {}) {
     }
   }
 
-  /* 心情 / 区间 · 音节上限裁剪：句尾语气词永远保留，并尽量凑到下限
+  /* 区间 · 音节上限裁剪：句尾语气词永远保留，并尽量凑到下限
      （forceRandom 无 opt 区间时不裁 —— 极端字数优先级最高） */
   if (sylls.length > sylMax && (!extreme || opt.syllRange)) {
     /* 1) 句尾语气词先摘出来：主体裁完再拼回去，保证 ba/ma 这类拼音一定显示出来 */
@@ -755,7 +750,7 @@ export function randomPhrase(opt = {}) {
 
   /* 断句与节奏：长句按小句补标点（逗号为主、偶尔句号），供 engine 分阶段逐句发送 */
   if (sylls.length >= 6 && segs.length >= 3) {
-    const clauseProb = extreme ? 60 : st.key === 'chatty' ? 70 : st.key === 'sad' ? 40 : 48;
+    const clauseProb = extreme ? 60 : 48;
     let acc = 0;
     let sylSeen = 0;
     const totalSyl = sylls.length;
@@ -777,8 +772,6 @@ export function randomPhrase(opt = {}) {
     pinyinTone: segs.map((s) => s.pt).join(' '),
     segs,
     parts: partsOf(segs),
-    state: st.key,
-    stateLabel: st.label,
     madeUp: segs.some((s) => !s.m)   // 词库接不上的「生造词」（仅作标记，不再补发提示）
   };
 }
