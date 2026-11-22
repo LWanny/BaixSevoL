@@ -36,7 +36,7 @@
   --bubble-ta:#ffffff;
   --bubble-ta-txt:#16181c;
   --bubble-radius:15px;
-  --avatar-radius:9px;
+  --avatar-radius:50%;
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -369,7 +369,7 @@ input.set-range::-moz-range-thumb{width:20px;height:20px;border:none;border-radi
 .dot-badge{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ok)}
 
 /* 头像 */
-.avatar{width:42px;height:42px;flex:0 0 auto;border-radius:50%;overflow:hidden;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff}
+.avatar{width:42px;height:42px;flex:0 0 auto;border-radius:var(--avatar-radius,50%);overflow:hidden;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff}
 .avatar img{width:100%;height:100%;object-fit:cover}
 .avatar.sm{width:32px;height:32px;font-size:12px}
 .avatar.lg{width:76px;height:76px;font-size:24px}

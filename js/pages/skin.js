@@ -80,7 +80,7 @@ function build(view) {
         globalBgColor: '#ffffff', globalBgImageId: null, chatWallpaperId: null,
         bubbleMe: 'linear-gradient(135deg,#1c1e22,#3c4048)', bubbleMeTxt: '#ffffff',
         bubbleTa: '#ffffff', bubbleTaTxt: '#16181c', bubbleRadius: 15,
-        avatarShape: 'rounded', bubbleCss: '', avatarMeId: keepMe,
+        avatarShape: 'circle', bubbleCss: '', avatarMeId: keepMe,
         globalBgX: 50, globalBgY: 50, globalBgZoom: 100, globalBgImgOp: 100,
         pageBgs: {},
         chatWallX: 50, chatWallY: 50, chatWallZoom: 100

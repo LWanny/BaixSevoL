@@ -225,7 +225,7 @@ export const DEFAULT_SKIN = {
   bubbleTa: '#ffffff',
   bubbleTaTxt: '#16181c',
   bubbleRadius: 15,
-  avatarShape: 'rounded',        // 聊天头像形状：circle 圆形 / rounded 圆角方形
+  avatarShape: 'circle',         // 聊天头像形状：circle 圆形 / rounded 圆角方形（顶栏与聊天流统一）
   bubbleCss: '',                 // 自定义气泡 CSS（声明或选择器两种写法）
   /* 图片位置与缩放：50 = 居中，100 = 原始铺满（仅对上传的图生效） */
   globalBgX: 50, globalBgY: 50, globalBgZoom: 100, globalBgImgOp: 100,
@@ -342,6 +342,14 @@ export async function loadState() {
     });
   }
   state.widgets = JSON.parse(JSON.stringify(DEFAULT_WIDGETS));
+  /* 头像形状统一改造：旧默认 'rounded' 一次性迁到 'circle'（之后仍可在聊天装扮里改形状） */
+  if (!(await kvGet('skinShapeMigrated', false))) {
+    await kvSet('skinShapeMigrated', true);
+    if (state.skin.avatarShape === 'rounded') {
+      state.skin.avatarShape = 'circle';
+      await kvSet('skin', state.skin);
+    }
+  }
   const saved = await kvGet('widgets', {});
   for (const k of Object.keys(DEFAULT_WIDGETS)) {
     if (Array.isArray(saved[k]) && saved[k].length) {

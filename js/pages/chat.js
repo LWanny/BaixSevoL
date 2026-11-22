@@ -207,7 +207,7 @@ export default async function pageChat(view) {
   ]);
   let tapTimer = null;
   avatar.addEventListener('click', () => {
-    if (tapTimer) { clearTimeout(tapTimer); tapTimer = null; patMe(); return; }
+    if (tapTimer) { clearTimeout(tapTimer); tapTimer = null; patTa(); return; }
     tapTimer = setTimeout(() => { tapTimer = null; openProfile(); }, 260);
   });
 
@@ -284,6 +284,12 @@ export default async function pageChat(view) {
     const src = mine ? myAvSrc : avSrc;
     if (src) av.appendChild(el('img', { src }));
     else av.appendChild(document.createTextNode(mine ? (state.role.chatNicknameMe || '我').slice(0, 1) : (state.role.name || 'TA').slice(0, 1)));
+    /* 双击头像拍一拍：TA 头像 → 拍 TA，我的头像 → 拍自己 */
+    let tapTimer = null;
+    av.addEventListener('click', () => {
+      if (tapTimer) { clearTimeout(tapTimer); tapTimer = null; (mine ? patMe : patTa)(); return; }
+      tapTimer = setTimeout(() => { tapTimer = null; }, 260);
+    });
     return av;
   }
 
@@ -1496,7 +1502,7 @@ export default async function pageChat(view) {
     await sched.addMessage({ role: 'sys', type: 'sys', text: '你拍了拍 TA' });
   }
   async function patMe() {
-    await sched.addMessage({ role: 'sys', type: 'sys', text: '你拍了拍 TA' });
+    await sched.addMessage({ role: 'sys', type: 'sys', text: '你拍了拍自己' });
   }
 
   /* ---------------- 语音 ----------------
