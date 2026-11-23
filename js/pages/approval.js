@@ -51,8 +51,19 @@ const TA_BUY_OK = ['行，批准了，买吧', '嗯，这个可以买', '好呀�
 const TA_BUY_NO = ['这个先不买啦', '再想想吧，驳回～', '最近有点超支，先缓缓', '不许买，下次再说'];
 const TA_VOTE_MSG = ['我选好了，你猜～', '纠结了一下，我投了一票', '嗯，我投了一个，投完你就知道'];
 
-/** 新记录排 TA 计划：85% 会处理，时间取 10 分钟 ~ 3 天内的随机点 */
+/** 新记录排 TA 计划：
+    自定义窗口（taMin/taMax 分钟，发起时设置 → 100% 会处理）→ 在窗口内随机时间；
+    未设置 → 85% 会处理，时间取 10 分钟 ~ 3 天内的随机点 */
 function scheduleTaPlan(row) {
+  const lo = Math.round(Number(row.taMin) || 0);
+  const hi = Math.round(Number(row.taMax) || 0);
+  if (lo > 0 || hi > 0) {
+    const a = Math.max(1, Math.min(lo, hi || lo));
+    const b = Math.max(a, Math.max(lo, hi));
+    row.taWillDo = true;
+    row.taPlanAt = Date.now() + a * 60e3 + Math.random() * (b - a) * 60e3;
+    return;
+  }
   row.taWillDo = Math.random() < TA_RATE;
   row.taPlanAt = row.taWillDo ? Date.now() + TA_WINDOW_MIN + Math.random() * (TA_WINDOW_MAX - TA_WINDOW_MIN) : 0;
 }
@@ -257,6 +268,10 @@ function openBuyForm(rec) {
   };
   renderImg();
 
+  /* TA 审批时间（可选）：最快 / 最晚几分钟处理；留空默认 3 天内随机 */
+  const taMinIn = el('input', { class: 'input', type: 'number', inputmode: 'numeric', min: 1, placeholder: '最快（分钟）', value: rec?.taMin || '' });
+  const taMaxIn = el('input', { class: 'input', type: 'number', inputmode: 'numeric', min: 1, placeholder: '最晚（分钟）', value: rec?.taMax || '' });
+
   /* 从商城挑商品（选填） */
   const pickBtn = el('button', { class: 'btn sm', type: 'button' }, ['从商城挑商品']);
   pickBtn.onclick = async () => {
@@ -279,7 +294,11 @@ function openBuyForm(rec) {
       el('div', { class: 'field' }, [el('label', { text: '价格（人民币）' }), price]),
       el('div', { class: 'field' }, [el('label', { text: '为什么想买' }), why]),
       el('div', { class: 'field' }, [el('label', { text: '有替代品吗' }), alt]),
-      el('div', { class: 'field' }, [el('label', { text: '图片（可选）' }), imgBox])
+      el('div', { class: 'field' }, [el('label', { text: '图片（可选）' }), imgBox]),
+      el('div', { class: 'field' }, [
+        el('label', { text: 'TA 审批时间（可选，留空默认 3 天内随机）' }),
+        el('div', { class: 'row', style: { gap: '8px' } }, [taMinIn, taMaxIn])
+      ])
     ]),
     actions: [{ label: '提交', icon: 'IC-MIO-021', onSelect: async () => {
       if (!title.value.trim()) { toast('请填写想买什么'); return; }
@@ -288,11 +307,16 @@ function openBuyForm(rec) {
         id: rec?.id || uid(), type: 'buy', from: rec?.from || 'me', ts: rec?.ts || Date.now(),
         status: rec?.status || 'pending', decidedAt: rec?.decidedAt || 0, decider: rec?.decider || '', reply: rec?.reply || '',
         title: title.value.trim(), price: Number(price.value) || 0,
-        why: why.value.trim(), alternative: alt.value.trim(), imgId
+        why: why.value.trim(), alternative: alt.value.trim(), imgId,
+        taMin: Number(taMinIn.value) || 0, taMax: Number(taMaxIn.value) || 0
       };
-      if (!rec) scheduleTaPlan(row);   // 新记录：排 TA 的 3 天内随机审批计划
+      if (!rec) scheduleTaPlan(row);   // 新记录：排 TA 的审批计划（有窗口用窗口，无窗口默认 3 天内随机）
       await put('approvals', row);
-      s.close(); await load(); toast('已提交，TA 会在 3 天内找时间审批');
+      s.close(); await load();
+      const wLo = Math.round(Number(taMinIn.value) || 0), wHi = Math.round(Number(taMaxIn.value) || 0);
+      toast(wLo > 0 || wHi > 0
+        ? `已提交，TA 会在 ${Math.max(1, Math.min(wLo, wHi || wLo))}~${Math.max(wLo, wHi)} 分钟内审批`
+        : '已提交，TA 会在 3 天内找时间审批');
     } }]
   });
   setTimeout(() => title.focus(), 260);
@@ -345,6 +369,10 @@ function openVoteForm(rec) {
   };
   renderImg();
 
+  /* TA 投票时间（可选）：最快 / 最晚几分钟投票；留空默认 3 天内随机 */
+  const taMinIn = el('input', { class: 'input', type: 'number', inputmode: 'numeric', min: 1, placeholder: '最快（分钟）', value: rec?.taMin || '' });
+  const taMaxIn = el('input', { class: 'input', type: 'number', inputmode: 'numeric', min: 1, placeholder: '最晚（分钟）', value: rec?.taMax || '' });
+
   const s = sheet({
     title: rec ? '编辑投票' : '发起审批 · 纠结投票',
     node: el('div', {}, [
@@ -354,7 +382,11 @@ function openVoteForm(rec) {
         optBox,
         el('button', { class: 'btn sm', type: 'button', onclick: () => { options.push({ id: uid(), title: '', price: '' }); renderOpts(); } }, ['＋ 加一项'])
       ]),
-      el('div', { class: 'field' }, [el('label', { text: '图片（可选）' }), imgBox])
+      el('div', { class: 'field' }, [el('label', { text: '图片（可选）' }), imgBox]),
+      el('div', { class: 'field' }, [
+        el('label', { text: 'TA 投票时间（可选，留空默认 3 天内随机）' }),
+        el('div', { class: 'row', style: { gap: '8px' } }, [taMinIn, taMaxIn])
+      ])
     ]),
     actions: [{ label: '提交', icon: 'IC-MIO-021', onSelect: async () => {
       const opts = options.filter((o) => o.title);
@@ -364,11 +396,16 @@ function openVoteForm(rec) {
         ...(rec || {}),
         id: rec?.id || uid(), type: 'vote', from: rec?.from || 'me', ts: rec?.ts || Date.now(),
         status: rec?.status || 'pending', decidedAt: rec?.decidedAt || 0, decider: rec?.decider || '', reply: rec?.reply || '',
-        question: question.value.trim(), options: opts, myVote: rec?.myVote || null, taVote: rec?.taVote || null, imgId
+        question: question.value.trim(), options: opts, myVote: rec?.myVote || null, taVote: rec?.taVote || null, imgId,
+        taMin: Number(taMinIn.value) || 0, taMax: Number(taMaxIn.value) || 0
       };
-      if (!rec) scheduleTaPlan(row);   // 新记录：排 TA 的 3 天内随机投票计划
+      if (!rec) scheduleTaPlan(row);   // 新记录：排 TA 的投票计划（有窗口用窗口，无窗口默认 3 天内随机）
       await put('approvals', row);
-      s.close(); await load(); toast('已提交，双方各投一票，TA 也会投');
+      s.close(); await load();
+      const wLo = Math.round(Number(taMinIn.value) || 0), wHi = Math.round(Number(taMaxIn.value) || 0);
+      toast(wLo > 0 || wHi > 0
+        ? `已提交，TA 会在 ${Math.max(1, Math.min(wLo, wHi || wLo))}~${Math.max(wLo, wHi)} 分钟内投票`
+        : '已提交，双方各投一票，TA 也会投');
     } }]
   });
   setTimeout(() => question.focus(), 260);
