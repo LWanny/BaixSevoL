@@ -4,7 +4,7 @@
    记录存 approvals 表：
    { id, type:'buy'|'vote', from:'me'|'ta', ts, status:'pending'|'approved'|'rejected'|'voted',
      decidedAt, decider:'me'|'ta', reply,
-     title, price, why, alternative, imgId,
+     title, price, why, alternative, imgs:[mediaId...]（多图，imgId 为首图兼容字段）,
      question, options:[{id, title, price}], vote } */
 
 import { el, uid, fmtDay } from '../util.js';
@@ -245,26 +245,26 @@ function openBuyForm(rec) {
   why.value = rec?.why || '';
   const alt = el('textarea', { class: 'input', rows: 2, placeholder: '有替代品吗（可留空）' });
   alt.value = rec?.alternative || '';
-  let imgId = rec?.imgId || null;
+  /* 多图（可选）：imgs 存 mediaId 列表；旧记录的单张 imgId 自动并入 */
+  let imgs = (rec?.imgs?.length) ? [...rec.imgs] : (rec?.imgId ? [rec.imgId] : []);
   const imgBox = el('div', { class: 'ap-img-box' });
-  const renderImg = async () => {
+  const renderImg = () => {
     imgBox.innerHTML = '';
-    if (imgId) {
-      try {
-        const url = await mediaURL(imgId);
-        imgBox.appendChild(el('img', { src: url, class: 'ap-img' }));
-      } catch {}
-    }
-    const addBtn = el('button', { class: 'btn sm', type: 'button', onclick: async () => {
+    imgs.forEach((id, idx) => {
+      const wrap = el('div', { class: 'ap-img-item' });
+      const im = el('img', { class: 'ap-img' });
+      mediaURL(id).then((u) => { if (u) im.src = u; }).catch(() => {});
+      wrap.appendChild(im);
+      wrap.appendChild(el('button', { class: 'ap-img-del', type: 'button', title: '删除', onclick: () => { imgs.splice(idx, 1); renderImg(); } }, ['×']));
+      imgBox.appendChild(wrap);
+    });
+    imgBox.appendChild(el('button', { class: 'btn sm', type: 'button', onclick: async () => {
       const f = await openFile({ accept: 'image/*' });
       if (!f) return;
       const { blob } = await compressImage(f, 1024, 0.85);
-      imgId = await saveMedia(blob, { type: 'image', source: 'approval' });
+      imgs.push(await saveMedia(blob, { type: 'image', source: 'approval' }));
       renderImg();
-    } }, [imgId ? '换图' : '加图片']);
-    const delBtn = imgId ? el('button', { class: 'btn sm', type: 'button', onclick: () => { imgId = null; renderImg(); } }) : null;
-    imgBox.appendChild(addBtn);
-    if (delBtn) imgBox.appendChild(delBtn);
+    } }, [imgs.length ? '＋ 加图' : '加图片']));
   };
   renderImg();
 
@@ -307,7 +307,7 @@ function openBuyForm(rec) {
         id: rec?.id || uid(), type: 'buy', from: rec?.from || 'me', ts: rec?.ts || Date.now(),
         status: rec?.status || 'pending', decidedAt: rec?.decidedAt || 0, decider: rec?.decider || '', reply: rec?.reply || '',
         title: title.value.trim(), price: Number(price.value) || 0,
-        why: why.value.trim(), alternative: alt.value.trim(), imgId,
+        why: why.value.trim(), alternative: alt.value.trim(), imgs, imgId: imgs[0] || null,
         taMin: Number(taMinIn.value) || 0, taMax: Number(taMaxIn.value) || 0
       };
       if (!rec) scheduleTaPlan(row);   // 新记录：排 TA 的审批计划（有窗口用窗口，无窗口默认 3 天内随机）
@@ -335,37 +335,54 @@ function openVoteForm(rec) {
       const p = el('input', { class: 'input', type: 'number', inputmode: 'decimal', min: 0, step: '0.01', placeholder: '价格', value: opt.price || '' });
       t.oninput = () => opt.title = t.value.trim();
       p.oninput = () => opt.price = Number(p.value) || 0;
+      /* 选项配图：每个选项可带一张图 */
+      const thumb = opt.imgId ? el('img', { class: 'ap-opt-thumb' }) : null;
+      if (thumb) mediaURL(opt.imgId).then((u) => { if (u) thumb.src = u; }).catch(() => {});
+      const imgBtn = el('button', { class: 'btn sm', type: 'button', onclick: async () => {
+        const f = await openFile({ accept: 'image/*' });
+        if (!f) return;
+        const { blob } = await compressImage(f, 512, 0.85);
+        opt.imgId = await saveMedia(blob, { type: 'image', source: 'approval' });
+        renderOpts();
+      } }, [opt.imgId ? '换图' : '配图']);
+      const imgRow = el('div', { class: 'row', style: { gap: '6px', alignItems: 'center', marginTop: '6px' } }, [
+        imgBtn,
+        thumb,
+        opt.imgId ? el('button', { class: 'btn sm', type: 'button', title: '删除配图', onclick: () => { opt.imgId = null; renderOpts(); } }, ['×']) : null
+      ]);
       const row = el('div', { class: 'ap-vote-opt' }, [
         el('div', { class: 'row', style: { gap: '8px', alignItems: 'center' } }, [t, p,
           el('button', { class: 'btn sm', type: 'button', title: '删除', disabled: options.length <= 2, onclick: () => {
             options.splice(i, 1); renderOpts();
           } }, ['×'])
-        ])
+        ]),
+        imgRow
       ]);
       optBox.appendChild(row);
     });
   };
   renderOpts();
 
-  let imgId = rec?.imgId || null;
+  /* 多图（可选）：imgs 存 mediaId 列表；旧记录的单张 imgId 自动并入 */
+  let imgs = (rec?.imgs?.length) ? [...rec.imgs] : (rec?.imgId ? [rec.imgId] : []);
   const imgBox = el('div', { class: 'ap-img-box' });
-  const renderImg = async () => {
+  const renderImg = () => {
     imgBox.innerHTML = '';
-    if (imgId) {
-      try {
-        const url = await mediaURL(imgId);
-        imgBox.appendChild(el('img', { src: url, class: 'ap-img' }));
-      } catch {}
-    }
-    const addBtn = el('button', { class: 'btn sm', type: 'button', onclick: async () => {
+    imgs.forEach((id, idx) => {
+      const wrap = el('div', { class: 'ap-img-item' });
+      const im = el('img', { class: 'ap-img' });
+      mediaURL(id).then((u) => { if (u) im.src = u; }).catch(() => {});
+      wrap.appendChild(im);
+      wrap.appendChild(el('button', { class: 'ap-img-del', type: 'button', title: '删除', onclick: () => { imgs.splice(idx, 1); renderImg(); } }, ['×']));
+      imgBox.appendChild(wrap);
+    });
+    imgBox.appendChild(el('button', { class: 'btn sm', type: 'button', onclick: async () => {
       const f = await openFile({ accept: 'image/*' });
       if (!f) return;
       const { blob } = await compressImage(f, 1024, 0.85);
-      imgId = await saveMedia(blob, { type: 'image', source: 'approval' });
+      imgs.push(await saveMedia(blob, { type: 'image', source: 'approval' }));
       renderImg();
-    } }, [imgId ? '换图' : '加图片']);
-    imgBox.appendChild(addBtn);
-    if (imgId) imgBox.appendChild(el('button', { class: 'btn sm', type: 'button', onclick: () => { imgId = null; renderImg(); } }));
+    } }, [imgs.length ? '＋ 加图' : '加图片']));
   };
   renderImg();
 
@@ -396,7 +413,7 @@ function openVoteForm(rec) {
         ...(rec || {}),
         id: rec?.id || uid(), type: 'vote', from: rec?.from || 'me', ts: rec?.ts || Date.now(),
         status: rec?.status || 'pending', decidedAt: rec?.decidedAt || 0, decider: rec?.decider || '', reply: rec?.reply || '',
-        question: question.value.trim(), options: opts, myVote: rec?.myVote || null, taVote: rec?.taVote || null, imgId,
+        question: question.value.trim(), options: opts, myVote: rec?.myVote || null, taVote: rec?.taVote || null, imgs, imgId: imgs[0] || null,
         taMin: Number(taMinIn.value) || 0, taMax: Number(taMaxIn.value) || 0
       };
       if (!rec) scheduleTaPlan(row);   // 新记录：排 TA 的投票计划（有窗口用窗口，无窗口默认 3 天内随机）
@@ -432,7 +449,10 @@ async function openDetail(r) {
       const marks = [];
       if (rec.myVote === o.id) marks.push(el('span', { class: 'ap-vote-mark', text: '✓ 我投给这里' }));
       if (reveal && rec.taVote === o.id) marks.push(el('span', { class: 'ap-vote-mark ta', text: '✓ TA 投给这里' }));
+      const th = o.imgId ? el('img', { class: 'ap-opt-thumb' }) : null;
+      if (th) mediaURL(o.imgId).then((u) => { if (u) th.src = u; }).catch(() => {});
       box.appendChild(el('div', { class: 'ap-vote-item' + ((rec.myVote === o.id || (reveal && rec.taVote === o.id)) ? ' on' : '') }, [
+        th,
         el('span', { text: o.title }),
         o.price ? el('span', { class: 'right', text: `¥${o.price}` }) : null,
         ...marks
@@ -445,9 +465,10 @@ async function openDetail(r) {
         : (rec.myVote ? 'TA 还没投票，投完你们就能互相看到结果' : '双方各投一票，都投完后互相可见') }));
     }
   }
-  if (rec.imgId) {
+  const detailImgs = (rec.imgs?.length) ? rec.imgs : (rec.imgId ? [rec.imgId] : []);
+  for (const id of detailImgs) {
     try {
-      const url = await mediaURL(rec.imgId);
+      const url = await mediaURL(id);
       node.appendChild(el('img', { src: url, class: 'ap-img-big' }));
     } catch {}
   }
@@ -505,7 +526,10 @@ async function openAct(r) {
   const draw = () => {
     box.innerHTML = '';
     (rec.options || []).forEach((o) => {
+      const th = o.imgId ? el('img', { class: 'ap-opt-thumb' }) : null;
+      if (th) mediaURL(o.imgId).then((u) => { if (u) th.src = u; }).catch(() => {});
       const row = el('div', { class: 'ap-vote-item' + (picked === o.id ? ' on' : ''), style: { cursor: 'pointer' } }, [
+        th,
         el('span', { text: o.title }),
         o.price ? el('span', { class: 'right', text: `¥${o.price}` }) : null
       ]);
