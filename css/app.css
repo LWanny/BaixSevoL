@@ -3008,8 +3008,11 @@ button.mc-import-line.as-btn:active{background:var(--accent-soft);color:var(--ac
 .tg-drawer{border-top:1px solid var(--line);background:var(--bg-elev2);margin:0 -16px;padding:8px 16px calc(8px + env(safe-area-inset-bottom))}
 .tg-hand{display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:8px}
 .tg-hand.off{opacity:.45}
-.tg-hand .tg-card{flex:1 1 0;max-width:none;min-height:104px;display:flex;flex-direction:column;justify-content:center;text-align:center}
-.tg-hand .tg-card.face .tg-card-img{width:auto;height:76px;max-width:100%;margin:6px auto 2px;object-fit:contain;background:none}
+/* 手牌区：字卡 / 牌面卡 / 牌背统一固定高度，不再一张高一张矮 */
+.tg-hand .tg-card{flex:1 1 0;max-width:none;height:132px;min-height:0;display:flex;flex-direction:column;text-align:center;overflow:hidden}
+.tg-hand .tg-card:not(.face){justify-content:center}
+.tg-hand .tg-card.face{justify-content:flex-start}
+.tg-hand .tg-card.face .tg-card-img{width:auto;height:86px;flex:0 0 auto;max-width:100%;margin:8px auto 0;object-fit:contain;background:none}
 .tg-hand .tg-empty{flex:1 1 100%;padding:16px 0}
 .tg-lib-btn{display:flex;align-items:center;justify-content:center;gap:6px;height:36px;border-radius:12px}
 .tg-lib-btn svg{width:17px;height:17px}

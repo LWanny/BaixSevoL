@@ -12,6 +12,7 @@ import { all, put, get, bulkPut, kvGet, kvSet } from '../store.js';
 import { sheet, toast } from '../ui.js';
 import { TAROT, LENORMAND } from '../data/tongdeck.js';
 import { TAROT_BACK_SRC } from '../data/tarotfaces.js';
+import { LENORMAND_BACK_SRC } from '../data/lenormandfaces.js';
 import { TAROT as D_TAROT, LENORMAND as D_LENO } from '../data/divination.js';
 
 const CFG_KEY = 'tongCfg';
@@ -187,18 +188,27 @@ function scrollToLatest() {
   requestAnimationFrame(() => { wrap.scrollTop = wrap.scrollHeight; });
 }
 
-/** 塔罗牌面图：item 自带 face（新数据），老消息按牌名从图鉴反查 */
+/** 塔罗/雷诺曼牌面图：item 自带 face（新数据），老消息按牌名从图鉴反查 */
 function faceOf(item) {
-  if (!item || item.src !== 'tarot') return null;
+  if (!item) return null;
   if (item.face) return item.face;
-  const t = TAROT.find((x) => x.name === item.name);
-  return (t && t.face) || null;
+  if (item.src === 'lenormand') {
+    const l = LENORMAND.find((x) => x.name === item.name);
+    return (l && l.face) || null;
+  }
+  if (item.src === 'tarot') {
+    const t = TAROT.find((x) => x.name === item.name);
+    return (t && t.face) || null;
+  }
+  return null;
 }
 
 function cardNode(item, faceUp, onClick, meta) {
   const back = !faceUp;
-  /* 塔罗：正面显示牌面图、背面显示牌背图；字卡 / 雷诺曼没有图，维持文字卡 */
-  const face = back ? (item && item.src === 'tarot' ? TAROT_BACK_SRC : null) : faceOf(item);
+  /* 塔罗/雷诺曼：正面显示牌面图、背面显示牌背图；字卡没有图，维持文字卡 */
+  const face = back
+    ? (item && item.src === 'tarot' ? TAROT_BACK_SRC : (item && item.src === 'lenormand' ? LENORMAND_BACK_SRC : null))
+    : faceOf(item);
   const kids = [
     face ? el('img', {
       class: 'tg-card-img', src: face, alt: item && item.name ? item.name : '牌背', loading: 'lazy',

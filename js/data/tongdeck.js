@@ -2,12 +2,13 @@
    每张：{ src: 'tarot'|'lenormand', name, sub, face? } · 塔罗带内置牌面图 face（占卜同款韦特图） */
 
 import { TAROT_FACE } from './tarotfaces.js';
+import { LENORMAND_FACE } from './lenormandfaces.js';
 
 const MAJOR = ['愚者', '魔术师', '女祭司', '皇后', '皇帝', '教皇', '恋人', '战车', '力量', '隐士',
   '命运之轮', '正义', '倒吊人', '死神', '节制', '恶魔', '塔', '星星', '月亮', '太阳', '审判', '世界'];
 const ROMAN = ['0', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII',
   'XIII', 'XIV', 'XV', 'XVI', 'XVII', 'XVIII', 'XIX', 'XX', 'XXI'];
-const SUITS = [['权杖', '🪄'], ['圣杯', '🏺'], ['宝剑', '⚔️'], ['星币', '🪙']];
+const SUITS = [['权杖'], ['圣杯'], ['宝剑'], ['星币']];
 const RANKS = ['王牌', '二', '三', '四', '五', '六', '七', '八', '九', '十', '侍从', '骑士', '王后', '国王'];
 /* 与 RANKS 一一对应，拼 TAROT_FACE 的 key（权杖·王牌 → tarot-权杖-Ace …） */
 const RANK_KEY = ['Ace', '2', '3', '4', '5', '6', '7', '8', '9', '10', '侍从', '骑士', '王后', '国王'];
@@ -20,10 +21,10 @@ const LENORMAND_NAMES = ['骑士', '三叶草', '船', '房子', '树', '云', '
 export const TAROT = (() => {
   const list = [];
   MAJOR.forEach((name, i) => list.push({ src: 'tarot', name, sub: ROMAN[i], face: TAROT_FACE['tarot-m' + i] || '' }));
-  SUITS.forEach(([suit, mark]) => {
-    RANKS.forEach((r, j) => list.push({ src: 'tarot', name: suit + '·' + r, sub: mark, face: TAROT_FACE['tarot-' + suit + '-' + RANK_KEY[j]] || '' }));
+  SUITS.forEach(([suit]) => {
+    RANKS.forEach((r, j) => list.push({ src: 'tarot', name: suit + '·' + r, sub: '', face: TAROT_FACE['tarot-' + suit + '-' + RANK_KEY[j]] || '' }));
   });
   return list;   // 22 + 56 = 78
 })();
 
-export const LENORMAND = LENORMAND_NAMES.map((name, i) => ({ src: 'lenormand', name, sub: (i + 1) + '号' }));
+export const LENORMAND = LENORMAND_NAMES.map((name, i) => ({ src: 'lenormand', name, sub: (i + 1) + '号', face: LENORMAND_FACE['len-' + i] || '' }));
