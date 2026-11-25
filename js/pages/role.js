@@ -199,8 +199,7 @@ function buildPinyinCfg() {
   const posN = Object.keys(st.pos).filter((k) => k !== 'other').length;
   p1.appendChild(el('div', { class: 'cfg-stats', text:
     `专属字库 · 单字库 ${PINYIN_POOL_SIZE} 个 · 词 ${PINYIN_WORD_SIZE} 条（单字词 ${st.one} / 双字 ${st.two} / 三字 ${st.three} / 四字+ ${st.four} / 半截话 ${st.frag}）· 词性 ${posN} 类` }));
-  p1.appendChild(cfgSlider('打错字 + 退格 %', '每个字母打错并按退格删除的概率',
-    () => C().typoRate, (v) => saveCfg({ typoRate: v }), 0, 100));
+  p1.appendChild(cfgSlider('打错字 + 退格 %', () => C().typoRate, (v) => saveCfg({ typoRate: v }), 0, 100));
   p1.appendChild(cfgRow('打完一句的时长',
     '从开打到落卡的总时间：区间取点随机；长句分阶段时按段平摊；预览最多演示 9 秒', []));
   p1.appendChild(cfgSlider('最短（秒）', () => C().typingDuration[0],
