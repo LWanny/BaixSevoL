@@ -150,6 +150,37 @@ export default async function pagePinyinLib(view) {
       ...POS_OPTS.map(([v, t]) => el('option', { value: v, text: t }))]);
   posSel2.addEventListener('change', () => { pos = posSel2.value; shown = STEP; render(); });
 
+  /* ---- 批量操作：双字及以上词条可勾选，一键全选后批量停用/启用 ---- */
+  const sel = new Set();                       // 选中的词条（按 text）
+  const isBatchable = (w) => !w.frag && lenOf(w) >= 2;
+  const batchBar = el('div', { class: 'pw-batch' });
+  async function batchSet(off) {
+    const cur = WORD_POOL.filter((x) => isWordDisabled(x.text)).map((x) => x.text);
+    const next = off ? [...new Set([...cur, ...sel])] : cur.filter((t) => !sel.has(t));
+    const n = sel.size;
+    setDisabledWords(next);
+    sel.clear();
+    render();
+    toast(off ? `已停用 ${n} 条（打字不再用它们）` : `已启用 ${n} 条`);
+  }
+  function paintBatch() {
+    const n = sel.size;
+    batchBar.innerHTML = '';
+    batchBar.appendChild(el('span', { class: 'pw-batch-n' + (n ? ' on' : ''), text: `已选 ${n}` }));
+    batchBar.appendChild(el('button', { class: 'btn sm', type: 'button', text: '全选双字+', onclick: () => {
+      const pick = WORD_POOL.filter((w) => match(w) && isBatchable(w));
+      if (!pick.length) { toast('当前筛选里没有双字及以上的词条'); return; }
+      pick.forEach((w) => sel.add(w.text));
+      render();
+      toast(`已选中 ${pick.length} 条`);
+    } }));
+    if (n) {
+      batchBar.appendChild(el('button', { class: 'btn sm', type: 'button', text: '清空选择', onclick: () => { sel.clear(); render(); } }));
+      batchBar.appendChild(el('button', { class: 'btn sm', type: 'button', text: '批量停用', onclick: () => batchSet(true) }));
+      batchBar.appendChild(el('button', { class: 'btn sm primary', type: 'button', text: '批量启用', onclick: () => batchSet(false) }));
+    }
+  }
+
   /* ---- 列表 + 底部 ---- */
   const list = el('div', { class: 'pw-list' });
   const more = el('div', { class: 'pw-more' });
@@ -207,10 +238,15 @@ export default async function pagePinyinLib(view) {
         onclick: () => {
           const cur = WORD_POOL.filter((x) => isWordDisabled(x.text)).map((x) => x.text);
           setDisabledWords(off ? cur.filter((t) => t !== w.text) : [...cur, w.text]);
+          sel.delete(w.text);
           render();
           toast(off ? `已启用：${w.text}` : `已停用：${w.text}（打字不再用它）`);
         } });
+      const ck = isBatchable(w) ? el('button', { class: 'pw-ck' + (sel.has(w.text) ? ' on' : ''), type: 'button',
+        title: '选择', text: sel.has(w.text) ? '✓' : '',
+        onclick: () => { if (sel.has(w.text)) sel.delete(w.text); else sel.add(w.text); render(); } }) : null;
       list.appendChild(el('div', { class: 'pw-row' + (off ? ' is-off' : '') }, [
+        ck,
         el('div', { class: 'pw-main' }, [
           el('div', { class: 'pw-t' }, [el('span', { class: 'pw-txt', text: w.text }), ...badges]),
           el('div', { class: 'pw-p', text: w.py })
@@ -224,6 +260,7 @@ export default async function pagePinyinLib(view) {
       more.appendChild(el('button', { class: 'btn block', text: `加载更多（已显示 ${shown} / ${rows.length}）`,
         onclick: () => { shown += STEP; render(); } }));
     }
+    paintBatch();
   }
 
   wrap.appendChild(stats);
@@ -232,6 +269,7 @@ export default async function pagePinyinLib(view) {
   wrap.appendChild(el('div', { class: 'pw-filters' }, [search]));
   wrap.appendChild(chips);
   wrap.appendChild(el('div', { class: 'pw-filters' }, [posSel2]));
+  wrap.appendChild(batchBar);
   wrap.appendChild(list);
   wrap.appendChild(more);
   /* 试打报告缺字交接：预填第一个缺字与其拼音（只窥不取，添加成功才消耗队列） */

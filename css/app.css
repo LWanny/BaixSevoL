@@ -3157,6 +3157,13 @@ button.mc-import-line.as-btn:active{background:var(--accent-soft);color:var(--ac
 .pw-search,.pw-pos{width:100%}
 .pw-cats{margin-bottom:9px}
 .pw-list{display:flex;flex-direction:column;gap:7px}
+/* 批量操作栏：全选双字+ / 批量停用启用 */
+.pw-batch{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 2px 10px}
+.pw-batch-n{font-size:12px;color:var(--txt-mute);min-width:52px}
+.pw-batch-n.on{color:var(--accent);font-weight:700}
+.pw-ck{flex:0 0 auto;width:20px;height:20px;border-radius:6px;border:1.5px solid var(--line);background:var(--bg-elev);
+  color:#fff;font-size:12px;line-height:1;padding:0;cursor:pointer}
+.pw-ck.on{background:var(--accent);border-color:var(--accent)}
 .pw-row{display:flex;align-items:center;gap:8px;background:var(--bg-elev);border:1px solid var(--line-soft);
   border-radius:12px;padding:9px 12px}
 .pw-main{flex:1 1 auto;min-width:0}
