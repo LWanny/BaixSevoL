@@ -32,6 +32,9 @@ export const DEFAULT_PCFG = {
   typingDuration: [3, 1],    // 打完一句的总时长 [最短秒, 最长分钟]（从开打到落卡）
   proactiveLen: [4, 10],     // 主动一句话的 [最短, 最长] 字数
 
+  /* ---- 回复一句话字数 [最短, 最长]（回复时拼音生成一句话的音节数区间） ---- */
+  replyLen: [2, 8],
+
   /* ---- 句式模板 · 用户自定义预设句型（词性槽位数组，如 ['pn','vb','nn','pt']） ---- */
   customTemplates: [],
 
@@ -41,7 +44,7 @@ export const DEFAULT_PCFG = {
 
 /* 区间型字段：读档时统一归一成 [lo, hi]（老版本存过单值的自动包成 [v,v]） */
 const RANGE_KEYS = ['templateRate', 'anchorTailRate', 'anchorRandomRate', 'tailRate', 'headRate',
-  'proactiveInterval', 'typingDuration', 'proactiveLen'];
+  'proactiveInterval', 'typingDuration', 'proactiveLen', 'replyLen'];
 
 function normRange(v, dflt) {
   if (typeof v === 'number' && Number.isFinite(v)) return [v, v];
@@ -151,9 +154,12 @@ export function typingDurMs() {
   return [lo, hi];
 }
 
-/** 句子音节数区间 [min, max]（内置，不再作为设置项暴露；opt.syllRange 优先） */
+/** 回复一句话音节数区间 [min, max]（读配置 replyLen；opt.syllRange 优先） */
 export function syllRangeOf() {
-  return [2, 8];
+  const r = cfg().replyLen;
+  const lo = Math.max(1, Number(r && r[0]) || 2);
+  const hi = Math.max(lo, Number(r && r[1]) || 8);
+  return [lo, hi];
 }
 
 /* ============ 批量导入：逐行解析（字库页与测试共用） ============ */
