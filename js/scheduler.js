@@ -4,7 +4,7 @@
 
 import { put, all, bulkPut, kvGet, kvSet } from './store.js';
 import { buildReply, buildProactive, eligible, drawCards, delayFor } from './engine.js';
-import { cfg, typingDurMs } from './pinyinConfig.js';
+import { cfg } from './pinyinConfig.js';
 import { state } from './state.js';
 import { uid, chance, rndInt, pick } from './util.js';
 import { notify } from './notify.js';
@@ -79,61 +79,11 @@ async function runSteps(steps) {
   const created = new Map();  // stepIndex -> messageId
   emit('typing', { on: true, label: '' });
 
-  /* 拟真打字机（需求1+2）：
-     - 打字过程逐字母弹出「无声调」拼音，每个字母随机延迟，音节间偶尔想一下
-     - 0–10% 概率手滑多敲一个字母 → 停一下 → 按退格删掉再继续
-     - 敲完停顿后落卡，卡片上显示的是带声调拼音 */
-  const KEY_LETTERS = 'abcdefghijklmnopqrstuvwxyz';
-  async function typePinyin(s) {
-    const C = cfg();   // 拼音配置实时读取：设置页改完，下一句打字就生效
-    const segs = (s.pysegs && s.pysegs.length) ? s.pysegs : [{ p: s.pinyin || '', t: s.text || '', m: false }];
-    const sylls = [];
-    for (const seg of segs) for (const syl of String(seg.p || '').split(' ')) if (syl) sylls.push(syl);
-    if (!sylls.length) { await wait(300); return; }
-
-    /* 本句总打字时长：typingDuration [最短秒, 最长分钟] 掷一个目标，均摊到每个字母上；
-       分阶段长句按段数平摊（pParts）；forceRandom 忽略用户区间走极端（0.4~120 秒） */
-    const target = (C.forceRandom ? rndInt(400, 120000) : rndInt(...typingDurMs()))
-      / (Number(s.pParts) || 1);
-    const chars = sylls.reduce((n, x) => n + x.length, 0) || 1;
-    // 112 ≈ 100（字母延迟 rndInt(60,140) 的中位）× 1.12（打错退格与句中停顿的溢出）
-    const unit = Math.max(0.15, target / (chars * 112));
-
-    let typed = '';
-    for (let k = 0; k < sylls.length; k++) {
-      const base = typed ? typed + ' ' : '';
-      const syl = sylls[k];
-      for (let j = 1; j <= syl.length; j++) {
-        typed = base + syl.slice(0, j);
-        emit('typing', { on: true, label: '拼音组词中', py: typed });
-        await wait(Math.max(18, Math.round(unit * rndInt(60, 140))));
-
-        /* 打错字 + 退格：单一概率 %（forceRandom 时极其频繁 25-60%） */
-        const typoPct = C.forceRandom
-          ? rndInt(25, 60)
-          : Math.max(0, Math.min(100, Math.round(Number(C.typoRate) || 0)));
-        if (chance(typoPct)) {
-          let bad = KEY_LETTERS[rndInt(0, 25)];
-          const next = syl[j];
-          if (next && bad === next) bad = KEY_LETTERS[(KEY_LETTERS.indexOf(bad) + 7) % 26];
-          emit('typing', { on: true, label: '拼音组词中', py: typed + bad });
-          await wait(rndInt(150, 480));
-          emit('typing', { on: true, label: '拼音组词中', py: typed });   // 退格
-          await wait(rndInt(120, 320));
-        }
-
-        /* 音节之间偶尔停顿，像边想边打 */
-        if (j === syl.length && k < sylls.length - 1 && chance(35)) await wait(rndInt(120, 450));
-      }
-    }
-    await wait(rndInt(350, 850));   // 打完了，最后停一下再落成带声调的卡片
-  }
-
   for (let i = 0; i < steps.length; i++) {
     const s = steps[i];
     const delay = s.kind === 'recall' ? s.delayMs : s.delayMs;
     // 拼音消息在打字期间单独提示「拼音组词中」
-    emit('typing', { on: true, label: s.kind === 'pinyin' ? '拼音组词中' : '' });
+    emit('typing', { on: true, label: '' });
     await wait(delay);
 
     if (s.kind === 'recall') {
@@ -159,9 +109,6 @@ async function runSteps(steps) {
       m = await addMessage({ role: 'ta', type: 'voice', mediaId: s.mediaId });
     } else if (s.kind === 'image') {
       m = await addMessage({ role: 'ta', type: 'image', mediaId: s.mediaId });
-    } else if (s.kind === 'pinyin') {
-      await typePinyin(s);      // 逐字母敲出无声调拼音 → 打错/退格 → 停顿 → 落卡显示带声调
-      m = await addMessage({ role: 'ta', type: 'pinyin', text: s.text, pinyin: s.pinyinTone || s.pinyin, pysegs: s.pysegs || null });
     } else if (s.kind === 'repost') {
       m = await addMessage({ role: 'ta', type: 'text', text: s.text, quoteId: null, repost: true });
     } else if (s.text) {
@@ -293,15 +240,8 @@ async function tickPeriodRemind() {
   } catch { /* 下一轮再试 */ }
 }
 
-/** 主动发送间隔的毫秒范围 [最短, 最长]：
-    配置区间 = [最短秒, 最长分钟]；老参数（分钟对）保持分钟语义 */
+/** 主动发送间隔的毫秒范围 [最短, 最长]：由「回话」页的主动间隔（分钟对）控制 */
 function proactiveGapRange(p) {
-  const C = cfg();
-  if (C.enableProactive) {
-    const sec = Math.max(1, Math.round(Number(C.proactiveInterval && C.proactiveInterval[0]) || 5));
-    const maxMin = Math.max(1, Math.round(Number(C.proactiveInterval && C.proactiveInterval[1]) || 30));
-    return [sec * 1000, Math.max(sec, maxMin * 60) * 1000];
-  }
   const lo = Math.max(1, Number(p.proactiveIntervalMin) || 1);
   const hi = Math.max(lo, Number(p.proactiveIntervalMax) || lo);
   return [lo * 60000, hi * 60000];

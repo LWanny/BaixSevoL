@@ -5,7 +5,6 @@
 import { chance, rndInt, pick, uid } from './util.js';
 import { state } from './state.js';
 import { drawInspiration } from './inspiration.js';
-import { randomPhrase, cutPhrase } from './pinyin.js';
 import { cfg } from './pinyinConfig.js';
 
 /* ---------- 表情池 ---------- */
@@ -139,54 +138,6 @@ export function delayFor(params) {
   return rndInt(lo, hi) * 1000;
 }
 
-/** 需求4+5 · 把一次拼音生成摊成若干 step：
-    - 长文按 parts（标点小句）分阶段逐句打出发送，第 2 句起用短间隔，节奏像真人连续敲
-    extra 用于附带 proactive 等标记 */
-function pushPinyinSteps(steps, py, firstDelay, extra = {}) {
-  const parts = (Array.isArray(py.parts) && py.parts.length)
-    ? py.parts
-    : [{ text: py.text, pinyin: py.pinyin, pinyinTone: py.pinyinTone, segs: py.segs }];
-  parts.forEach((pt, i) => {
-    steps.push({
-      kind: 'pinyin',
-      delayMs: i === 0 ? firstDelay : rndInt(1500, 5200),
-      text: pt.text,
-      pinyin: pt.pinyin,
-      pinyinTone: pt.pinyinTone,
-      pysegs: pt.segs,
-      pParts: parts.length,          // 分阶段段数：打字总时长按段平摊
-      pIdx: i,
-      ...extra
-    });
-  });
-}
-
-/** 主动发送的拼音受「主动联系」配置约束：
-    按 proactiveLen 字数区间重生成（≈字数），最多重试 4 次取最接近的一版，超上限硬裁；
-    forceRandom 时走极端字数（极短或极长），忽略用户区间 */
-function fitProactive() {
-  const C = cfg();
-  if (C.forceRandom) {
-    const range = chance(30) ? [1, 3] : [15, 28];
-    let py = randomPhrase({ syllRange: range });
-    if (py.text.length > range[1]) py = cutPhrase(py, range[1]);
-    return py;
-  }
-  const range = C.proactiveLen || [4, 10];
-  const dist = (x) => (x.text.length < range[0] ? range[0] - x.text.length : 0)
-    + (x.text.length > range[1] ? x.text.length - range[1] : 0);
-  let best = randomPhrase({ syllRange: range });
-  let bestD = dist(best);
-  for (let i = 0; i < 4 && bestD > 0; i++) {
-    const again = randomPhrase({ syllRange: range });
-    const d = dist(again);
-    if (d === 0) return again;
-    if (d < bestD) { best = again; bestD = d; }
-  }
-  if (bestD > 0 && best.text.length > range[1]) best = cutPhrase(best, range[1]);
-  return best;
-}
-
 /**
  * 生成 TA 对我某条消息的回复计划。
  * 返回 { ignored:boolean, steps:[{kind,delayMs,...}] }
@@ -203,16 +154,8 @@ export async function buildReply({ cards, params, history = [], incomingText = '
   const hi = clampCount(params.maxCount, lo);
   const count = rndInt(lo, hi);
   const steps = [];
-  let pinyinUsed = false;
-  const pinyinMasterOn = cfg().enabled;   // 拼音打字总开关：关闭后回复不再敲拼音
 
   for (let i = 0; i < count; i++) {
-    // 拼音打字：不翻字卡库，随机敲拼音组一句话（每批最多一条）
-    if (!pinyinUsed && pinyinMasterOn && params.pinyinEnabled && chance(Number(params.pinyinPct) || 0)) {
-      pinyinUsed = true;
-      pushPinyinSteps(steps, randomPhrase(), delayFor(params));
-      continue;
-    }
     const one = await buildOne(textPool, params);
     if (!one) break;
 
@@ -320,14 +263,6 @@ export async function buildProactive({ cards, params, history = [], medias = [] 
   const hi = clampCount(params.proactiveMaxCount, lo);
   const count = rndInt(lo, hi);
   for (let i = 0; i < count; i++) {
-    // 每条独立掷：命中主动打字就打拼音，否则发字卡 —— 拼音和字卡都可以发，不二选一
-    const C = cfg();
-    const pyOn = C.enabled && params.pinyinEnabled && chance(Number(params.pinyinPct) || 0)
-      && (C.enableProactive || C.forceRandom);
-    if (pyOn) {
-      pushPinyinSteps(steps, fitProactive(), i === 0 ? 0 : delayFor(params), { proactive: true });
-      continue;
-    }
     const one = await buildOne(textPool, params);
     if (!one) break;
     let text = one.text;

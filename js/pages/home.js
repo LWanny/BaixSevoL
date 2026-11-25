@@ -32,6 +32,7 @@ let homePageIdx = 0;
 /* 应用入口：每个都是一个可单独移动的「软件图标」小组件 */
 const APPS = [
   { path: '/chat',    label: '消息',     icon: 'IC-NAV-002', badge: 'unread' },
+  { path: '/listen',  label: '语听',     icon: 'IC-CHT-012' },
   { path: '/moments', label: '朋友圈',   icon: 'IC-MOM-001' },
   { path: '/divine',  label: '占卜',     icon: 'IC-DIV-001' },
   { path: '/music',   label: '音乐',     icon: 'IC-MIO-016' },

@@ -13,6 +13,7 @@ import { toast } from './ui.js';
 
 import pageHome from './pages/home.js';
 import pageChat from './pages/chat.js';
+import pageListen from './pages/listen.js';
 import pageMailbox from './pages/mailbox.js';
 import pageCards from './pages/cards.js';
 import pageRole from './pages/role.js';
@@ -78,6 +79,7 @@ async function boot() {
   register({
     '/': pageHome,
     '/chat': pageChat,
+    '/listen': pageListen,
     '/mailbox': pageMailbox,
     '/cards': pageCards,
     '/role': pageRole,

@@ -2,7 +2,7 @@
    结构化数据与媒体文件全部落在这里，不使用 localStorage（避开 5MB 上限）。 */
 
 const DB_NAME = 'zikachuanxin';
-const DB_VER = 15;   // 15：新增 approvals（审批小钱包）表
+const DB_VER = 16;   // 16：新增 listen（语听）表
 
 const STORES = {
   kv:         { keyPath: 'k' },
@@ -37,7 +37,8 @@ const STORES = {
   approvals:     { keyPath: 'id', indexes: { ts: 'ts', status: 'status', from: 'from' } },  // 审批
   games:         { keyPath: 'id', indexes: { ts: 'ts' } },                       // 游戏战绩
   echoDecks:     { keyPath: 'id', indexes: { ts: 'ts' } },                       // 回声 · 卡组
-  echoCards:     { keyPath: 'id', indexes: { deckId: 'deckId', ts: 'ts' } }      // 回声 · 组内卡
+  echoCards:     { keyPath: 'id', indexes: { deckId: 'deckId', ts: 'ts' } },     // 回声 · 组内卡
+  listen:        { keyPath: 'id', indexes: { ts: 'ts' } }                        // 语听消息
 };
 
 let _db = null;

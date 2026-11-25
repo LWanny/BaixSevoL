@@ -3276,3 +3276,20 @@ button.mc-import-line.as-btn:active{background:var(--accent-soft);color:var(--ac
 .ap-status-line{margin-top:10px;font-size:12px;color:var(--txt-mute);padding-top:8px;border-top:1px solid var(--border)}
 .ap-reply-box{margin-top:10px;padding:10px;background:var(--bg-2);border-radius:10px;font-size:13px}
 .ap-reply-t{font-size:11px;color:var(--txt-mute);margin-bottom:4px}
+
+/* ---------- 语听 ---------- */
+.listen-page { display: flex; flex-direction: column; padding: 0 !important; }
+.listen-settings { padding: 12px; border-bottom: 1px solid #ececf1; max-height: 62vh; overflow-y: auto; }
+.listen-settings.hidden { display: none; }
+.listen-list { flex: 1; overflow-y: auto; padding: 14px 12px 96px; }
+.listen-row { display: flex; margin: 10px 0; }
+.listen-row.me { justify-content: flex-end; }
+.listen-bub { max-width: 78%; padding: 10px 14px; border-radius: 16px; font-size: 15px; line-height: 1.55; word-break: break-word; }
+.listen-bub.me { background: #26262b; color: #fff; border-bottom-right-radius: 6px; }
+.listen-bub.ta { background: #fff; color: #1c1c20; border-bottom-left-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.05); }
+.listen-bub .content.py-card { background: transparent; padding: 0; }
+.listen-bub .py-line { color: #9a9aa6; font-size: 13px; margin-bottom: 4px; letter-spacing: .3px; }
+.listen-bub .py-text { color: #1c1c20; font-size: 15px; }
+.listen-bar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 8px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); background: var(--bg, #f4f5f7); border-top: 1px solid #e8eaee; }
+.listen-in { flex: 1; height: 40px; border-radius: 20px; border: none; padding: 0 14px; font-size: 15px; background: #fff; outline: none; }
+.listen-send { height: 40px; padding: 0 16px; border-radius: 20px; border: none; background: #26262b; color: #fff; font-size: 14px; }
