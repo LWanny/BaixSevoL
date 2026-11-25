@@ -657,10 +657,10 @@ export function randomPhrase(opt = {}) {
       pieces.push({ py: w.py, text: w.text });
     }
   } else {
-    /* 词 / 单字比例：词概率区间与单字概率区间各取一点，按两者比例决定每次抽词还是抽单字；
+    /* 词 / 单字比例：内置约 7:3 混合（词 70% : 单字 30%，不再单独暴露配置）；
        forceRandom 时词概率 0-100 均匀、单字 = 100 − 词；极端短句则强制全单字 */
-    const wPct = extreme ? rndInt(0, 100) : randRange(C.wordRatio, 70);
-    const sPct = extremeShort ? 100 : (extreme ? 100 - wPct : randRange(C.singleRatio, 30));
+    const wPct = extreme ? rndInt(0, 100) : 70;
+    const sPct = extremeShort ? 100 : (extreme ? 100 - wPct : 30);
     const pWordPct = (wPct + sPct) > 0 ? (wPct / (wPct + sPct)) * 100 : 50;
     const n = extreme
       ? (extremeShort ? rndInt(1, 2) : rndInt(10, 16))     // 极端字数：极短或极长

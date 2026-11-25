@@ -193,20 +193,14 @@ function buildPinyinCfg() {
       () => C().forceRandom, (v) => { saveCfg({ forceRandom: !!v }); paintOff(); })
   ]);
 
-  /* ---- 面板 1 · 输入习惯（词库/单字/打错字 三个概率区间） ---- */
+  /* ---- 面板 1 · 输入习惯 ---- */
   const p1 = el('div');
   const st = WORD_STATS;
   const posN = Object.keys(st.pos).filter((k) => k !== 'other').length;
   p1.appendChild(el('div', { class: 'cfg-stats', text:
     `专属字库 · 单字库 ${PINYIN_POOL_SIZE} 个 · 词 ${PINYIN_WORD_SIZE} 条（单字词 ${st.one} / 双字 ${st.two} / 三字 ${st.three} / 四字+ ${st.four} / 半截话 ${st.frag}）· 词性 ${posN} 类` }));
-  p1.appendChild(cfgPair('抽完整词拼音', '每次生成在区间里取点，按与「抽单字」的比例决定抽词还是抽单字',
-    () => C().wordRatio, (v) => saveCfg({ wordRatio: v }), 0, 100));
-  p1.appendChild(cfgPair('抽单字拼音', '与上面的比例决定混合（词 : 单字 ≈ 抽词概率 : 抽单字概率）',
-    () => C().singleRatio, (v) => saveCfg({ singleRatio: v }), 0, 100));
-  p1.appendChild(cfgPair('打错字 + 退格', '每个字母打错并按退格删除的概率区间',
+  p1.appendChild(cfgSlider('打错字 + 退格 %', '每个字母打错并按退格删除的概率',
     () => C().typoRate, (v) => saveCfg({ typoRate: v }), 0, 100));
-  p1.appendChild(cfgPair('句子音节数', '一句话的音节数区间（每个汉字一个音节），生成时在区间里取点',
-    () => C().syllableRange, (v) => saveCfg({ syllableRange: v }), 1, 16));
   p1.appendChild(cfgRow('打完一句的时长',
     '从开打到落卡的总时间：区间取点随机；长句分阶段时按段平摊；预览最多演示 9 秒', []));
   p1.appendChild(cfgSlider('最短（秒）', () => C().typingDuration[0],

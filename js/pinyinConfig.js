@@ -15,10 +15,7 @@ export const DEFAULT_PCFG = {
   enabled: true,              // 拼音打字总开关（关闭后回复与主动联系都不再敲拼音，只发普通字卡消息）
 
   /* ---- 1 基础概率 ---- */
-  wordRatio: [60, 80],        // 抽完整词库拼音的概率区间 %（与单字按比例混合）
-  singleRatio: [20, 40],      // 抽单字拼音的概率区间 %
-  typoRate: [0, 10],          // 打错字并退格的概率区间 %
-  syllableRange: [2, 8],      // 一句话的音节数 [最短, 最长]
+  typoRate: 5,                // 打错字并退格的概率 %（单一概率，默认 5）
 
   /* ---- 2 句式模板 ---- */
   useTemplate: true,          // 是否启用句式模板
@@ -43,8 +40,8 @@ export const DEFAULT_PCFG = {
 };
 
 /* 区间型字段：读档时统一归一成 [lo, hi]（老版本存过单值的自动包成 [v,v]） */
-const RANGE_KEYS = ['wordRatio', 'singleRatio', 'typoRate', 'syllableRange', 'templateRate',
-  'anchorTailRate', 'anchorRandomRate', 'tailRate', 'headRate', 'proactiveInterval', 'typingDuration', 'proactiveLen'];
+const RANGE_KEYS = ['templateRate', 'anchorTailRate', 'anchorRandomRate', 'tailRate', 'headRate',
+  'proactiveInterval', 'typingDuration', 'proactiveLen'];
 
 function normRange(v, dflt) {
   if (typeof v === 'number' && Number.isFinite(v)) return [v, v];
@@ -57,6 +54,12 @@ function normRange(v, dflt) {
 
 function normalize(c) {
   for (const k of RANGE_KEYS) c[k] = normRange(c[k], DEFAULT_PCFG[k]);
+  /* typoRate：现在是单一概率 %；老版本存的是区间 [lo,hi]，迁移成区间均值 */
+  if (Array.isArray(c.typoRate)) {
+    c.typoRate = Math.round(((Number(c.typoRate[0]) || 0) + (Number(c.typoRate[1]) || 0)) / 2);
+  }
+  if (typeof c.typoRate !== 'number' || !Number.isFinite(c.typoRate)) c.typoRate = DEFAULT_PCFG.typoRate;
+  c.typoRate = Math.max(0, Math.min(100, Math.round(c.typoRate)));
   if (!Array.isArray(c.customTemplates)) c.customTemplates = [];
   c.customTemplates = c.customTemplates.filter((t) => Array.isArray(t) && t.length >= 2);
   return c;
@@ -148,12 +151,9 @@ export function typingDurMs() {
   return [lo, hi];
 }
 
-/** 抽一个音节数区间 [min, max]（opt.syllRange 优先；forceRandom 极端区间由调用方处理） */
+/** 句子音节数区间 [min, max]（内置，不再作为设置项暴露；opt.syllRange 优先） */
 export function syllRangeOf() {
-  const r = cfg().syllableRange;
-  const lo = Math.max(1, Number(r && r[0]) || 2);
-  const hi = Math.max(lo, Number(r && r[1]) || 8);
-  return [lo, hi];
+  return [2, 8];
 }
 
 /* ============ 批量导入：逐行解析（字库页与测试共用） ============ */

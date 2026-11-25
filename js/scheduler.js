@@ -108,11 +108,10 @@ async function runSteps(steps) {
         emit('typing', { on: true, label: '拼音组词中', py: typed });
         await wait(Math.max(18, Math.round(unit * rndInt(60, 140))));
 
-        /* 打错字 + 退格：typoRate 区间先随机取点再判定（forceRandom 时极其频繁 25-60%） */
+        /* 打错字 + 退格：单一概率 %（forceRandom 时极其频繁 25-60%） */
         const typoPct = C.forceRandom
           ? rndInt(25, 60)
-          : rndInt(Math.max(0, Number(C.typoRate && C.typoRate[0]) || 0),
-                   Math.max(0, Number(C.typoRate && C.typoRate[1]) || 0));
+          : Math.max(0, Math.min(100, Math.round(Number(C.typoRate) || 0)));
         if (chance(typoPct)) {
           let bad = KEY_LETTERS[rndInt(0, 25)];
           const next = syl[j];
