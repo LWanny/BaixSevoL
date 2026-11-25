@@ -319,36 +319,38 @@ export async function buildProactive({ cards, params, history = [], medias = [] 
   const lo = clampCount(params.proactiveMinCount);
   const hi = clampCount(params.proactiveMaxCount, lo);
   const count = rndInt(lo, hi);
-  let pinyinUsed = false;
-  for (let i = 0; i < count; i++) {
-    // 主动拼音打字：受「主动联系」配置约束 —— enableProactive 开关（forceRandom 无视开关）
-    const C = cfg();
-    const pyOn = C.enabled && params.pinyinEnabled && chance(Number(params.pinyinPct) || 0)
-      && (C.enableProactive || C.forceRandom);
-    if (!pinyinUsed && pyOn) {
-      pinyinUsed = true;
-      pushPinyinSteps(steps, fitProactive(), i === 0 ? 0 : delayFor(params), { proactive: true });
-      continue;
-    }
-    const one = await buildOne(textPool, params);
-    if (!one) break;
-    let text = one.text;
-    text = injectEmoji(text, Number(params.emojiPct) || 0);
-    if (chance(Number(params.kaomojiPct) || 0)) text += ' ' + randomKaomoji();
-    steps.push({ kind: 'message', delayMs: i === 0 ? 0 : delayFor(params), text, cardIds: one.cardIds, proactive: true });
-
-    /* ---- 独立附加（不计入条数上限） ---- */
-    if (stkPool.length && chance(Number(params.stickerPct) || 0)) {
-      const st = pick(stkPool);
-      steps.push({ kind: 'sticker', delayMs: delayFor(params), mediaId: st.mediaId, cardIds: [st.id], proactive: true });
-    }
-    if (voiPool.length && chance(Number(params.voicePct) || 0)) {
-      const v = pick(voiPool);
-      steps.push({ kind: 'voice', delayMs: delayFor(params), mediaId: v.mediaId, cardIds: [v.id], proactive: true });
-    }
+  // 主动打字与主动发送字卡互斥：本次主动要么打拼音、要么发字卡，不混合
+  const C = cfg();
+  const pyOn = C.enabled && params.pinyinEnabled && chance(Number(params.pinyinPct) || 0)
+    && (C.enableProactive || C.forceRandom);
+  if (pyOn) {
+    pushPinyinSteps(steps, fitProactive(), 0, { proactive: true });
     if (medias && medias.length && chance(Number(params.imagePct) || 0)) {
       const m = pick(medias);
       steps.push({ kind: 'image', delayMs: delayFor(params), mediaId: m.id, cardIds: [], proactive: true });
+    }
+  } else {
+    for (let i = 0; i < count; i++) {
+      const one = await buildOne(textPool, params);
+      if (!one) break;
+      let text = one.text;
+      text = injectEmoji(text, Number(params.emojiPct) || 0);
+      if (chance(Number(params.kaomojiPct) || 0)) text += ' ' + randomKaomoji();
+      steps.push({ kind: 'message', delayMs: i === 0 ? 0 : delayFor(params), text, cardIds: one.cardIds, proactive: true });
+
+      /* ---- 独立附加（不计入条数上限） ---- */
+      if (stkPool.length && chance(Number(params.stickerPct) || 0)) {
+        const st = pick(stkPool);
+        steps.push({ kind: 'sticker', delayMs: delayFor(params), mediaId: st.mediaId, cardIds: [st.id], proactive: true });
+      }
+      if (voiPool.length && chance(Number(params.voicePct) || 0)) {
+        const v = pick(voiPool);
+        steps.push({ kind: 'voice', delayMs: delayFor(params), mediaId: v.mediaId, cardIds: [v.id], proactive: true });
+      }
+      if (medias && medias.length && chance(Number(params.imagePct) || 0)) {
+        const m = pick(medias);
+        steps.push({ kind: 'image', delayMs: delayFor(params), mediaId: m.id, cardIds: [], proactive: true });
+      }
     }
   }
   if (chance(params.patPct)) steps.push({ kind: 'pat', delayMs: 1200, by: 'ta' });
