@@ -150,9 +150,9 @@ export default async function pagePinyinLib(view) {
       ...POS_OPTS.map(([v, t]) => el('option', { value: v, text: t }))]);
   posSel2.addEventListener('change', () => { pos = posSel2.value; shown = STEP; render(); });
 
-  /* ---- 批量操作：双字及以上词条可勾选，一键全选后批量停用/启用 ---- */
+  /* ---- 批量操作：半截话 / 双字及以上词条可勾选，一键全选后批量停用/启用 ---- */
   const sel = new Set();                       // 选中的词条（按 text）
-  const isBatchable = (w) => !w.frag && lenOf(w) >= 2;
+  const isBatchable = (w) => w.frag || lenOf(w) >= 2;
   const batchBar = el('div', { class: 'pw-batch' });
   async function batchSet(off) {
     const cur = WORD_POOL.filter((x) => isWordDisabled(x.text)).map((x) => x.text);
@@ -167,9 +167,9 @@ export default async function pagePinyinLib(view) {
     const n = sel.size;
     batchBar.innerHTML = '';
     batchBar.appendChild(el('span', { class: 'pw-batch-n' + (n ? ' on' : ''), text: `已选 ${n}` }));
-    batchBar.appendChild(el('button', { class: 'btn sm', type: 'button', text: '全选双字+', onclick: () => {
+    batchBar.appendChild(el('button', { class: 'btn sm', type: 'button', text: '一键全选', onclick: () => {
       const pick = WORD_POOL.filter((w) => match(w) && isBatchable(w));
-      if (!pick.length) { toast('当前筛选里没有双字及以上的词条'); return; }
+      if (!pick.length) { toast('当前筛选里没有可批量选择的词条（单字不支持）'); return; }
       pick.forEach((w) => sel.add(w.text));
       render();
       toast(`已选中 ${pick.length} 条`);
