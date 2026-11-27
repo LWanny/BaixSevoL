@@ -60,8 +60,9 @@ async function fetchBlob(url) {
 }
 
 /* ---------------- 单条导入 ---------------- */
-async function importImage(kind, url) {
-  const source = kind === 'sticker' ? 'library' : 'me';
+async function importImage(kind, url, owner = 'me') {
+  // sticker 默认进「我的表情库」；owner='ta' 时进 Ta 的表情库（TA 按 回话·表情包概率 发送）
+  const source = kind === 'sticker' ? (owner === 'ta' ? 'ta-library' : 'library') : 'me';
   const name = nameFromURL(url);
   try {
     const blob = await fetchBlob(url);
@@ -105,12 +106,12 @@ async function importAudio(kind, url) {
   }
 }
 
-async function importOne(kind, url) {
-  return KINDS[kind].accept === 'image' ? importImage(kind, url) : importAudio(kind, url);
+async function importOne(kind, url, owner = 'me') {
+  return KINDS[kind].accept === 'image' ? importImage(kind, url, owner) : importAudio(kind, url);
 }
 
 /* ---------------- 界面 ---------------- */
-export function openBulkImport(kind = 'sticker', { onDone = null } = {}) {
+export function openBulkImport(kind = 'sticker', { onDone = null, owner = 'me' } = {}) {
   const meta = KINDS[kind] || KINDS.sticker;
   const ta = el('textarea', {
     class: 'input', rows: 7,
@@ -144,7 +145,7 @@ export function openBulkImport(kind = 'sticker', { onDone = null } = {}) {
       ]));
       list.scrollTop = list.scrollHeight;
       try {
-        const r = await importOne(kind, url);
+        const r = await importOne(kind, url, owner);
         if (r === 'ok') { ok++; st.textContent = '已保存'; st.classList.add('good'); }
         else if (r === 'link') { ok++; fallback++; st.textContent = '外链'; st.classList.add('warn'); }
         else { skip++; st.textContent = '已存在'; }

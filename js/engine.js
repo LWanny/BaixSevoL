@@ -4,8 +4,20 @@
 
 import { chance, rndInt, pick, uid } from './util.js';
 import { state } from './state.js';
+import { all } from './store.js';
 import { drawInspiration } from './inspiration.js';
 import { cfg } from './pinyinConfig.js';
+
+/** TA 贴纸候选池：字卡库的贴纸卡 + Ta的表情库（media source 'ta-library'）。
+    统一成 { mediaId, cardId }，命中「表情包概率」后随机抽一个发送。 */
+async function taStickerPool(cards) {
+  const pool = stickers(cards).map((c) => ({ mediaId: c.mediaId, cardId: c.id }));
+  try {
+    const lib = (await all('media')).filter((m) => m.source === 'ta-library' && m.type === 'image');
+    pool.push(...lib.map((m) => ({ mediaId: m.id, cardId: null })));
+  } catch { /* media 表读失败时只用字卡贴纸 */ }
+  return pool;
+}
 
 /* ---------- 表情池 ---------- */
 export const EMOJI = ['😢', '🥺', '😆', '😘', '💕', '😌', '😻', '😴', '😤', '🤣', '😅', '😊', '💪', '✨', '🍀', '🌙', '☀️', '🐱', '🐶'];
@@ -176,12 +188,12 @@ export async function buildReply({ cards, params, history = [], incomingText = '
     steps.push(step);
 
     /* ---- 独立附加消息（不计入 count 上限） ---- */
-    const stkPool = stickers(cards);
+    const stkPool = await taStickerPool(cards);
     const voiPool = voices(cards);
     if (stkPool.length && chance(Number(params.stickerPct) || 0)) {
       const st = pick(stkPool);
-      cardIds.push(st.id);
-      steps.push({ kind: 'sticker', delayMs: delayFor(params), mediaId: st.mediaId, cardIds: [st.id] });
+      if (st.cardId) cardIds.push(st.cardId);
+      steps.push({ kind: 'sticker', delayMs: delayFor(params), mediaId: st.mediaId, cardIds: st.cardId ? [st.cardId] : [] });
     }
     if (voiPool.length && chance(Number(params.voicePct) || 0)) {
       const v = pick(voiPool);
@@ -255,7 +267,7 @@ export async function buildReply({ cards, params, history = [], incomingText = '
 /** 主动发送计划 */
 export async function buildProactive({ cards, params, history = [], medias = [] }) {
   const textPool = eligible(cards);
-  const stkPool = stickers(cards);
+  const stkPool = await taStickerPool(cards);
   const voiPool = voices(cards);
   const steps = [];
   // 主动发送的条数由 proactiveMinCount / proactiveMaxCount 决定
@@ -273,7 +285,7 @@ export async function buildProactive({ cards, params, history = [], medias = [] 
     /* ---- 独立附加（不计入条数上限） ---- */
     if (stkPool.length && chance(Number(params.stickerPct) || 0)) {
       const st = pick(stkPool);
-      steps.push({ kind: 'sticker', delayMs: delayFor(params), mediaId: st.mediaId, cardIds: [st.id], proactive: true });
+      steps.push({ kind: 'sticker', delayMs: delayFor(params), mediaId: st.mediaId, cardIds: st.cardId ? [st.cardId] : [], proactive: true });
     }
     if (voiPool.length && chance(Number(params.voicePct) || 0)) {
       const v = pick(voiPool);

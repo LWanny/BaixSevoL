@@ -3297,3 +3297,6 @@ button.mc-import-line.as-btn:active{background:var(--accent-soft);color:var(--ac
 /* 通牌选牌弹窗 · 字卡分组筛选行 */
 .tg-gchips { margin-top: 6px; }
 .tg-gchips .chip { font-size: 12px; padding: 4px 10px; }
+
+/* 表情库 · 我的 / Ta 切换行 */
+.lib-tabs { margin-bottom: 10px; }

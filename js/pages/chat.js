@@ -781,16 +781,37 @@ export default async function pageChat(view) {
   }
 
   async function openStickerPicker() {
-    const loadMedias = async () => (await all('media')).filter((m) => m.source === 'library' && m.type === 'image');
+    const srcOf = (o) => (o === 'ta' ? 'ta-library' : 'library');
+    let owner = 'me';              // 'me' 我的表情库 / 'ta' Ta的表情库
+    const loadMedias = async () =>
+      (await all('media')).filter((m) => m.source === srcOf(owner) && m.type === 'image');
     let medias = await loadMedias();
     let batch = false;
     const sel = new Set();
 
     const node = el('div');
     const ctlRef = { close: () => {} };
+    let titleEl = null;
+    const setTitle = () => { if (titleEl) titleEl.textContent = owner === 'ta' ? 'Ta的表情库' : '我的表情库'; };
 
     function render() {
       node.innerHTML = '';
+
+      /* ---- 顶部：我的 / Ta 表情库切换 ---- */
+      const tabs = el('div', { class: 'chips lib-tabs' });
+      [['me', '我的表情库'], ['ta', 'Ta的表情库']].forEach(([k, label]) => {
+        tabs.appendChild(el('button', {
+          class: 'chip' + (owner === k ? ' on' : ''),
+          onclick: async () => {
+            if (owner === k) return;
+            owner = k; batch = false; sel.clear();
+            medias = await loadMedias();
+            setTitle();
+            render();
+          }
+        }, [label]));
+      });
+      node.appendChild(tabs);
 
       /* ---- 顶部工具条 ---- */
       const bar = el('div', { class: 'lib-bar' });
@@ -827,8 +848,8 @@ export default async function pageChat(view) {
       /* ---- 表情网格 ---- */
       if (!medias.length) {
         node.appendChild(el('div', { class: 'empty', style: { padding: '22px' } }, [
-          el('div', { class: 'e-h', text: '表情库还是空的' }),
-          el('div', { class: 'e-p', text: '把常用表情加进来，发送时可以一键调用' })
+          el('div', { class: 'e-h', text: owner === 'ta' ? 'Ta的表情库还是空的' : '表情库还是空的' }),
+          el('div', { class: 'e-p', text: owner === 'ta' ? '给 TA 添加表情包，TA 会按回话里的表情包概率发出来' : '把常用表情加进来，发送时可以一键调用' })
         ]));
       } else {
         const grid = el('div', { class: 'picker' });
@@ -844,7 +865,10 @@ export default async function pageChat(view) {
             } }, [img, el('span', { class: 'pick-check' + (on ? ' on' : '') })]);
             grid.appendChild(cell);
           } else {
-            img.onclick = () => { ctlRef.close(); sendSticker(md.id); };
+            img.onclick = () => {
+              if (owner === 'ta') { toast('这是 TA 的表情包，TA 会自己发'); return; }
+              ctlRef.close(); sendSticker(md.id);
+            };
             grid.appendChild(img);
           }
         });
@@ -854,13 +878,13 @@ export default async function pageChat(view) {
       /* ---- 底部按钮（非批量模式才显示）---- */
       if (!batch) {
         node.appendChild(el('button', { class: 'btn block', style: { marginTop: '12px' }, onclick: async () => {
-          await addMyStickers();
+          await addStickers(owner);
           medias = await loadMedias();
           render();
-        } }, ['添加表情到我的表情库']));
+        } }, [owner === 'ta' ? '添加表情到Ta的表情库' : '添加表情到我的表情库']));
         node.appendChild(el('button', { class: 'btn block', style: { marginTop: '8px' }, onclick: () => {
           ctlRef.close();
-          openBulkImport('sticker', { onDone: () => toast('已导入，下次打开表情面板就能看到') });
+          openBulkImport('sticker', { owner, onDone: () => toast('已导入，下次打开表情面板就能看到') });
         } }, ['链接批量导入表情包']));
       }
     }
@@ -868,15 +892,18 @@ export default async function pageChat(view) {
     render();
     const ctl = sheet({ title: '我的表情库', node });
     ctlRef.close = ctl.close;
+    titleEl = ctl.box.querySelector('.sh-t');
+    setTitle();
   }
 
-  async function addMyStickers() {
+  async function addStickers(owner) {
     const files = await openFile({ accept: 'image/*', multiple: true });
     if (!files || !files.length) return;
+    const source = owner === 'ta' ? 'ta-library' : 'library';
     for (const f of files) {
       let out;
       try { out = await compressImage(f, 512, 0.9); } catch { out = { blob: f, w: 0, h: 0 }; }
-      await saveMedia(out.blob, { type: 'image', w: out.w, h: out.h, source: 'library', name: f.name });
+      await saveMedia(out.blob, { type: 'image', w: out.w, h: out.h, source, name: f.name });
     }
     toast(`已添加 ${files.length} 个表情`);
   }
