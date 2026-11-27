@@ -405,6 +405,7 @@ function openDetail(item, m) {
 function openPicker() {
   let kw = '';
   let cat = '全部';
+  let gFilter = 'all';    // 字卡库分组筛选（分类与字卡库页一致）
   const picked = [];    // {src, name, sub}
 
   const grid = el('div', { class: 'tg-pick-grid' });
@@ -430,16 +431,24 @@ function openPicker() {
       class: 'chip' + (cat === c ? ' on' : ''),
       onclick: (e) => {
         cat = c;
+        if (c !== '字卡库') gFilter = 'all';
         [...chips.children].forEach((n) => n.classList.remove('on'));
         e.currentTarget.classList.add('on');
         refresh();
       }
     }, [c]));
   });
+  /* 字卡分组筛选行：与「字卡库」页里建的分类一致（仅字卡库来源时显示） */
+  const gchips = el('div', { class: 'chips tg-gchips' });
+  const gChip = (label, id) => el('button', {
+    class: 'chip sm' + (gFilter === id ? ' on' : ''),
+    onclick: () => { gFilter = id; refresh(); }
+  }, [label]);
 
   const body = el('div', {}, [
     searchInput,
     chips,
+    gchips,
     grid,
     el('div', { class: 'tg-pick-foot' }, [
       el('button', {
@@ -453,14 +462,24 @@ function openPicker() {
 
   function refresh() {
     grid.innerHTML = '';
+    /* 分组筛选行：只在「字卡库」来源下显示，分组列表与字卡库页同步 */
+    gchips.innerHTML = '';
+    if (cat === '字卡库') {
+      gchips.style.display = '';
+      gchips.appendChild(gChip('全部分类', 'all'));
+      groups.forEach((g) => gchips.appendChild(gChip(g.name, g.id)));
+    } else {
+      gchips.style.display = 'none';
+    }
     const srcFilter = cat === '全部' ? null : (cat === '字卡库' ? 'lib' : (cat === '塔罗' ? 'tarot' : 'lenormand'));
     let pool = poolForAll();
     if (srcFilter) pool = pool.filter((p) => p.src === srcFilter);
+    if (cat === '字卡库' && gFilter !== 'all') pool = pool.filter((p) => p.src === 'lib' && p.groupId === gFilter);
     if (kw) pool = pool.filter((p) => (p.name || '').includes(kw));
 
     if (!pool.length) {
       grid.appendChild(el('div', { class: 'tg-empty' }, [
-        el('div', { class: 'e-p', text: '没有匹配的牌' })
+        el('div', { class: 'e-p', text: (cat === '字卡库' && gFilter !== 'all') ? '该分类下没有字卡' : '没有匹配的牌' })
       ]));
     }
     pool.slice(0, 300).forEach((p) => {

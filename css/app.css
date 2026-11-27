@@ -3293,3 +3293,7 @@ button.mc-import-line.as-btn:active{background:var(--accent-soft);color:var(--ac
 .listen-bar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 8px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); background: var(--bg, #f4f5f7); border-top: 1px solid #e8eaee; }
 .listen-in { flex: 1; height: 40px; border-radius: 20px; border: none; padding: 0 14px; font-size: 15px; background: #fff; outline: none; }
 .listen-send { height: 40px; padding: 0 16px; border-radius: 20px; border: none; background: #26262b; color: #fff; font-size: 14px; }
+
+/* 通牌选牌弹窗 · 字卡分组筛选行 */
+.tg-gchips { margin-top: 6px; }
+.tg-gchips .chip { font-size: 12px; padding: 4px 10px; }
