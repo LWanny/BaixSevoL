@@ -794,7 +794,10 @@ export default async function pageChat(view) {
     let titleEl = null;
     const setTitle = () => { if (titleEl) titleEl.textContent = owner === 'ta' ? 'Ta的表情库' : '我的表情库'; };
 
-    function render() {
+    function render(keepScroll = true) {
+      /* 重建前记住弹层滚动位置，重建后恢复 —— 勾选/删除下面的表情不再跳回顶部 */
+      const scroller = node.closest('.sheet-b');
+      const keep = scroller ? scroller.scrollTop : 0;
       node.innerHTML = '';
 
       /* ---- 顶部：我的 / Ta 表情库切换 ---- */
@@ -807,7 +810,7 @@ export default async function pageChat(view) {
             owner = k; batch = false; sel.clear();
             medias = await loadMedias();
             setTitle();
-            render();
+            render(false);          // 切换表情库时回到顶部
           }
         }, [label]));
       });
@@ -887,6 +890,8 @@ export default async function pageChat(view) {
           openBulkImport('sticker', { owner, onDone: () => toast('已导入，下次打开表情面板就能看到') });
         } }, ['链接批量导入表情包']));
       }
+
+      if (scroller) requestAnimationFrame(() => { scroller.scrollTop = keepScroll ? keep : 0; });
     }
 
     render();
