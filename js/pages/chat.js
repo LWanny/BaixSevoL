@@ -795,9 +795,10 @@ export default async function pageChat(view) {
     const setTitle = () => { if (titleEl) titleEl.textContent = owner === 'ta' ? 'Ta的表情库' : '我的表情库'; };
 
     function render(keepScroll = true) {
-      /* 重建前记住弹层滚动位置，重建后恢复 —— 勾选/删除下面的表情不再跳回顶部 */
-      const scroller = node.closest('.sheet-b');
-      const keep = scroller ? scroller.scrollTop : 0;
+      /* 滚动发生在 .picker 网格自身（max-height + overflow-y:auto）——
+         重建前记住网格滚动位置，重建后恢复，勾选/删除下面的表情不再跳回顶部 */
+      const prevGrid = node.querySelector('.picker');
+      const keep = prevGrid ? prevGrid.scrollTop : 0;
       node.innerHTML = '';
 
       /* ---- 顶部：我的 / Ta 表情库切换 ---- */
@@ -876,6 +877,8 @@ export default async function pageChat(view) {
           }
         });
         node.appendChild(grid);
+        /* 单元格有 aspect-ratio:1 固定高，网格高度在图片加载前就稳定，可同步恢复 */
+        grid.scrollTop = keepScroll ? keep : 0;
       }
 
       /* ---- 底部按钮（非批量模式才显示）---- */
@@ -890,8 +893,6 @@ export default async function pageChat(view) {
           openBulkImport('sticker', { owner, onDone: () => toast('已导入，下次打开表情面板就能看到') });
         } }, ['链接批量导入表情包']));
       }
-
-      if (scroller) requestAnimationFrame(() => { scroller.scrollTop = keepScroll ? keep : 0; });
     }
 
     render();
